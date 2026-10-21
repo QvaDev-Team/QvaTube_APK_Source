@@ -46,3 +46,13 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# ---------------------------------------------------------------------------
+# Firma de release de Android (nunca subir al repositorio)
+# ---------------------------------------------------------------------------
+/android/key.properties
+*.jks
+*.keystore
+*.p12
+*.pem
+*.base64

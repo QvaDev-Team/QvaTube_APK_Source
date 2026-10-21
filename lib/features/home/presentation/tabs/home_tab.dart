@@ -1,49 +1,124 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/config/app_config.dart';
+import '../../../../core/storage/app_preferences.dart';
+import '../../../../core/platform/device_channel.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
 import '../../../../core/widgets/app_logo.dart';
-import '../widgets/content_placeholders.dart';
+import '../../../catalog/application/catalog_providers.dart';
+import '../widgets/media_card.dart';
+import '../widgets/section_header.dart';
+import '../widgets/suggest_content_sheet.dart';
 
-/// Pestaña de Inicio (spec §6.5).
-///
-/// La estructura y el diseño están listos; el contenido real depende de los
-/// endpoints del catálogo, que aún no se han conectado.
-class HomeTab extends StatelessWidget {
+/// Pestaña de Inicio (spec §6.5) conectada a la API de QvaTube.
+class HomeTab extends ConsumerWidget {
   const HomeTab({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
-      children: const [
-        _Hero(),
-        SizedBox(height: 26),
-        SectionTitle(title: 'Seguir donde quedaste'),
-        _PosterRow(),
-        SizedBox(height: 26),
-        SectionTitle(title: 'Recomendaciones'),
-        _PosterRow(),
-        SizedBox(height: 26),
-        _CommunityBanner(),
-        SizedBox(height: 26),
-        SectionTitle(title: 'Cómo funciona'),
-        _HowItWorks(),
-        SizedBox(height: 26),
-        SectionTitle(title: 'Reseñas y estadísticas'),
-        _StatsGrid(),
-        SizedBox(height: 16),
-        _ReviewForm(),
-      ],
+  Widget build(BuildContext context, WidgetRef ref) {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    final showContinue =
+        prefs.getBool(AppConfig.showContinueWatchingKey) ?? true;
+    final showNewBadges = prefs.getBool(AppConfig.showNewBadgesKey) ?? true;
+
+    final continueWatching = ref.watch(continueWatchingProvider);
+    final recommendations = ref.watch(recommendationsProvider);
+    final genreRows = ref.watch(homeGenresProvider);
+
+    return RefreshIndicator(
+      color: AppColors.accent,
+      backgroundColor: AppColors.surface,
+      onRefresh: () async {
+        ref.invalidate(continueWatchingProvider);
+        ref.invalidate(recommendationsProvider);
+        ref.invalidate(homeGenresProvider);
+        ref.invalidate(siteStatsProvider);
+        ref.invalidate(reviewsProvider);
+      },
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+        children: [
+          const _Hero(),
+          const SizedBox(height: 26),
+          if (!showContinue)
+            const SizedBox.shrink()
+          else
+            continueWatching.when(
+              loading: () => const SizedBox.shrink(),
+              error: (error, stack) => const SizedBox.shrink(),
+              data: (items) {
+                if (items.isEmpty) return const SizedBox.shrink();
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SectionTitle(title: 'Seguir donde quedaste'),
+                    MediaCarousel(items: items, showNewBadge: showNewBadges),
+                    const SizedBox(height: 26),
+                  ],
+                );
+              },
+            ),
+          recommendations.when(
+            loading: () => const SizedBox.shrink(),
+            error: (error, stack) => const SizedBox.shrink(),
+            data: (data) {
+              if (data.items.isEmpty) return const SizedBox.shrink();
+              final title = data.seasonLabel != null
+                  ? 'Recomendaciones · ${data.seasonLabel}'
+                  : 'Recomendaciones';
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SectionTitle(title: title),
+                  MediaCarousel(items: data.items, showNewBadge: showNewBadges),
+                  const SizedBox(height: 26),
+                ],
+              );
+            },
+          ),
+          genreRows.when(
+            loading: () => const SizedBox.shrink(),
+            error: (error, stack) => const SizedBox.shrink(),
+            data: (rows) {
+              if (rows.isEmpty) return const SizedBox.shrink();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final row in rows) ...[
+                    SectionTitle(
+                      title: row.label ?? 'Contenido',
+                      accent: row.accent,
+                    ),
+                    MediaCarousel(
+                      items: row.items,
+                      showNewBadge: showNewBadges,
+                    ),
+                    const SizedBox(height: 26),
+                  ],
+                ],
+              );
+            },
+          ),
+          const _CommunityBanner(),
+          const SizedBox(height: 26),
+          const SectionTitle(title: 'Cómo funciona'),
+          const _HowItWorks(),
+          const SizedBox(height: 26),
+          const SectionTitle(title: 'Reseñas y estadísticas'),
+          const _StatsGrid(),
+        ],
+      ),
     );
   }
 }
 
-class _Hero extends StatelessWidget {
+class _Hero extends ConsumerWidget {
   const _Hero();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Column(
       children: [
         const AppLogo(height: 64),
@@ -57,7 +132,7 @@ class _Hero extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 20),
-        const Row(
+        Row(
           children: [
             Expanded(
               child: _ActionButton(
@@ -65,21 +140,23 @@ class _Hero extends StatelessWidget {
                 icon: Icons.auto_awesome,
                 color: AppColors.accent,
                 foreground: AppColors.accentInk,
+                onTap: () => showSuggestContentSheet(context, ref),
               ),
             ),
-            SizedBox(width: 10),
+            const SizedBox(width: 10),
             Expanded(
               child: _ActionButton(
                 label: 'Súbelo tú mismo',
                 icon: Icons.send,
                 color: AppColors.telegram,
                 foreground: Colors.white,
+                onTap: () => _openTelegram(context, ref),
               ),
             ),
           ],
         ),
         const SizedBox(height: 10),
-        const Row(
+        Row(
           children: [
             Expanded(
               child: _ActionButton(
@@ -87,20 +164,62 @@ class _Hero extends StatelessWidget {
                 icon: Icons.chat_bubble_outline,
                 color: AppColors.whatsapp,
                 foreground: Colors.white,
+                onTap: () => _openCommunity(context, ref),
               ),
             ),
-            SizedBox(width: 10),
+            const SizedBox(width: 10),
             Expanded(
               child: _ActionButton(
                 label: 'Descargar APK',
                 icon: Icons.download,
                 color: AppColors.textPrimary,
                 foreground: Colors.black,
+                onTap: () => _downloadApk(context, ref),
               ),
             ),
           ],
         ),
       ],
+    );
+  }
+
+  Future<void> _openTelegram(BuildContext context, WidgetRef ref) async {
+    final config = await ref.read(siteConfigProvider.future);
+    final bot = config.botUsername ?? 'qvatube_bot';
+    await DeviceChannel.openUrl('https://t.me/$bot');
+  }
+
+  Future<void> _openCommunity(BuildContext context, WidgetRef ref) async {
+    final config = await ref.read(siteConfigProvider.future);
+    final url = config.whatsappUrl;
+    if (url == null || url.isEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No hay un enlace de comunidad configurado.'),
+        ),
+      );
+      return;
+    }
+    await DeviceChannel.openUrl(url);
+  }
+
+  Future<void> _downloadApk(BuildContext context, WidgetRef ref) async {
+    final info = await ref.read(catalogApiProvider).apkInfo();
+    final size = info['size_mb'];
+    final base = AppConfig.apiBaseUrl.endsWith('/')
+        ? AppConfig.apiBaseUrl.substring(0, AppConfig.apiBaseUrl.length - 1)
+        : AppConfig.apiBaseUrl;
+    await DeviceChannel.openUrl('$base/download/qvatube.apk');
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          size != null
+              ? 'Descargando la APK ($size MB)…'
+              : 'Descargando la APK…',
+        ),
+      ),
     );
   }
 }
@@ -111,70 +230,60 @@ class _ActionButton extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.foreground,
+    required this.onTap,
   });
 
   final String label;
   final IconData icon;
   final Color color;
   final Color foreground;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 46,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: color,
+    return Material(
+      color: color,
+      borderRadius: BorderRadius.circular(AppRadii.md),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadii.md),
-        boxShadow: color == AppColors.accent ? AppColors.playGlow : null,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 18, color: foreground),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.body(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: foreground,
-              ),
-            ),
+        child: Container(
+          height: 46,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadii.md),
+            boxShadow: color == AppColors.accent ? AppColors.playGlow : null,
           ),
-        ],
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 18, color: foreground),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.body(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: foreground,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-class _PosterRow extends StatelessWidget {
-  const _PosterRow();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 248,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: 6,
-        separatorBuilder: (context, index) => const SizedBox(width: 10),
-        itemBuilder: (context, index) {
-          return const PosterPlaceholder(width: 122);
-        },
-      ),
-    );
-  }
-}
-
-class _CommunityBanner extends StatelessWidget {
+class _CommunityBanner extends ConsumerWidget {
   const _CommunityBanner();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -228,18 +337,28 @@ class _CommunityBanner extends StatelessWidget {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.accent,
-              borderRadius: BorderRadius.circular(AppRadii.pill),
-            ),
-            child: Text(
-              'Descargar',
-              style: AppTextStyles.body(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w800,
-                color: AppColors.accentInk,
+          InkWell(
+            onTap: () async {
+              final config = await ref.read(siteConfigProvider.future);
+              final url = config.whatsappUrl;
+              if (url != null && url.isNotEmpty) {
+                await DeviceChannel.openUrl(url);
+              }
+            },
+            borderRadius: BorderRadius.circular(AppRadii.pill),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.accent,
+                borderRadius: BorderRadius.circular(AppRadii.pill),
+              ),
+              child: Text(
+                'Unirme',
+                style: AppTextStyles.body(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.accentInk,
+                ),
               ),
             ),
           ),
@@ -299,143 +418,116 @@ class _HowItWorks extends StatelessWidget {
   }
 }
 
-class _StatsGrid extends StatelessWidget {
+class _StatsGrid extends ConsumerWidget {
   const _StatsGrid();
 
-  static const List<({String label, String value})> _stats = [
-    (label: 'Películas indexadas', value: '—'),
-    (label: 'Series', value: '—'),
-    (label: 'Música', value: '—'),
-    (label: 'Usuarios activos', value: '—'),
-  ];
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stats = ref.watch(siteStatsProvider);
+    final reviews = ref.watch(reviewsProvider);
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('4.9', style: Theme.of(context).textTheme.displayLarge),
-                Row(
-                  children: List.generate(
-                    5,
-                    (index) => const Icon(
-                      Icons.star,
-                      size: 14,
-                      color: AppColors.accent,
-                    ),
+        reviews.when(
+          loading: () => const SizedBox(height: 40),
+          error: (error, stack) => const SizedBox.shrink(),
+          data: (data) => Row(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    data.average.toStringAsFixed(1),
+                    style: Theme.of(context).textTheme.displayLarge,
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(width: 18),
-            Expanded(
-              child: Text(
-                'Reseñas de la comunidad — pendiente de conectar con el '
-                'endpoint de reseñas.',
-                style: AppTextStyles.body(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 2.2,
-          children: [
-            for (final stat in _stats)
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(AppRadii.md),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      stat.value,
-                      style: AppTextStyles.display(fontSize: 22),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      stat.label,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.body(
-                        fontSize: 11,
-                        color: AppColors.textMuted,
+                  Row(
+                    children: List.generate(
+                      5,
+                      (index) => Icon(
+                        index < data.average.round()
+                            ? Icons.star
+                            : Icons.star_border,
+                        size: 14,
+                        color: AppColors.accent,
                       ),
                     ),
-                  ],
+                  ),
+                  Text(
+                    '${data.total} reseñas',
+                    style: AppTextStyles.body(
+                      fontSize: 11,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Text(
+                  'Lo que dice la comunidad sobre QvaTube.',
+                  style: AppTextStyles.body(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ),
-          ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        stats.when(
+          loading: () => const SizedBox.shrink(),
+          error: (error, stack) => const SizedBox.shrink(),
+          data: (data) {
+            final entries = <({String label, String value})>[
+              (label: 'Películas indexadas', value: '${data.moviesCount ?? 0}'),
+              (label: 'Series', value: '${data.seriesCount ?? 0}'),
+              (label: 'Música', value: '${data.musicCount ?? 0}'),
+              (label: 'Usuarios activos', value: '${data.onlineNow ?? 0}'),
+            ];
+            return GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 2.2,
+              children: [
+                for (final entry in entries)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(AppRadii.md),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          entry.value,
+                          style: AppTextStyles.display(fontSize: 22),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          entry.label,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.body(
+                            fontSize: 11,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
       ],
-    );
-  }
-}
-
-class _ReviewForm extends StatelessWidget {
-  const _ReviewForm();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadii.md),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Deja tu calificación',
-            style: AppTextStyles.body(fontSize: 14, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: List.generate(
-              5,
-              (index) => const Icon(
-                Icons.star_border,
-                size: 24,
-                color: AppColors.textMuted,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          const TextField(
-            style: TextStyle(fontSize: 13),
-            decoration: InputDecoration(
-              hintText: 'Escribe tu comentario...',
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 44,
-            child: ElevatedButton(
-              onPressed: null,
-              child: Text('Enviar reseña'),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

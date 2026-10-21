@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app/router.dart';
 import 'core/storage/app_preferences.dart';
+import 'features/auth/application/auth_controller.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 
@@ -21,11 +22,26 @@ Future<void> main() async {
   );
 }
 
-class QvaTubeApp extends ConsumerWidget {
+class QvaTubeApp extends ConsumerStatefulWidget {
   const QvaTubeApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<QvaTubeApp> createState() => _QvaTubeAppState();
+}
+
+class _QvaTubeAppState extends ConsumerState<QvaTubeApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Restaura la sesión guardada (`GET /api/auth/me`) antes de decidir a
+    // qué pantalla ir.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(authControllerProvider.notifier).restoreSession();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(

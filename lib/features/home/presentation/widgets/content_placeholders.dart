@@ -123,32 +123,6 @@ class PosterGridItem extends StatelessWidget {
   }
 }
 
-/// Encabezado de sección con línea divisoria (spec §3.2).
-class SectionTitle extends StatelessWidget {
-  const SectionTitle({super.key, required this.title, this.action});
-
-  final String title;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          Text(title, style: Theme.of(context).textTheme.displaySmall),
-          const SizedBox(width: 12),
-          const Expanded(child: Divider(height: 1)),
-          if (action != null) ...[
-            const SizedBox(width: 12),
-            action!,
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 /// Estado vacío genérico de una sección por definir.
 class PendingContentNotice extends StatelessWidget {
   const PendingContentNotice({super.key, required this.message});

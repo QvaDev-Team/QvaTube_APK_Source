@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text.dart';
 import '../../../core/widgets/otp_code_input.dart';
-import '../application/auth_providers.dart';
-import '../data/auth_repository.dart';
+import '../application/auth_controller.dart';
 import 'widgets/auth_scaffold.dart';
 
 /// Recuperación de contraseña en dos pasos.
@@ -27,8 +25,6 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   bool _working = false;
-  String? _error;
-  String? _token;
 
   @override
   void dispose() {
@@ -39,38 +35,25 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   Future<void> _requestCode() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     FocusScope.of(context).unfocus();
-    setState(() {
-      _working = true;
-      _error = null;
-    });
+    setState(() => _working = true);
 
-    try {
-      final data = await ref.read(authApiProvider).forgotPassword(
-            email: _emailController.text.trim(),
-          );
-      if (!mounted) return;
-      setState(() {
-        _working = false;
-        _token = (data['token'] ?? data['reset_token']) as String?;
-      });
-      context.go('/restablecer-clave', extra: _token);
-    } on RemoteCallsDisabledException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _working = false;
-        _error = authErrorMessage(error);
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _working = false;
-        _error = authErrorMessage(error);
-      });
+    final token = await ref
+        .read(authControllerProvider.notifier)
+        .requestPasswordReset(_emailController.text.trim());
+
+    if (!mounted) return;
+    if (token == null) {
+      setState(() => _working = false);
+      return;
     }
+    setState(() => _working = false);
+    context.go('/restablecer-clave', extra: token);
   }
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authControllerProvider);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: AuthBackdrop(
@@ -105,8 +88,8 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                             'restablecer tu contraseña.',
                       ),
                       const SizedBox(height: 22),
-                      if (_error != null) ...[
-                        AuthNotice(message: _error!),
+                      if (authState.error != null) ...[
+                        AuthNotice(message: authState.error!),
                         const SizedBox(height: 14),
                       ],
                       TextFormField(
@@ -137,8 +120,10 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                       SizedBox(
                         height: 48,
                         child: ElevatedButton(
-                          onPressed: _working ? null : _requestCode,
-                          child: _working
+                          onPressed: _working || authState.isWorking
+                              ? null
+                              : _requestCode,
+                          child: _working || authState.isWorking
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
@@ -180,7 +165,6 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
   String _code = '';
   bool _working = false;
   bool _hasError = false;
-  String? _error;
 
   @override
   void dispose() {
@@ -199,30 +183,26 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
     setState(() {
       _working = true;
       _hasError = false;
-      _error = null;
     });
 
-    try {
-      await ref.read(authApiProvider).resetPassword(
-            token: widget.token ?? '',
-            code: _code,
-            newPassword: _passwordController.text,
-          );
-      if (!mounted) return;
-      setState(() => _working = false);
-      context.go('/login');
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _working = false;
-        _hasError = true;
-        _error = authErrorMessage(error);
-      });
+    final ok = await ref.read(authControllerProvider.notifier).resetPassword(
+          token: widget.token ?? '',
+          code: _code,
+          newPassword: _passwordController.text,
+        );
+    if (!mounted) return;
+    if (!ok) {
+      setState(() => _hasError = true);
+      return;
     }
+    setState(() => _working = false);
+    context.go('/login');
   }
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authControllerProvider);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: AuthBackdrop(
@@ -257,8 +237,8 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                             'recibiste por Telegram.',
                       ),
                       const SizedBox(height: 22),
-                      if (_error != null) ...[
-                        AuthNotice(message: _error!),
+                      if (authState.error != null) ...[
+                        AuthNotice(message: authState.error!),
                         const SizedBox(height: 14),
                       ],
                       OtpCodeInput(
@@ -314,8 +294,10 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                       SizedBox(
                         height: 48,
                         child: ElevatedButton(
-                          onPressed: _working ? null : _submit,
-                          child: _working
+                          onPressed: _working || authState.isWorking
+                              ? null
+                              : _submit,
+                          child: _working || authState.isWorking
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,

@@ -1,0 +1,27 @@
+# ---------------------------------------------------------------------------
+# Credenciales de firma de RELEASE (plantilla).
+#
+# NO subas este archivo real al repositorio: copia esta plantilla como
+# `android/key.properties` y rellénala con tus datos reales.
+# `android/key.properties` y los *.jks están en .gitignore.
+#
+# Crear el almacén de claves (una sola vez, guárdalo en un lugar seguro):
+#   keytool -genkeypair -v -keystore android/qvatube-release.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias qvatube
+#
+# Después:
+#   base64 -w 0 android/qvatube-release.jks > qvatube-release.jks.base64
+#   (el resultado es el secreto KEYSTORE_BASE64 de GitHub)
+# ---------------------------------------------------------------------------
+
+# Ruta del almacén de claves, relativa a android/
+storeFile=qvatube-release.jks
+
+# Contraseña del almacén de claves (secreto KEYSTORE_PASSWORD)
+storePassword=CHANGE_ME
+
+# Alias de la clave (secreto KEY_ALIAS)
+keyAlias=qvatube
+
+# Contraseña de la clave (secreto KEY_PASSWORD)
+keyPassword=CHANGE_ME

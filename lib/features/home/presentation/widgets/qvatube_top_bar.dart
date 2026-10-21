@@ -8,6 +8,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
 import '../../../../core/widgets/app_logo.dart';
 import '../../../auth/application/auth_controller.dart';
+import '../../../catalog/application/catalog_providers.dart';
+import '../../../catalog/domain/catalog_models.dart';
 import 'account_menu_sheet.dart';
 
 /// Barra superior de la app (spec §6.1).
@@ -23,6 +25,10 @@ class QvaTopBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authControllerProvider);
     final user = authState.user;
+    // Contador de notificaciones sin leer (`GET /api/notifications`).
+    final unread = authState.isAuthenticated
+        ? ref.watch(notificationsProvider).value?.unread ?? 0
+        : 0;
 
     return ClipRect(
       child: BackdropFilter(
@@ -56,7 +62,8 @@ class QvaTopBar extends ConsumerWidget {
                   const SizedBox(width: 4),
                   _UserAvatar(
                     label: user?.initials ?? 'Q',
-                    imageUrl: user?.avatarUrl,
+                    imageUrl: absoluteMediaUrl(user?.avatarUrl),
+                    unreadCount: unread,
                     onTap: () => showAccountMenuSheet(context, ref),
                   ),
                 ],
@@ -74,35 +81,66 @@ class _UserAvatar extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.imageUrl,
+    this.unreadCount = 0,
   });
 
   final String label;
   final String? imageUrl;
+  final int unreadCount;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final url = imageUrl;
-    return InkWell(
-      key: const Key('user-avatar'),
-      onTap: onTap,
-      customBorder: const CircleBorder(),
-      child: Container(
-        width: 36,
-        height: 36,
-        clipBehavior: Clip.antiAlias,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: AppColors.accentGradient,
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        InkWell(
+          key: const Key('user-avatar'),
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: Container(
+            width: 36,
+            height: 36,
+            clipBehavior: Clip.antiAlias,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: AppColors.accentGradient,
+            ),
+            child: (url != null && url.isNotEmpty)
+                ? Image.network(
+                    url,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => _initials(label),
+                  )
+                : _initials(label),
+          ),
         ),
-        child: (url != null && url.isNotEmpty)
-            ? Image.network(
-                url,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => _initials(label),
-              )
-            : _initials(label),
-      ),
+        if (unreadCount > 0)
+          Positioned(
+            right: -2,
+            top: -2,
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 16),
+              height: 16,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.accent,
+                borderRadius: BorderRadius.circular(AppRadii.pill),
+                border: Border.all(color: AppColors.background, width: 2),
+              ),
+              child: Text(
+                unreadCount > 9 ? '9+' : '$unreadCount',
+                style: AppTextStyles.mono(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.accentInk,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 

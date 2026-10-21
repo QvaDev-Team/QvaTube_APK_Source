@@ -1,15 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/network/api_client.dart';
+import '../../../core/network/api_providers.dart';
 import '../data/auth_api.dart';
 import '../data/auth_repository.dart';
 
-/// Cliente HTTP único de la app.
-final apiClientProvider = Provider<ApiClient>((ref) {
-  final client = ApiClient();
-  ref.onDispose(client.dio.close);
-  return client;
-});
+export '../../../core/network/api_providers.dart' show apiClientProvider;
 
 /// API de autenticación (rutas de `doc/openapi.json`).
 final authApiProvider = Provider<AuthApi>((ref) {
@@ -18,5 +13,8 @@ final authApiProvider = Provider<AuthApi>((ref) {
 
 /// Repositorio de autenticación.
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  return AuthRepository(ref.watch(authApiProvider));
+  return AuthRepository(
+    ref.watch(authApiProvider),
+    ref.watch(apiClientProvider),
+  );
 });

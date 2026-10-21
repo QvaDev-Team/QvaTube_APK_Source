@@ -20,3 +20,25 @@ Future<void> markIntroAsSeen(WidgetRef ref) async {
   await prefs.setBool(AppConfig.introSeenKey, true);
   ref.invalidate(introSeenProvider);
 }
+
+/// Guarda la cookie de sesión (`qva_session`) para que la sesión sobreviva
+/// al cierre de la app.
+class SessionStore {
+  const SessionStore(this._prefs);
+
+  final SharedPreferences _prefs;
+
+  String? get cookie => _prefs.getString(AppConfig.sessionCookieKey);
+
+  Future<void> save(String? cookie) async {
+    if (cookie == null || cookie.isEmpty) {
+      await _prefs.remove(AppConfig.sessionCookieKey);
+      return;
+    }
+    await _prefs.setString(AppConfig.sessionCookieKey, cookie);
+  }
+}
+
+final sessionStoreProvider = Provider<SessionStore>((ref) {
+  return SessionStore(ref.watch(sharedPreferencesProvider));
+});

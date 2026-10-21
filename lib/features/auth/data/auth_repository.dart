@@ -1,20 +1,19 @@
-import '../../../core/config/app_config.dart';
 import '../../../core/network/api_client.dart';
 import '../domain/auth_models.dart';
 import 'auth_api.dart';
 
 /// Repositorio de autenticación.
 ///
-/// Envuelve los endpoints de `doc/openapi.json`. Mientras
-/// `AppConfig.remoteCallsEnabled` sea `false` ninguna petición sale del
-/// dispositivo: se lanza [RemoteCallsDisabledException] y la UI informa de que
-/// falta definir el contenido de cada pantalla.
+/// Envuelve los endpoints de `doc/openapi.json` (tag "Autenticación") y
+/// normaliza los errores que devuelve la API (`{"error": "..."}`).
 class AuthRepository {
-  const AuthRepository(this._api);
+  const AuthRepository(this._api, this._client);
 
   final AuthApi _api;
+  final ApiClient _client;
 
-  bool get isRemoteEnabled => AppConfig.remoteCallsEnabled;
+  /// Cookie de sesión actual (`qva_session`).
+  String? get sessionCookie => _client.sessionCookie;
 
   Future<AuthUser> login({
     required String email,
@@ -44,21 +43,47 @@ class AuthRepository {
     return AuthUser.fromJson(data);
   }
 
-  Future<void> logout() => _api.logout();
+  Future<void> logout() async {
+    await _api.logout();
+    _client.sessionCookie = null;
+  }
 
   Future<AuthUser> updateName(String displayName) async {
     final data = await _api.updateName(displayName);
     return AuthUser.fromJson(data);
   }
 
+  Future<AuthUser> uploadAvatar({
+    required String filePath,
+    required String fileName,
+  }) async {
+    final data = await _api.uploadAvatar(filePath: filePath, fileName: fileName);
+    return AuthUser.fromJson(data);
+  }
+
+  Future<void> deleteAvatar() async {
+    await _api.deleteAvatar();
+  }
+
   Future<void> requestPasswordReset(String email) =>
       _api.forgotPassword(email: email);
+
+  /// Devuelve el token de recuperación (`{"token": "..."}`).
+  Future<String> requestPasswordResetToken(String email) async {
+    final data = await _api.forgotPassword(email: email);
+    return (data['token'] ?? '') as String;
+  }
 
   Future<void> resetPassword({
     required String token,
     required String code,
     required String newPassword,
   }) => _api.resetPassword(token: token, code: code, newPassword: newPassword);
+
+  Future<TelegramLinkCode> createLinkCode() async {
+    final data = await _api.createLinkCode();
+    return TelegramLinkCode.fromJson(data);
+  }
 
   Future<TelegramVerification> startTelegramVerification() async {
     final data = await _api.startTelegramVerification();
@@ -82,7 +107,8 @@ class AuthRepository {
 /// Mensajes de error ya traducidos para la UI.
 String authErrorMessage(Object error) {
   if (error is RemoteCallsDisabledException) {
-    return 'Conexión con la API pendiente de definir para ${error.operation}.';
+    return 'Las llamadas al servidor están deshabilitadas para '
+        '${error.operation}.';
   }
   if (error is ApiException) {
     return error.message;

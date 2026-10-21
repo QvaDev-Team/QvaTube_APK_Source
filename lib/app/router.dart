@@ -8,6 +8,14 @@ import '../features/auth/presentation/forgot_password_screen.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/register_screen.dart';
 import '../features/auth/presentation/telegram_verification_screen.dart';
+import '../features/account/presentation/avatar_screen.dart';
+import '../features/account/presentation/community_screen.dart';
+import '../features/account/presentation/edit_name_screen.dart';
+import '../features/account/presentation/favorites_screen.dart';
+import '../features/account/presentation/notifications_screen.dart';
+import '../features/account/presentation/plan_screen.dart';
+import '../features/account/presentation/profile_screen.dart';
+import '../features/account/presentation/settings_screen.dart';
 import '../features/home/presentation/home_shell.dart';
 import '../features/home/presentation/pending_screen.dart';
 import '../features/home/presentation/tabs/catalog_tab.dart';
@@ -29,12 +37,16 @@ abstract final class Routes {
   static const String telegramVerify = '/verificar-telegram';
   static const String search = '/buscar';
 
-  // Pestañas (la de Inicio va en el medio de la barra inferior).
+  // Pestañas (la de Inicio siempre va en el medio de la barra inferior).
   static const String popular = '/popular';
   static const String television = '/television';
-  static const String home = '/inicio';
   static const String movies = '/peliculas';
   static const String series = '/series';
+  static const String home = '/inicio';
+  static const String anime = '/anime';
+  static const String novelas = '/novelas';
+  static const String music = '/musica';
+  static const String books = '/libros';
 
   static const List<String> account = [
     '/cuenta/perfil',
@@ -66,6 +78,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       final introSeen = ref.read(introSeenProvider);
       final canBrowse = authState.canBrowse;
 
+      // Mientras se comprueba la sesión (`GET /api/auth/me`) no se redirige:
+      // se espera para no mostrar el login a un usuario que sí tiene sesión.
+      if (authState.status == AuthStatus.unknown) {
+        return null;
+      }
+
       if (location == Routes.root) {
         if (!introSeen) return Routes.intro;
         return canBrowse ? Routes.home : Routes.login;
@@ -76,6 +94,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           location == Routes.television ||
           location == Routes.movies ||
           location == Routes.series ||
+          location == Routes.anime ||
+          location == Routes.novelas ||
+          location == Routes.music ||
+          location == Routes.books ||
           location.startsWith('/cuenta/');
 
       if (isProtected && !canBrowse) {
@@ -141,6 +163,9 @@ final routerProvider = Provider<GoRouter>((ref) {
                 builder: (context, state) => const CatalogTab(
                   title: 'Popular',
                   icon: Icons.local_fire_department,
+                  categoryKey: 'popular',
+                  allowSort: false,
+                  allowGenreFilter: false,
                   description: 'Lo más visto por la comunidad de QvaTube.',
                 ),
               ),
@@ -151,11 +176,42 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: Routes.television,
-                builder: (context, state) => const CatalogTab(
+                builder: (context, state) => const PendingScreen(
                   title: 'Televisión',
+                  description: 'La lista de canales en vivo no está expuesta '
+                      'por la API (la web la tiene embebida). Se conectará '
+                      'cuando el backend exponga GET /api/tv/channels.',
                   icon: Icons.live_tv,
-                  aspectRatio: 1,
-                  description: 'Canales en vivo de Cuba e internacional.',
+                  showBackButton: false,
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'peliculas'),
+            routes: [
+              GoRoute(
+                path: Routes.movies,
+                builder: (context, state) => const CatalogTab(
+                  title: 'Películas',
+                  icon: Icons.movie_outlined,
+                  categoryKey: 'movie',
+                  description: 'Cine cubano e internacional, siempre en 2:3.',
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'series'),
+            routes: [
+              GoRoute(
+                path: Routes.series,
+                builder: (context, state) => const CatalogTab(
+                  title: 'Series',
+                  icon: Icons.tv,
+                  categoryKey: 'series',
+                  description: 'Series por temporada, con episodios nuevos '
+                      'cada semana.',
                 ),
               ),
             ],
@@ -170,58 +226,108 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
           StatefulShellBranch(
-            navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'peliculas'),
+            navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'anime'),
             routes: [
               GoRoute(
-                path: Routes.movies,
+                path: Routes.anime,
                 builder: (context, state) => const CatalogTab(
-                  title: 'Películas',
-                  icon: Icons.movie_outlined,
-                  description: 'Cine cubano e internacional, siempre en 2:3.',
+                  title: 'Anime',
+                  icon: Icons.auto_awesome,
+                  categoryKey: 'anime',
+                  description: 'Series de anime por temporada, con episodios '
+                      'nuevos cada semana.',
                 ),
               ),
             ],
           ),
           StatefulShellBranch(
-            navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'series'),
+            navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'novelas'),
             routes: [
               GoRoute(
-                path: Routes.series,
+                path: Routes.novelas,
                 builder: (context, state) => const CatalogTab(
-                  title: 'Series',
-                  icon: Icons.tv,
-                  description: 'Series por temporada, con episodios nuevos '
-                      'cada semana.',
+                  title: 'Novelas',
+                  icon: Icons.favorite_border,
+                  categoryKey: 'novela',
+                  description: 'Novelas por capítulos, con la Novela Cubana.',
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'musica'),
+            routes: [
+              GoRoute(
+                path: Routes.music,
+                builder: (context, state) => const CatalogTab(
+                  title: 'Música',
+                  icon: Icons.music_note,
+                  categoryKey: 'music',
+                  gridAspectRatio: 0.68,
+                  description: 'Álbumes completos con carátula cuadrada y '
+                      'reproductor.',
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'libros'),
+            routes: [
+              GoRoute(
+                path: Routes.books,
+                builder: (context, state) => const CatalogTab(
+                  title: 'Libros',
+                  icon: Icons.menu_book,
+                  categoryKey: 'book',
+                  description: 'Libros en EPUB y PDF listos para leer.',
                 ),
               ),
             ],
           ),
         ],
       ),
-      for (final path in Routes.account)
-        GoRoute(
-          path: path,
-          builder: (context, state) => PendingScreen(
-            title: _accountTitle(path),
-            description: 'Esta sección se completará con su endpoint '
-                'correspondiente cuando se defina la información de la cuenta.',
-          ),
+      GoRoute(
+        path: '/cuenta/perfil',
+        builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: '/cuenta/nombre',
+        builder: (context, state) => const EditNameScreen(),
+      ),
+      GoRoute(
+        path: '/cuenta/avatar',
+        builder: (context, state) => const AvatarScreen(),
+      ),
+      GoRoute(
+        path: '/cuenta/plan',
+        builder: (context, state) => const PlanScreen(),
+      ),
+      GoRoute(
+        path: '/cuenta/notificaciones',
+        builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/cuenta/favoritos',
+        builder: (context, state) => const FavoritesScreen(),
+      ),
+      GoRoute(
+        path: '/cuenta/configuracion',
+        builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/cuenta/comunidad',
+        builder: (context, state) => const CommunityScreen(),
+      ),
+      GoRoute(
+        path: '/cuenta/descargas',
+        builder: (context, state) => const PendingScreen(
+          title: 'Mis descargas',
+          description: 'Las descargas se autorizan con POST '
+              '/api/download/authorize. Esta pantalla se conectará cuando se '
+              'defina la lista local de descargas.',
+          icon: Icons.download,
         ),
+      ),
     ],
   );
 });
-
-String _accountTitle(String path) {
-  return switch (path) {
-    '/cuenta/perfil' => 'Mi perfil',
-    '/cuenta/nombre' => 'Nombre visible',
-    '/cuenta/avatar' => 'Foto de perfil',
-    '/cuenta/plan' => 'Plan y suscripción',
-    '/cuenta/descargas' => 'Mis descargas',
-    '/cuenta/favoritos' => 'Favoritos',
-    '/cuenta/notificaciones' => 'Notificaciones',
-    '/cuenta/configuracion' => 'Configuración',
-    '/cuenta/comunidad' => 'Comunidad',
-    _ => 'Cuenta',
-  };
-}

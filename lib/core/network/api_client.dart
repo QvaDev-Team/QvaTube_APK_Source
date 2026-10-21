@@ -19,7 +19,7 @@ class ApiException implements Exception {
 class RemoteCallsDisabledException extends ApiException {
   const RemoteCallsDisabledException([
     this.operation = 'la operación',
-  ]) : super('Conexión con la API pendiente de definir para $operation.');
+  ]) : super('Las llamadas al servidor están deshabilitadas para $operation.');
 
   final String operation;
 }
@@ -35,6 +35,7 @@ class ApiClient {
     Dio? dio,
     String baseUrl = AppConfig.apiBaseUrl,
     this.remoteCallsEnabled = AppConfig.remoteCallsEnabled,
+    void Function(String? cookie)? onSessionCookie,
   }) {
     _dio = dio ??
         Dio(
@@ -49,7 +50,9 @@ class ApiClient {
             headers: const {'Accept': 'application/json'},
           ),
         );
-    _cookieInterceptor = SessionCookieInterceptor();
+    _cookieInterceptor = SessionCookieInterceptor(
+      onCookie: (cookie) => onSessionCookie?.call(cookie),
+    );
     _dio.interceptors.add(_cookieInterceptor);
   }
 
@@ -63,7 +66,10 @@ class ApiClient {
   /// Cookie de sesión actual (`qva_session`).
   String? get sessionCookie => _cookieInterceptor.cookie;
 
-  set sessionCookie(String? value) => _cookieInterceptor.cookie = value;
+  set sessionCookie(String? value) {
+    _cookieInterceptor.cookie = value;
+    _cookieInterceptor.onCookie?.call(value);
+  }
 
   Future<Response<dynamic>> get(
     String path, {
@@ -163,6 +169,11 @@ class ApiClient {
 
 /// Captura la cookie de sesión `qva_session` y la reenvía en cada petición.
 class SessionCookieInterceptor extends Interceptor {
+  SessionCookieInterceptor({this.onCookie});
+
+  /// Se invoca cada vez que el servidor renueva la cookie de sesión.
+  final void Function(String? cookie)? onCookie;
+
   String? cookie;
 
   @override
@@ -172,7 +183,11 @@ class SessionCookieInterceptor extends Interceptor {
       for (final raw in setCookie) {
         final parts = raw.split(';').first.split('=');
         if (parts.length == 2 && parts.first.trim() == 'qva_session') {
-          cookie = parts.last.trim();
+          final value = parts.last.trim();
+          if (value.isNotEmpty) {
+            cookie = value;
+            onCookie?.call(value);
+          }
         }
       }
     }

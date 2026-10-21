@@ -11,11 +11,11 @@ abstract final class AppConfig {
     defaultValue: 'https://qvatube.hidenplay.net/',
   );
 
-  /// El contenido definitivo de cada pantalla todavía no está definido, por lo
-  /// que las llamadas al servidor permanecen desactivadas. La capa de red está
-  /// implementada y verificada contra `doc/openapi.json`, pero no se ejecuta
-  /// hasta que se habilite este flag.
-  static const bool remoteCallsEnabled = false;
+  /// Las pantallas ya están conectadas a la API de QvaTube. Si hay que dejar
+  /// la app en modo "sin red" (por ejemplo, mientras se define el contenido
+  /// de alguna pantalla), basta con poner este flag en `false`: el cliente
+  /// lanza `RemoteCallsDisabledException` y la UI avisa al usuario.
+  static const bool remoteCallsEnabled = true;
 
   /// Clave de almacenamiento para saber si ya se mostró la pantalla de
   /// introducción (intro) en este dispositivo.
@@ -23,4 +23,8 @@ abstract final class AppConfig {
 
   /// Clave de almacenamiento de la sesión (cookie `qva_session`).
   static const String sessionCookieKey = 'qvatube.session_cookie';
+
+  /// Claves de preferencias locales de la app.
+  static const String showNewBadgesKey = 'qvatube.show_new_badges';
+  static const String showContinueWatchingKey = 'qvatube.show_continue_watching';
 }

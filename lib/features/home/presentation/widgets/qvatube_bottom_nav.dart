@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -42,8 +44,13 @@ class QvaBottomNav extends StatefulWidget {
 
 class _QvaBottomNavState extends State<QvaBottomNav>
     with TickerProviderStateMixin {
-  static const double _pillWidth = 50;
-  static const double _pillHeight = 38;
+  // Tamaño máximo de la píldora activa. El tamaño real se calcula en el
+  // layout: nunca puede pasar del ancho de la casilla, así el óvalo no se
+  // sale ni se pisa con los vecinos (ni en el primer ni en el último icono).
+  static const double _maxPillWidth = 50;
+  static const double _maxPillHeight = 34;
+  static const double _pillWidthFactor = 0.78;
+  static const double _pillHeightFactor = 0.72;
 
   late final AnimationController _glowController = AnimationController(
     vsync: this,
@@ -98,9 +105,16 @@ class _QvaBottomNavState extends State<QvaBottomNav>
         top: false,
         child: SizedBox(
           height: 58,
-          child: LayoutBuilder(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: LayoutBuilder(
             builder: (context, constraints) {
               final slot = constraints.maxWidth / count;
+              final pillWidth =
+                  math.min(_maxPillWidth, slot * _pillWidthFactor);
+              final pillHeight =
+                  math.min(_maxPillHeight, slot * _pillHeightFactor);
+              final pillRadius = pillHeight / 2;
               return Stack(
                 alignment: Alignment.topCenter,
                 children: [
@@ -108,24 +122,29 @@ class _QvaBottomNavState extends State<QvaBottomNav>
                   AnimatedBuilder(
                     animation: _glowController,
                     builder: (context, child) {
-                      final opacity = 0.35 + (_glowController.value * 0.35);
+                      final opacity = 0.22 + (_glowController.value * 0.20);
                       return Positioned(
-                        left: slot * _pillCenter + (slot - _pillWidth) / 2,
-                        top: (58 - _pillHeight) / 2,
+                        left: slot * _pillCenter + (slot - pillWidth) / 2,
+                        top: (58 - pillHeight) / 2,
                         child: Container(
-                          width: _pillWidth,
-                          height: _pillHeight,
+                          width: pillWidth,
+                          height: pillHeight,
                           decoration: BoxDecoration(
                             color: AppColors.accentSoft,
-                            borderRadius: BorderRadius.circular(16),
+                            // Radio = alto/2 → óvalo perfecto.
+                            borderRadius: BorderRadius.circular(pillRadius),
                             border: Border.all(
-                              color: AppColors.accent.withValues(alpha: 0.55),
+                              color: AppColors.accent.withValues(alpha: 0.6),
                             ),
                             boxShadow: [
+                              // Halo interior suave (no se corta en los
+                              // extremos de la barra).
                               BoxShadow(
-                                color: AppColors.accent.withValues(alpha: opacity),
-                                blurRadius: 12,
-                                spreadRadius: 2,
+                                color: AppColors.accent.withValues(
+                                  alpha: opacity,
+                                ),
+                                blurRadius: 8,
+                                spreadRadius: 0,
                               ),
                             ],
                           ),
@@ -140,6 +159,8 @@ class _QvaBottomNavState extends State<QvaBottomNav>
                           child: _NavButton(
                             item: widget.items[index],
                             isActive: index == widget.currentIndex,
+                            pillWidth: pillWidth,
+                            pillHeight: pillHeight,
                             onTap: () => widget.onTap(index),
                           ),
                         ),
@@ -148,6 +169,7 @@ class _QvaBottomNavState extends State<QvaBottomNav>
                 ],
               );
             },
+            ),
           ),
         ),
       ),
@@ -160,11 +182,15 @@ class _NavButton extends StatelessWidget {
     required this.item,
     required this.isActive,
     required this.onTap,
+    required this.pillWidth,
+    required this.pillHeight,
   });
 
   final QvaBottomNavItem item;
   final bool isActive;
   final VoidCallback onTap;
+  final double pillWidth;
+  final double pillHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -177,8 +203,8 @@ class _NavButton extends StatelessWidget {
         height: 58,
         child: Center(
           child: SizedBox(
-            width: 50,
-            height: 38,
+            width: pillWidth,
+            height: pillHeight,
             child: Stack(
               clipBehavior: Clip.none,
               alignment: Alignment.center,
@@ -194,24 +220,29 @@ class _NavButton extends StatelessWidget {
                 ),
                 if (item.badgeCount > 0)
                   Positioned(
-                    right: 6,
-                    top: 4,
+                    right: 0,
+                    top: 0,
                     child: Container(
-                      constraints: const BoxConstraints(minWidth: 15),
-                      height: 15,
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      constraints: const BoxConstraints(minWidth: 13),
+                      height: 13,
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: AppColors.accent,
                         borderRadius: BorderRadius.circular(AppRadii.pill),
+                        // Borde del color de fondo para despegarlo del icono.
+                        border: Border.all(
+                          color: AppColors.background,
+                          width: 1.5,
+                        ),
                       ),
                       child: Text(
                         item.badgeCount > 99 ? '99+' : '${item.badgeCount}',
                         style: AppTextStyles.mono(
-                          fontSize: 9.5,
+                          fontSize: 8,
                           fontWeight: FontWeight.w700,
                           color: AppColors.accentInk,
-                        ),
+                        ).copyWith(height: 1),
                       ),
                     ),
                   ),

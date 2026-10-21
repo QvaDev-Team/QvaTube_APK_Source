@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- La app consume la API de QvaTube (doc/openapi.json). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="qvatube_apk"
+        android:label="QvaTube"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

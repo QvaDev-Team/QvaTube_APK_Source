@@ -13,21 +13,29 @@ class PendingScreen extends StatelessWidget {
     required this.title,
     required this.description,
     this.icon = Icons.construction_outlined,
+    this.showBackButton = true,
   });
 
   final String title;
   final String description;
   final IconData icon;
 
+  /// Las pantallas que son una pestaña de la barra inferior no muestran el
+  /// botón "atrás".
+  final bool showBackButton;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        leading: IconButton(
-          onPressed: () => Navigator.of(context).maybePop(),
-          icon: const Icon(Icons.arrow_back),
-        ),
+        automaticallyImplyLeading: showBackButton,
+        leading: showBackButton
+            ? IconButton(
+                onPressed: () => Navigator.of(context).maybePop(),
+                icon: const Icon(Icons.arrow_back),
+              )
+            : null,
         title: Text(title),
       ),
       body: Center(

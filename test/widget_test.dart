@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:qvatube_apk/core/config/app_config.dart';
+import 'package:qvatube_apk/core/network/api_client.dart';
+import 'package:qvatube_apk/core/network/api_providers.dart';
 import 'package:qvatube_apk/core/storage/app_preferences.dart';
 import 'package:qvatube_apk/main.dart';
 
@@ -17,6 +19,10 @@ Future<void> _pumpApp(WidgetTester tester, {bool introSeen = true}) async {
       overrides: [
         sharedPreferencesProvider
             .overrideWithValue(await SharedPreferences.getInstance()),
+        // En los tests no hay red: el cliente lanza el error controlado.
+        apiClientProvider.overrideWithValue(
+          ApiClient(remoteCallsEnabled: false),
+        ),
       ],
       child: const QvaTubeApp(),
     ),
@@ -42,10 +48,12 @@ void main() {
     expect(find.text('Explorar como invitado'), findsOneWidget);
   });
 
-  testWidgets('el invitado entra al home con barra inferior de 5 secciones',
+  testWidgets('el invitado entra al home con barra inferior de 9 secciones',
       (WidgetTester tester) async {
     await _pumpApp(tester);
 
+    await tester.ensureVisible(find.text('Explorar como invitado'));
+    await tester.pump();
     await tester.tap(find.text('Explorar como invitado'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
@@ -73,6 +81,8 @@ void main() {
   testWidgets('el avatar abre el menú de cuenta', (WidgetTester tester) async {
     await _pumpApp(tester);
 
+    await tester.ensureVisible(find.text('Explorar como invitado'));
+    await tester.pump();
     await tester.tap(find.text('Explorar como invitado'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
