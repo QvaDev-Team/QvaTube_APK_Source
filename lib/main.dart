@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+
 void main() {
   runApp(const MyApp());
 }
@@ -10,7 +11,7 @@ class MyApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-        return ShadApp.custom(
+    return ShadApp.custom(
       themeMode: ThemeMode.dark,
       darkTheme: ShadThemeData(
         brightness: Brightness.dark,
@@ -20,9 +21,7 @@ class MyApp extends StatelessWidget {
         return MaterialApp(
           home: const MyHomePage(title: 'QvaTube'),
           theme: Theme.of(context),
-          localizationsDelegates: const [
-            GlobalShadLocalizations.delegate,
-          ],
+          localizationsDelegates: const [GlobalShadLocalizations.delegate],
           builder: (context, child) {
             return ShadAppBuilder(child: child!);
           },
