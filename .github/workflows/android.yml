@@ -26,6 +26,17 @@ jobs:
     name: Compilar APK
     runs-on: ubuntu-latest
 
+    # Los secretos se declaran a nivel de job porque el contexto `secrets`
+    # NO está disponible dentro de `if:` de un step (solo en env/with/run).
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      # Nombre del .jks dentro de android/ (variable de repositorio
+      # opcional KEYSTORE_FILE; por defecto qvatube-release.jks).
+      KEYSTORE_FILE: ${{ vars.KEYSTORE_FILE || 'qvatube-release.jks' }}
+
     steps:
       - name: Clonar el repositorio
         uses: actions/checkout@v4
@@ -48,15 +59,7 @@ jobs:
       - name: Preparar las credenciales de firma
         # Solo si existe el secreto KEYSTORE_BASE64 (si no, el release usa la
         # clave de debug y el APK sale "unsigned" para pruebas internas).
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          # Nombre del .jks dentro de android/ (variable de repositorio
-          # opcional KEYSTORE_FILE; por defecto qvatube-release.jks).
-          KEYSTORE_FILE: ${{ vars.KEYSTORE_FILE || 'qvatube-release.jks' }}
+        if: env.KEYSTORE_BASE64 != ''
         run: |
           set -euo pipefail
           cd android
@@ -68,6 +71,11 @@ jobs:
           keyPassword=$KEY_PASSWORD
           EOF
           chmod 600 key.properties "$KEYSTORE_FILE"
+
+      - name: Aviso si no hay credenciales de firma
+        if: env.KEYSTORE_BASE64 == ''
+        run: |
+          echo "::warning::No hay secretos de firma: el APK de release se generará con la clave de debug (no sirve para publicar en Google Play)."
 
       - name: Instalar dependencias
         run: flutter pub get
@@ -119,32 +127,63 @@ jobs:
       # Release rodante: en cada push a main se actualiza la release
       # "latest" del repositorio. Así el APK más reciente se descarga
       # siempre desde el mismo enlace y aparece en la portada del repo.
+      #
+      # Se usa la CLI `gh` (ya viene en el runner) en vez de una action de
+      # terceros porque hay que poder BORRAR los borradores ("Draft") que
+      # queden de pruebas manuales: si existe un draft con el mismo tag,
+      # GitHub responde 422 "already_exists" y la release no se publica.
       # ---------------------------------------------------------------------
-      - name: Actualizar la release "latest" del repositorio
+      - name: Publicar la release "latest" del repositorio
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          name: 'QvaTube (última versión)'
-          prerelease: true
-          draft: false
-          fail_on_unmatched_files: false
-          files: |
-            build/app/outputs/flutter-apk/qvatube.apk
-            build/app/outputs/flutter-apk/app-release-*.apk
-          body: |
-            ## QvaTube — build automático
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: latest
+        run: |
+          set -euo pipefail
+          cd build/app/outputs/flutter-apk
 
-            | | |
-            |---|---|
-            | Commit | `${{ github.sha }}` |
-            | Rama | `${{ github.ref_name }}` |
-            | Versión | `${{ vars.APP_VERSION || 'automática' }}` |
-            | Fecha | `${{ github.event.repository.updated_at }}` |
+          echo ">> Releases actuales con el tag $TAG (incluye borradores):"
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$TAG\") | \"id=\(.id) draft=\(.draft) tag=\(.tag_name)\""
 
-            **Descarga directa (siempre la última):**
-            https://github.com/${{ github.repository }}/releases/latest/download/qvatube.apk
+          # 1) Borra la release anterior (publicada o borrador) con ese tag.
+          for id in $(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+                        --jq ".[] | select(.tag_name == \"$TAG\") | .id"); do
+            echo ">> Eliminando la release anterior (id=$id)"
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id"
+          done
 
-            `qvatube.apk` = APK universal (funciona en cualquier teléfono).
-            Los `app-release-<arquitectura>.apk` son las versiones separadas
-            por ABI (más pequeñas).
+          # 2) El tag también se recrea apuntando al commit actual.
+          git push origin ":refs/tags/$TAG" 2>/dev/null || echo ">> No había tag remoto $TAG"
+          git tag -f "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
+
+          # 3) Crea la release con los APK dentro.
+          gh release create "$TAG" \
+            qvatube.apk \
+            app-release-armeabi-v7a.apk \
+            app-release-arm64-v8a.apk \
+            app-release-x86_64.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "QvaTube (última versión)" \
+            --prerelease \
+            --notes "$(cat <<EOF
+          ## QvaTube — build automático
+
+          | | |
+          |---|---|
+          | Commit | \`$GITHUB_SHA\` |
+          | Rama | \`$GITHUB_REF_NAME\` |
+          | Fecha | ${{ github.event.repository.updated_at }} |
+
+          **Descarga directa (siempre la última):**
+          https://github.com/$GITHUB_REPOSITORY/releases/latest/download/qvatube.apk
+
+          \`qvatube.apk\` = APK universal (funciona en cualquier teléfono).
+          Los \`app-release-<arquitectura>.apk\` son las versiones separadas
+          por ABI (más pequeñas).
+          EOF
+          )"
+
+          echo ">> Release publicada: $(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url --jq .url)"
