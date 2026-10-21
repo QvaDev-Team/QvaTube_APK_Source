@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/storage/app_preferences.dart';
 import '../../../core/theme/app_assets.dart';
+import '../../update/presentation/update_checker.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text.dart';
 
@@ -53,6 +54,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 10),
           _ThemeSelector(),
           const SizedBox(height: 20),
+          Text('Aplicación', style: Theme.of(context).textTheme.displaySmall),
+          const SizedBox(height: 10),
+          const UpdateMenuEntry(),
+          _VersionEntry(),
           Text('Contenido', style: Theme.of(context).textTheme.displaySmall),
           const SizedBox(height: 10),
           _SwitchRow(
@@ -297,6 +302,42 @@ class _ThemeSelectorState extends ConsumerState<_ThemeSelector> {
           ),
         );
       },
+    );
+  }
+}
+
+
+/// Muestra la versión instalada y enlaza con las releases de GitHub.
+class _VersionEntry extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadii.md),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, size: 20, color: AppColors.textSecondary),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              'Versión de la app',
+              style: AppTextStyles.body(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => showAppVersionDialog(context),
+            child: const Text('Ver'),
+          ),
+        ],
+      ),
     );
   }
 }

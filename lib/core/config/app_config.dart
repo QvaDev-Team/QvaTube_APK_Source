@@ -24,6 +24,30 @@ abstract final class AppConfig {
   /// Clave de almacenamiento de la sesión (cookie `qva_session`).
   static const String sessionCookieKey = 'qvatube.session_cookie';
 
+  /// Manifiesto JSON con la última versión publicada.
+  ///
+  /// Lo publica el workflow de GitHub Actions (archivo `latest.json` de la
+  /// release). Formato:
+  /// `{"version_code": 2002, "version_name": "1.0.2", "url": "https://.../qvatube.apk"}`
+  ///
+  /// Se puede cambiar en build con
+  /// `--dart-define=UPDATE_MANIFEST_URL=https://tu-servidor/latest.json`.
+  static const String updateManifestUrl = String.fromEnvironment(
+    'UPDATE_MANIFEST_URL',
+    defaultValue:
+        'https://github.com/R0ger0l1va/qvatube_apk/releases/latest/download/latest.json',
+  );
+
+  /// URL directa del APK de la última versión.
+  ///
+  /// Se usa como plan B: si no hay manifiesto, la app descarga este APK y lee
+  /// su `versionCode` para saber si hay algo nuevo.
+  static const String updateApkUrl = String.fromEnvironment(
+    'UPDATE_APK_URL',
+    defaultValue:
+        'https://github.com/R0ger0l1va/qvatube_apk/releases/latest/download/qvatube.apk',
+  );
+
   /// Clave de la preferencia con el tema (temporada) activo.
   static const String themeIdKey = 'qvatube.theme_id';
 

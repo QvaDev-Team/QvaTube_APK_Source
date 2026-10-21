@@ -2,7 +2,11 @@ package net.qvatube.app
 
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -12,7 +16,9 @@ import java.io.File
  * Canal nativo mínimo (sin dependencias externas) para:
  *  - elegir una imagen de la galería y copiarla a la caché de la app
  *    (se usa en POST /api/auth/avatar);
- *  - abrir enlaces externos (bot de Telegram, comunidad de WhatsApp).
+ *  - abrir enlaces externos (bot de Telegram, comunidad de WhatsApp);
+ *  - consultar la versión instalada y la de un APK descargado;
+ *  - instalar una actualización (autoactualización desde la app).
  */
 class MainActivity : FlutterActivity() {
     private val channelName = "qvatube/device"
@@ -38,9 +44,116 @@ class MainActivity : FlutterActivity() {
                             }
                         }
                     }
+                    "getInstalledVersion" -> {
+                        try {
+                            val info = packageManager.getPackageInfo(packageName, 0)
+                            val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                info.longVersionCode
+                            } else {
+                                @Suppress("DEPRECATION")
+                                info.versionCode.toLong()
+                            }
+                            result.success(
+                                mapOf(
+                                    "versionCode" to code,
+                                    "versionName" to (info.versionName ?: "")
+                                )
+                            )
+                        } catch (e: Exception) {
+                            result.error("version", e.message, null)
+                        }
+                    }
+                    "getApkVersion" -> {
+                        val path = call.argument<String>("path")
+                        if (path.isNullOrBlank()) {
+                            result.error("bad_args", "Ruta vacía", null)
+                        } else {
+                            try {
+                                result.success(readApkVersion(File(path)))
+                            } catch (e: Exception) {
+                                result.error("version", e.message, null)
+                            }
+                        }
+                    }
+                    "cacheDirectory" -> result.success(cacheDir.absolutePath)
+                    "installApk" -> {
+                        val path = call.argument<String>("path")
+                        if (path.isNullOrBlank()) {
+                            result.error("bad_args", "Ruta vacía", null)
+                        } else {
+                            installApk(File(path), result)
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /** Lee el versionCode / versionName de un APK en disco. */
+    private fun readApkVersion(file: File): Map<String, Any> {
+        val pm = packageManager
+        val info = pm.getPackageArchiveInfo(file.absolutePath, 0)
+            ?: throw IllegalStateException("El archivo no es un APK válido")
+        val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            info.versionCode.toLong()
+        }
+        return mapOf(
+            "versionCode" to code,
+            "versionName" to (info.versionName ?: "")
+        )
+    }
+
+    /**
+     * Abre el instalador del sistema para el APK descargado.
+     *
+     * Si el usuario todavía no ha autorizado a esta app a instalar
+     * paquetes, se abre la pantalla de Ajustes correspondiente y se devuelve
+     * un error para que la app lo explique.
+     */
+    private fun installApk(file: File, result: MethodChannel.Result) {
+        if (!file.exists()) {
+            result.error("missing_file", "No se encontró el APK descargado", null)
+            return
+        }
+        try {
+            @Suppress("DEPRECATION")
+            val canInstall = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                packageManager.canRequestPackageInstalls()
+            } else {
+                true
+            }
+            if (!canInstall) {
+                val settings = Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:$packageName")
+                )
+                startActivity(settings)
+                result.error(
+                    "permission_required",
+                    "Hay que permitir las instalaciones de esta app",
+                    null
+                )
+                return
+            }
+
+            val uri = FileProvider.getUriForFile(
+                this,
+                "$packageName.fileprovider",
+                file
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("install", e.message, null)
+        }
     }
 
     private fun pickImage(result: MethodChannel.Result) {

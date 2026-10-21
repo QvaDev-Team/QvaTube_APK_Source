@@ -57,6 +57,18 @@ descargas optimizadas para gastar lo mínimo de datos.
 | 💬 | **Comunidad** | Enlace a WhatsApp, bot de Telegram y datos de pago por Transfermóvil. |
 | ⚙️ | **Configuración** | Preferencias locales (cinta "NUEVO", fila "Seguir donde quedaste"). |
 
+### ⬆️ Autoactualización
+
+La app comprueba al abrirse si hay una **versión nueva publicada en GitHub**
+(manifiesto de 1 KB) y, si la hay, muestra una banda con el aviso, **descarga
+el APK y abre el instalador del sistema** para actualizar sin salir de QvaTube.
+
+Además: *Configuración → Buscar actualizaciones* hace una comprobación
+profunda (descarga el APK y lee su `versionCode`).
+
+Guía completa (manifiesto `latest.json`, URLs configurables, pruebas locales):
+[`doc/AUTO_UPDATE.md`](doc/AUTO_UPDATE.md)
+
 ### 🎃 Temas por temporada
 
 Los logos, favicons e iconos se cambian **sin tocar código**: todo está
@@ -232,6 +244,7 @@ Workflows: [`.github/workflows/android.yml`](.github/workflows/android.yml) y
 |---|---|
 | [`doc/API_MAP.md`](doc/API_MAP.md) | Qué endpoint está conectado a qué pantalla, discrepancias con el `openapi.json` y lo que falta. |
 | [`doc/CI_CD.md`](doc/CI_CD.md) | Creación del almacén de claves, secretos de GitHub, publicación en Google Play y verificación de firmas. |
+| [`doc/AUTO_UPDATE.md`](doc/AUTO_UPDATE.md) | Autoactualización: manifiesto de versión, descarga e instalación. |
 | [`doc/TEMAS.md`](doc/TEMAS.md) | Cómo cambiar o añadir la temporada (logo, favicon e iconos). |
 | [`doc/build_guide.md`](doc/build_guide.md) | Guía de compilación local: JDK 17, build debug y release optimizado para ARM64. |
 | [`doc/QVATUBE_FLUTTER_DESIGN_SPEC.md`](doc/QVATUBE_FLUTTER_DESIGN_SPEC.md) | Sistema de diseño completo (colores, tipografías, iconos, componentes). |
@@ -247,6 +260,7 @@ Workflows: [`.github/workflows/android.yml`](.github/workflows/android.yml) y
 - [x] Perfil, plan, notificaciones, favoritos y comunidad
 - [x] Barra inferior de 9 secciones con Inicio en el medio
 - [x] CI/CD: APK firmado por push y publicación en Play Store por tag
+- [x] Autoactualización desde la app (aviso, descarga e instalación)
 - [ ] Reproductor de video, música y libros
 - [ ] Descargas con autorización (`/api/download/authorize`)
 - [ ] Progreso de reproducción y "marcar como visto"

@@ -7,6 +7,7 @@ import 'core/config/app_config.dart';
 import 'core/storage/app_preferences.dart';
 import 'core/theme/app_assets.dart';
 import 'features/auth/application/auth_controller.dart';
+import 'features/update/presentation/update_checker.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 
@@ -71,7 +72,10 @@ class _QvaTubeAppState extends ConsumerState<QvaTubeApp> {
           ),
           child: ColoredBox(
             color: AppColors.background,
-            child: child ?? const SizedBox.shrink(),
+            // Aviso de versión nueva al abrir la app.
+            child: UpdateChecker(
+              child: child ?? const SizedBox.shrink(),
+            ),
           ),
         );
       },

@@ -22,7 +22,10 @@ import '../features/home/presentation/tabs/catalog_tab.dart';
 import '../features/home/presentation/tabs/home_tab.dart';
 import '../features/onboarding/presentation/intro_screen.dart';
 
-final _rootKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+/// Navigator raíz (se usa también para mostrar diálogos globales, como el
+/// aviso de actualización, desde un contexto que está por encima del
+/// Navigator).
+final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
 /// Rutas de la app.
 abstract final class Routes {
@@ -69,7 +72,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final notifier = ref.watch(authSessionNotifierProvider);
 
   return GoRouter(
-    navigatorKey: _rootKey,
+    navigatorKey: rootNavigatorKey,
     initialLocation: Routes.root,
     refreshListenable: notifier,
     redirect: (context, state) {
@@ -150,7 +153,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       StatefulShellRoute.indexedStack(
-        parentNavigatorKey: _rootKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state, navigationShell) {
           return HomeShell(navigationShell: navigationShell);
         },

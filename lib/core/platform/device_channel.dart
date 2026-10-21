@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 
 /// Puente con el canal nativo `qvatube/device` (MainActivity.kt).
@@ -20,6 +22,70 @@ abstract final class DeviceChannel {
     } on MissingPluginException {
       return null;
     }
+  }
+
+  /// Versión instalada de la app (`versionCode` / `versionName`).
+  static Future<({int versionCode, String versionName})>
+      getInstalledVersion() async {
+    try {
+      final result = await _channel.invokeMapMethod<String, dynamic>(
+        'getInstalledVersion',
+      );
+      final code = (result?['versionCode'] as num?)?.toInt() ?? 0;
+      final name = result?['versionName']?.toString() ?? '';
+      return (versionCode: code, versionName: name);
+    } on PlatformException {
+      return (versionCode: 0, versionName: '');
+    } on MissingPluginException {
+      return (versionCode: 0, versionName: '');
+    }
+  }
+
+  /// Versión de un APK descargado (para comprobar actualizaciones).
+  static Future<({int versionCode, String versionName})> getApkVersion(
+    String path,
+  ) async {
+    try {
+      final result = await _channel.invokeMapMethod<String, dynamic>(
+        'getApkVersion',
+        {'path': path},
+      );
+      final code = (result?['versionCode'] as num?)?.toInt() ?? 0;
+      final name = result?['versionName']?.toString() ?? '';
+      return (versionCode: code, versionName: name);
+    } on PlatformException {
+      return (versionCode: 0, versionName: '');
+    } on MissingPluginException {
+      return (versionCode: 0, versionName: '');
+    }
+  }
+
+  /// Abre el instalador del sistema con el APK descargado.
+  ///
+  /// Devuelve `false` si el usuario tiene que autorizar antes la instalación
+  /// (en ese caso se abrió el ajuste del sistema).
+  static Future<bool> installApk(String path) async {
+    try {
+      return await _channel.invokeMethod<bool>('installApk', {'path': path}) ??
+          false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  /// Carpeta de caché de la app (donde se descargan las actualizaciones).
+  static Future<String> cacheDirectory() async {
+    try {
+      final path = await _channel.invokeMethod<String>('cacheDirectory');
+      if (path != null && path.isNotEmpty) return path;
+    } on PlatformException {
+      // se usa la carpeta temporal
+    } on MissingPluginException {
+      // se usa la carpeta temporal
+    }
+    return Directory.systemTemp.path;
   }
 
   /// Abre una URL en el navegador del sistema.

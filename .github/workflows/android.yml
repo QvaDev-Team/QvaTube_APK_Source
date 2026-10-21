@@ -145,6 +145,29 @@ jobs:
           ls -la dist
           df -h / | tail -1
 
+      # Manifiesto de versión: la app lo consulta para saber si hay una
+      # actualización sin tener que descargar el APK entero.
+      - name: Generar el manifiesto de versión
+        run: |
+          set -euo pipefail
+          VERSION_LINE=$(grep -E "^version:" pubspec.yaml | head -1)
+          VERSION_NAME=$(echo "$VERSION_LINE" | sed -E 's/^version:[[:space:]]*([^+ ]+).*/\1/')
+          VERSION_CODE=$(echo "$VERSION_LINE" | sed -E 's/.*\+([0-9]+).*/\1/')
+          SIZE_MB=$(awk "BEGIN {printf \"%.1f\", $(stat -c%s dist/qvatube.apk) / 1048576}")
+          NOTES=$(git log -1 --pretty=%B | tr '\n' ' ' | tr -s ' ')
+          URL="https://github.com/$GITHUB_REPOSITORY/releases/latest/download/qvatube.apk"
+          jq -n \
+            --argjson version_code "$VERSION_CODE" \
+            --arg version_name "$VERSION_NAME" \
+            --arg url "$URL" \
+            --arg notes "$NOTES" \
+            --argjson size_mb "$SIZE_MB" \
+            --arg published_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{version_code: $version_code, version_name: $version_name, url: $url,
+              notes: $notes, size_mb: $size_mb, published_at: $published_at}' \
+            > dist/latest.json
+          cat dist/latest.json
+
       - name: Publicar el APK como artefacto
         uses: actions/upload-artifact@v4
         with:
@@ -153,6 +176,7 @@ jobs:
           if-no-files-found: error
           path: |
             dist/qvatube.apk
+            dist/latest.json
             dist/symbols
 
       - name: Publicar el AAB como artefacto
