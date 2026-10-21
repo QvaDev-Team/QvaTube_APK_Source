@@ -79,11 +79,13 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/theme.json
     - assets/logo.png
     - assets/logo.webp
     - assets/favicon.png
     - assets/icons/
-    - assets/themes/
+    # Cada carpeta de tema debe declararse aquí (Flutter no es recursivo).
+    - assets/themes/halloween/
 
   fonts:
     # Títulos y textos grandes (--f-display)

@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "active": "halloween",
+  "description": "Manifiesto de assets de QvaTube. Cambia 'active' o usa la app (Configuración > Tema) para cambiar los logos e iconos por temporada. Cada tema vive en su propia carpeta y debe usar los mismos nombres de archivo.",
+  "androidLauncher": {
+    "mipmap-mdpi": "icon-72.png",
+    "mipmap-hdpi": "icon-72.png",
+    "mipmap-xhdpi": "icon-96.png",
+    "mipmap-xxhdpi": "icon-144.png",
+    "mipmap-xxxhdpi": "icon-192.png"
+  },
+  "themes": {
+    "default": {
+      "label": "QvaTube (estándar)",
+      "path": "assets",
+      "description": "Logo e iconos originales de la marca.",
+      "assets": {
+        "logo": "logo.png",
+        "logoWebp": "logo.webp",
+        "favicon": "favicon.png",
+        "faviconIco": "favicon.ico",
+        "icons": {
+          "72": "icon-72.png",
+          "96": "icon-96.png",
+          "128": "icon-128.png",
+          "144": "icon-144.png",
+          "152": "icon-152.png",
+          "192": "icon-192.png",
+          "384": "icon-384.png",
+          "512": "icon-512.png"
+        }
+      }
+    },
+    "halloween": {
+      "label": "Halloween",
+      "path": "assets/themes/halloween",
+      "description": "Variante de Halloween (logo rojo con splash). Temporada activa.",
+      "assets": {
+        "logo": "logo.png",
+        "logoWebp": "logo.webp",
+        "favicon": "favicon.png",
+        "faviconIco": "favicon.ico",
+        "icons": {
+          "72": "icon-72.png",
+          "96": "icon-96.png",
+          "128": "icon-128.png",
+          "144": "icon-144.png",
+          "152": "icon-152.png",
+          "192": "icon-192.png",
+          "384": "icon-384.png",
+          "512": "icon-512.png"
+        }
+      }
+    }
+  }
+}

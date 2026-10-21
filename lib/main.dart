@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app/router.dart';
+import 'core/config/app_config.dart';
 import 'core/storage/app_preferences.dart';
+import 'core/theme/app_assets.dart';
 import 'features/auth/application/auth_controller.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
@@ -11,6 +13,12 @@ import 'core/theme/app_theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final preferences = await SharedPreferences.getInstance();
+
+  // Assets de la temporada (assets/theme.json). Se respeta el tema elegido
+  // en Configuración; si no hay ninguno, se usa el "active" del manifiesto.
+  await AppAssets.init(
+    themeId: preferences.getString(AppConfig.themeIdKey),
+  );
 
   runApp(
     ProviderScope(

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_assets.dart';
 import '../theme/app_colors.dart';
 
-/// Logotipo de QvaTube (`assets/logo.png`).
+/// Logotipo de QvaTube.
+///
+/// La ruta se resuelve desde el manifiesto de assets (`assets/theme.json`), así
+/// que el logo de la temporada se cambia sin tocar código.
 class AppLogo extends StatelessWidget {
   const AppLogo({
     super.key,
@@ -15,28 +19,34 @@ class AppLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final logo = Image.asset(
-      'assets/logo.png',
-      height: height,
-      fit: BoxFit.contain,
-      filterQuality: FilterQuality.medium,
-      errorBuilder: (context, error, stackTrace) => _FallbackLogo(height: height),
-    );
+    return ValueListenableBuilder<int>(
+      valueListenable: AppAssets.revision,
+      builder: (context, _, _) {
+        final logo = Image.asset(
+          AppAssets.logo,
+          height: height,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.medium,
+          errorBuilder: (context, error, stackTrace) =>
+              _FallbackLogo(height: height),
+        );
 
-    if (!showWordmark) return logo;
+        if (!showWordmark) return logo;
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        logo,
-        const SizedBox(width: 8),
-        Text(
-          'QvaTube',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                letterSpacing: 0.2,
-              ),
-        ),
-      ],
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            logo,
+            const SizedBox(width: 8),
+            Text(
+              'QvaTube',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    letterSpacing: 0.2,
+                  ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

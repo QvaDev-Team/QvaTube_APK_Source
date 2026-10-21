@@ -2,11 +2,14 @@ name: Android CI
 
 # Se ejecuta en cada push a main, en cada PR y a mano.
 #
-# 1) Compila el APK (debug y release firmado) y el AAB.
-# 2) Los deja como artefactos de la ejecución.
-# 3) En los pushes a main actualiza la release "latest" del repo, para
-#    poder descargar siempre la última versión con un enlace directo:
+# 1) Compila el AAB (para Google Play, con todas las arquitecturas) y el APK
+#    de release **solo arm64**, minificado con R8 y ofuscado con
+#    --obfuscate para que ocupe lo mínimo (26 MB).
+# 2) Deja el APK en la release rodante "latest" del repositorio:
 #       https://github.com/R0ger0l1va/qvatube_apk/releases/latest/download/qvatube.apk
+#
+# NO se compila el APK de depuración: pesa ~225 MB (con los 4 ABI y los
+# símbolos) y llenaba el disco del runner ("No space left on device").
 on:
   push:
     branches: [main]
@@ -56,6 +59,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # El runner de GitHub tiene ~14 GB en la partición /. Flutter + Android
+      # SDK + varios builds de Gradle se lo comen, así que se libera lo que no
+      # hace falta (dotnet, GHC, emulador) ANTES de compilar.
+      - name: Liberar espacio en el runner
+        run: |
+          set -euo pipefail
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /opt/ghc "$AGENT_TOOLSDIRECTORY"/CodeQL || true
+          sudo rm -rf /usr/local/lib/android/sdk/emulator || true
+          sudo rm -rf /usr/local/lib/android/sdk/system-images || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          df -h / | tail -1
+
       - name: Preparar las credenciales de firma
         # Solo si existe el secreto KEYSTORE_BASE64 (si no, el release usa la
         # clave de debug y el APK sale "unsigned" para pruebas internas).
@@ -86,33 +102,58 @@ jobs:
       - name: Pruebas
         run: flutter test
 
-      - name: APK de depuración
-        run: flutter build apk --debug
-
-      - name: APK de release (firmado)
-        run: flutter build apk --release --split-per-abi
-
-      - name: APK universal (un solo archivo para todos los phones)
-        run: flutter build apk --release
-
+      # ---------------------------------------------------------------------
+      # 1) AAB para Google Play: tiene que incluir TODAS las arquitecturas
+      #    (arm, arm64, x86_64) porque Play las reparte según el dispositivo.
+      # ---------------------------------------------------------------------
       - name: AAB para Play Store
         run: flutter build appbundle --release
 
-      - name: Renombrar el APK universal
+      - name: Guardar el AAB
         run: |
           set -euo pipefail
-          cd build/app/outputs/flutter-apk
-          cp app-release.apk qvatube.apk
-          ls -la
+          mkdir -p dist
+          cp build/app/outputs/bundle/release/*.aab dist/
+          ls -la dist
 
-      - name: Publicar los APK como artefacto
+      - name: Limpiar intermedios
+        run: flutter clean
+
+      # ---------------------------------------------------------------------
+      # 2) APK de distribución directa: SOLO arm64-v8a, con R8
+      #    (isMinifyEnabled + isShrinkResources) y ofuscación de Dart.
+      #    26 MB en vez de los 66 MB del APK universal.
+      #    --split-per-abi es lo que hace que las librerías nativas de los
+      #    plugins também se filtren (native-code: arm64-v8a únicamente).
+      #    Los símbolos se suben como artefacto del workflow (no a la release
+      #    pública) para poder symbolicar los crash.
+      # ---------------------------------------------------------------------
+      - name: APK de release ARM64 (minificado y ofuscado)
+        run: |
+          flutter build apk --release \
+            --split-per-abi \
+            --target-platform android-arm64 \
+            --obfuscate \
+            --split-debug-info=build/symbols
+
+      - name: Recolectar los artefactos
+        run: |
+          set -euo pipefail
+          mkdir -p dist/symbols
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk dist/qvatube.apk
+          cp build/symbols/* dist/symbols/ 2>/dev/null || true
+          ls -la dist
+          df -h / | tail -1
+
+      - name: Publicar el APK como artefacto
         uses: actions/upload-artifact@v4
         with:
           name: qvatube-apk-${{ github.sha }}
           retention-days: 30
           if-no-files-found: error
           path: |
-            build/app/outputs/flutter-apk/*.apk
+            dist/qvatube.apk
+            dist/symbols
 
       - name: Publicar el AAB como artefacto
         uses: actions/upload-artifact@v4
@@ -121,7 +162,7 @@ jobs:
           retention-days: 30
           if-no-files-found: error
           path: |
-            build/app/outputs/bundle/release/*.aab
+            dist/*.aab
 
       # ---------------------------------------------------------------------
       # Release rodante: en cada push a main se actualiza la release
@@ -140,30 +181,23 @@ jobs:
           TAG: latest
         run: |
           set -euo pipefail
-          cd build/app/outputs/flutter-apk
-
-          echo ">> Releases actuales con el tag $TAG (incluye borradores):"
-          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            --jq ".[] | select(.tag_name == \"$TAG\") | \"id=\(.id) draft=\(.draft) tag=\(.tag_name)\""
+          cd dist
 
           # 1) Borra la release anterior (publicada o borrador) con ese tag.
           for id in $(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-                        --jq ".[] | select(.tag_name == \"$TAG\") | .id"); do
+                        --jq ".[] | select(.tag_name == \\"$TAG\\") | .id"); do
             echo ">> Eliminando la release anterior (id=$id)"
             gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id"
           done
 
-          # 2) El tag también se recrea apuntando al commit actual.
+          # 2) El tag se recrea apuntando al commit actual.
           git push origin ":refs/tags/$TAG" 2>/dev/null || echo ">> No había tag remoto $TAG"
           git tag -f "$TAG" "$GITHUB_SHA"
           git push origin "refs/tags/$TAG"
 
-          # 3) Crea la release con los APK dentro.
+          # 3) Crea la release con el APK dentro.
           gh release create "$TAG" \
             qvatube.apk \
-            app-release-armeabi-v7a.apk \
-            app-release-arm64-v8a.apk \
-            app-release-x86_64.apk \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "QvaTube (última versión)" \
@@ -173,16 +207,17 @@ jobs:
 
           | | |
           |---|---|
-          | Commit | \`$GITHUB_SHA\` |
-          | Rama | \`$GITHUB_REF_NAME\` |
+          | Commit | \\`$GITHUB_SHA\\` |
+          | Rama | \\`$GITHUB_REF_NAME\\` |
           | Fecha | ${{ github.event.repository.updated_at }} |
 
           **Descarga directa (siempre la última):**
           https://github.com/$GITHUB_REPOSITORY/releases/latest/download/qvatube.apk
 
-          \`qvatube.apk\` = APK universal (funciona en cualquier teléfono).
-          Los \`app-release-<arquitectura>.apk\` son las versiones separadas
-          por ABI (más pequeñas).
+          \\`qvatube.apk\\` = APK de release para **arm64** (Android 7+),
+          minificado con R8 y con el código de Dart ofuscado (~26 MB).
+          Los símbolos de depuración se suben como artefacto del workflow,
+          no en esta release pública.
           EOF
           )"
 

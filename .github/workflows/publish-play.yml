@@ -58,6 +58,18 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # El runner de GitHub tiene ~14 GB en la partición /: se libera lo que
+      # no hace falta para no morir con "No space left on device".
+      - name: Liberar espacio en el runner
+        run: |
+          set -euo pipefail
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /opt/ghc "$AGENT_TOOLSDIRECTORY"/CodeQL || true
+          sudo rm -rf /usr/local/lib/android/sdk/emulator || true
+          sudo rm -rf /usr/local/lib/android/sdk/system-images || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          df -h / | tail -1
+
       - name: Preparar las credenciales de firma
         if: env.KEYSTORE_BASE64 != ''
         run: |
@@ -75,8 +87,17 @@ jobs:
       - name: Instalar dependencias
         run: flutter pub get
 
-      - name: Compilar el AAB de release
-        run: flutter build appbundle --release
+      # El AAB de Play conserva TODAS las arquitecturas (Play reparte la
+      # correcta a cada dispositivo) y se ofusca para reducirlo.
+      - name: Compilar el AAB de release (minificado y ofuscado)
+        run: |
+          flutter build appbundle --release \
+            --obfuscate \
+            --split-debug-info=build/symbols
+          mkdir -p dist/symbols
+          cp build/app/outputs/bundle/release/*.aab dist/
+          cp build/symbols/* dist/symbols/ 2>/dev/null || true
+          ls -la dist
 
       - name: Comprobar las credenciales de Play
         if: env.PLAY_SERVICE_ACCOUNT_JSON == ''
@@ -97,7 +118,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          cd build/app/outputs/bundle/release
+          cd dist
 
           # Borra la release previa con ese tag (incluidos los borradores
           # "Draft" que queden de pruebas manuales: bloquean la creación

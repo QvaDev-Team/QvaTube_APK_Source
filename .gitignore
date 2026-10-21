@@ -56,3 +56,6 @@ app.*.map.json
 *.p12
 *.pem
 *.base64
+
+# Salidas del workflow de CI (APK/AAB y símbolos)
+/dist/

@@ -24,6 +24,9 @@ abstract final class AppConfig {
   /// Clave de almacenamiento de la sesión (cookie `qva_session`).
   static const String sessionCookieKey = 'qvatube.session_cookie';
 
+  /// Clave de la preferencia con el tema (temporada) activo.
+  static const String themeIdKey = 'qvatube.theme_id';
+
   /// Claves de preferencias locales de la app.
   static const String showNewBadgesKey = 'qvatube.show_new_badges';
   static const String showContinueWatchingKey = 'qvatube.show_continue_watching';
