@@ -1,13 +1,13 @@
-abstract final class AdsEndpoints {
-  const AdsEndpoints._();
+final class AdsEndpoints {
+  const AdsEndpoints();
 
   /// GET: Ad configuration (enabled status and VAST tag URL)
-  static const String config = '/api/ads/config';
+  final String config = '/api/ads/config';
 
   /// POST: Start an ad session to unlock quota (returns nonce and TTL)
-  static const String request = '/api/ads/request';
+  final String request = '/api/ads/request';
 
   /// POST: Redeem the nonce after watching the ad to claim quota
-  static const String claim = '/api/ads/claim';
+  final String claim = '/api/ads/claim';
 }
 

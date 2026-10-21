@@ -31,23 +31,25 @@ import 'reviews_endpoints.dart';
 import 'tv_endpoints.dart';
 
 /// Centralized access to all API endpoints grouped by domain.
-abstract final class Endpoints {
-  const Endpoints._();
+final class Endpoints {
+  const Endpoints();
 
-  static const auth = AuthEndpoints;
-  static const catalog = CatalogEndpoints;
-  static const music = MusicEndpoints;
-  static const playback = PlaybackEndpoints;
-  static const media = MediaEndpoints;
-  static const downloads = DownloadsEndpoints;
-  static const favoritesProgress = FavoritesProgressEndpoints;
-  static const plans = PlansEndpoints;
-  static const ads = AdsEndpoints;
-  static const notifications = NotificationsEndpoints;
-  static const reportsSuggestions = ReportsSuggestionsEndpoints;
-  static const reviews = ReviewsEndpoints;
-  static const tv = TvEndpoints;
-  static const promo = PromoEndpoints;
-  static const misc = MiscEndpoints;
+  static const AuthEndpoints auth = AuthEndpoints();
+  static const CatalogEndpoints catalog = CatalogEndpoints();
+  static const MusicEndpoints music = MusicEndpoints();
+  static const PlaybackEndpoints playback = PlaybackEndpoints();
+  static const MediaEndpoints media = MediaEndpoints();
+  static const DownloadsEndpoints downloads = DownloadsEndpoints();
+  static const FavoritesProgressEndpoints favoritesProgress =
+      FavoritesProgressEndpoints();
+  static const PlansEndpoints plans = PlansEndpoints();
+  static const AdsEndpoints ads = AdsEndpoints();
+  static const NotificationsEndpoints notifications = NotificationsEndpoints();
+  static const ReportsSuggestionsEndpoints reportsSuggestions =
+      ReportsSuggestionsEndpoints();
+  static const ReviewsEndpoints reviews = ReviewsEndpoints();
+  static const TvEndpoints tv = TvEndpoints();
+  static const PromoEndpoints promo = PromoEndpoints();
+  static const MiscEndpoints misc = MiscEndpoints();
 }
 

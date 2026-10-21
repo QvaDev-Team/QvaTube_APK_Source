@@ -1,8 +1,8 @@
-abstract final class ReviewsEndpoints {
-  const ReviewsEndpoints._();
+final class ReviewsEndpoints {
+  const ReviewsEndpoints();
 
   /// GET: List site reviews with average rating
   /// POST: Submit a site review (rating and optional comment)
-  static const String reviews = '/api/reviews';
+  final String reviews = '/api/reviews';
 }
 
