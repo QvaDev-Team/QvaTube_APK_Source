@@ -10,13 +10,11 @@
 [![Release](https://img.shields.io/badge/release-Apk%20%E2%9%93%20latest-blue)](https://github.com/R0ger0l1va/qvatube_apk/releases/latest)
 [![Flutter](https://img.shields.io/badge/Flutter-3.47-02569A?logo=flutter&logoColor=white)](https://docs.flutter.dev)
 [![Android](https://img.shields.io/badge/Android-7.0%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
-[![API](https://img.shields.io/badge/API-QvaTube%20v1-FF3D1A)](doc/openapi.json)
+![API](https://img.shields.io/badge/API-QvaTube%20v1-FF3D1A)
 [![License](https://img.shields.io/badge/license-MIT-6B6B70)](LICENSE)
 
 [**⬇ Descargar la APK**](https://github.com/R0ger0l1va/qvatube_apk/releases/latest/download/qvatube.apk) ·
-[**⬇ Todas las versiones**](https://github.com/R0ger0l1va/qvatube_apk/releases) ·
-[**Documentación de la API**](doc/API_MAP.md) ·
-[**Guía de CI/CD y Play Store**](doc/CI_CD.md)
+[**⬇ Todas las versiones**](https://github.com/R0ger0l1va/qvatube_apk/releases)
 
 </div>
 
@@ -66,9 +64,6 @@ el APK y abre el instalador del sistema** para actualizar sin salir de QvaTube.
 Además: *Configuración → Buscar actualizaciones* hace una comprobación
 profunda (descarga el APK y lee su `versionCode`).
 
-Guía completa (manifiesto `latest.json`, URLs configurables, pruebas locales):
-[`doc/AUTO_UPDATE.md`](doc/AUTO_UPDATE.md)
-
 ### 🎃 Temas por temporada
 
 Los logos, favicons e iconos se cambian **sin tocar código**: todo está
@@ -82,8 +77,6 @@ dart run tool/apply_theme.dart --list
 # Cambiar de temporada (manifiesto + icono del launcher)
 dart run tool/apply_theme.dart halloween --sync-pubspec
 ```
-
-Guía completa para añadir una nueva temporada: [`doc/TEMAS.md`](doc/TEMAS.md)
 
 ### 🎨 Sistema de diseño
 
@@ -158,14 +151,13 @@ flutter build appbundle --release
 ```
 
 > Requiere Flutter 3.47+ y JDK 17. Para compilar con la **clave de release** tienes que
-> crear `android/key.properties` (ver [`doc/CI_CD.md`](doc/CI_CD.md)).
+> crear `android/key.properties`.
 
 ---
 
 ## 🔌 Servidor y configuración
 
-La app consume la **API de QvaTube** (`https://qvatube.hidenplay.net/`, especificación en
-[`doc/openapi.json`](doc/openapi.json)).
+La app consume la **API de QvaTube** (`https://qvatube.hidenplay.net/`).
 
 ```bash
 # Apuntar a otro servidor
@@ -178,8 +170,6 @@ flutter run --dart-define=API_URL=https://otro-servidor/
 | `lib/core/network/api_client.dart` | Cliente HTTP, cookie de sesión `qva_session` y manejo de errores. |
 | `lib/features/auth/` | Login, registro, recuperación, verificación por Telegram, perfil y avatar. |
 | `lib/features/catalog/` | Catálogo, home, planes, notificaciones y favoritos. |
-
-**Mapa completo endpoint ↔ pantalla:** [`doc/API_MAP.md`](doc/API_MAP.md)
 
 > La app funciona **sin cuenta** en modo invitado (catálogo público). La sesión se
 > mantiene con la cookie `qva_session` y se restaura al reabrir la app.
@@ -234,21 +224,7 @@ Workflows: [`.github/workflows/android.yml`](.github/workflows/android.yml) y
 
 **Secretos** que hay que crear en *Settings → Secrets and variables → Actions*:
 `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` y
-`PLAY_SERVICE_ACCOUNT_JSON`. Guía completa: [`doc/CI_CD.md`](doc/CI_CD.md).
-
----
-
-## 📄 Documentación
-
-| Documento | Contenido |
-|---|---|
-| [`doc/API_MAP.md`](doc/API_MAP.md) | Qué endpoint está conectado a qué pantalla, discrepancias con el `openapi.json` y lo que falta. |
-| [`doc/CI_CD.md`](doc/CI_CD.md) | Creación del almacén de claves, secretos de GitHub, publicación en Google Play y verificación de firmas. |
-| [`doc/AUTO_UPDATE.md`](doc/AUTO_UPDATE.md) | Autoactualización: manifiesto de versión, descarga e instalación. |
-| [`doc/TEMAS.md`](doc/TEMAS.md) | Cómo cambiar o añadir la temporada (logo, favicon e iconos). |
-| [`doc/build_guide.md`](doc/build_guide.md) | Guía de compilación local: JDK 17, build debug y release optimizado para ARM64. |
-| [`doc/QVATUBE_FLUTTER_DESIGN_SPEC.md`](doc/QVATUBE_FLUTTER_DESIGN_SPEC.md) | Sistema de diseño completo (colores, tipografías, iconos, componentes). |
-| [`doc/openapi.json`](doc/openapi.json) | Especificación de la API de QvaTube. |
+`PLAY_SERVICE_ACCOUNT_JSON`.
 
 ---
 
