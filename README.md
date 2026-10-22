@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="doc/banner.png" alt="QvaTube" width="100%">
+<img src="assets/readme/banner.png" alt="QvaTube" width="100%">
 
 # QvaTube — App Android
 
@@ -30,10 +30,10 @@ lentas: tema oscuro cinematográfico, un solo color de acento, tipografías cond
 descargas optimizadas para gastar lo mínimo de datos.
 
 <div align="center">
-<img src="doc/screenshots/login.png" width="24%" alt="Login">
-<img src="doc/screenshots/home.png" width="24%" alt="Home">
-<img src="doc/screenshots/musica.png" width="24%" alt="Música">
-<img src="doc/screenshots/libros.png" width="24%" alt="Libros">
+<img src="assets/readme/login.png" width="24%" alt="Login">
+<img src="assets/readme/home.png" width="24%" alt="Home">
+<img src="assets/readme/musica.png" width="24%" alt="Música">
+<img src="assets/readme/libros.png" width="24%" alt="Libros">
 </div>
 
 ---
