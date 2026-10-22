@@ -65,3 +65,11 @@ app.*.map.json
 
 # Salidas del workflow de CI (APK/AAB y símbolos)
 /dist/
+
+# ---------------------------------------------------------------------------
+# Configuración local y documentación interna (no publicar)
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+/doc/
