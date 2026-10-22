@@ -5,7 +5,7 @@ name: Android CI
 # 1) Compila el AAB (para Google Play, con todas las arquitecturas) y el APK
 #    de release **solo arm64**, minificado con R8 y ofuscado con
 #    --obfuscate para que ocupe lo mínimo (26 MB).
-# 2) Deja el APK en la release rodante "latest" del repositorio:
+# 2) Deja el APK en la release rodante "latest" del repositorio público:
 #       https://github.com/R0ger0l1va/qvatube_apk/releases/latest/download/qvatube.apk
 #
 # NO se compila el APK de depuración: pesa ~225 MB (con los 4 ABI y los
@@ -39,6 +39,8 @@ jobs:
       # Nombre del .jks dentro de android/ (variable de repositorio
       # opcional KEYSTORE_FILE; por defecto qvatube-release.jks).
       KEYSTORE_FILE: ${{ vars.KEYSTORE_FILE || 'qvatube-release.jks' }}
+      # Repo público donde se publican las releases descargables.
+      DIST_REPO: R0ger0l1va/qvatube_apk
 
     steps:
       - name: Clonar el repositorio
@@ -155,7 +157,7 @@ jobs:
           VERSION_CODE=$(echo "$VERSION_LINE" | sed -E 's/.*\+([0-9]+).*/\1/')
           SIZE_MB=$(awk "BEGIN {printf \"%.1f\", $(stat -c%s dist/qvatube.apk) / 1048576}")
           NOTES=$(git log -1 --pretty=%B | tr '\n' ' ' | tr -s ' ')
-          URL="https://github.com/$GITHUB_REPOSITORY/releases/latest/download/qvatube.apk"
+          URL="https://github.com/$DIST_REPO/releases/latest/download/qvatube.apk"
           jq -n \
             --argjson version_code "$VERSION_CODE" \
             --arg version_name "$VERSION_NAME" \
@@ -198,32 +200,29 @@ jobs:
       # queden de pruebas manuales: si existe un draft con el mismo tag,
       # GitHub responde 422 "already_exists" y la release no se publica.
       # ---------------------------------------------------------------------
-      - name: Publicar la release "latest" del repositorio
+      - name: Publicar la release "latest" en el repo público
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.DIST_REPO_TOKEN }}
           TAG: latest
         run: |
           set -euo pipefail
           cd dist
 
-          # 1) Borra la release anterior (publicada o borrador) con ese tag.
-          for id in $(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-                        --jq ".[] | select(.tag_name == \\"$TAG\\") | .id"); do
+          # 1) Borra la release y el tag anteriores del repo público.
+          for id in $(gh api "repos/$DIST_REPO/releases?per_page=100" \
+                        --jq ".[] | select(.tag_name == \"$TAG\") | .id"); do
             echo ">> Eliminando la release anterior (id=$id)"
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id"
+            gh api -X DELETE "repos/$DIST_REPO/releases/$id"
           done
+          gh api -X DELETE "repos/$DIST_REPO/git/refs/tags/$TAG" 2>/dev/null || true
 
-          # 2) El tag se recrea apuntando al commit actual.
-          git push origin ":refs/tags/$TAG" 2>/dev/null || echo ">> No había tag remoto $TAG"
-          git tag -f "$TAG" "$GITHUB_SHA"
-          git push origin "refs/tags/$TAG"
-
-          # 3) Crea la release con el APK dentro.
+          # 2) Crea la release (y el tag) en el repo público.
           gh release create "$TAG" \
             qvatube.apk \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
+            latest.json \
+            --repo "$DIST_REPO" \
+            --target main \
             --title "QvaTube (última versión)" \
             --prerelease \
             --notes "$(cat <<EOF
@@ -231,18 +230,18 @@ jobs:
 
           | | |
           |---|---|
-          | Commit | \\`$GITHUB_SHA\\` |
-          | Rama | \\`$GITHUB_REF_NAME\\` |
+          | Commit | $GITHUB_SHA |
+          | Rama | $GITHUB_REF_NAME |
           | Fecha | ${{ github.event.repository.updated_at }} |
 
           **Descarga directa (siempre la última):**
-          https://github.com/$GITHUB_REPOSITORY/releases/latest/download/qvatube.apk
+          https://github.com/$DIST_REPO/releases/latest/download/qvatube.apk
 
-          \\`qvatube.apk\\` = APK de release para **arm64** (Android 7+),
+          \`qvatube.apk\` = APK de release para **arm64** (Android 7+),
           minificado con R8 y con el código de Dart ofuscado (~26 MB).
           Los símbolos de depuración se suben como artefacto del workflow,
           no en esta release pública.
           EOF
           )"
 
-          echo ">> Release publicada: $(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url --jq .url)"
+          echo ">> Release publicada: $(gh release view "$TAG" --repo "$DIST_REPO" --json url --jq .url)"
