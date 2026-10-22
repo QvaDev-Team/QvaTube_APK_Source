@@ -2,11 +2,13 @@ name: Android CI
 
 # Se ejecuta en cada push a main, en cada PR y a mano.
 #
-# 1) Compila el AAB (para Google Play, con todas las arquitecturas) y el APK
-#    de release **solo arm64**, minificado con R8 y ofuscado con
-#    --obfuscate para que ocupe lo mínimo (26 MB).
-# 2) Deja el APK en la release rodante "latest" del repositorio público:
+# Compila el APK de release **solo arm64**, minificado con R8 y ofuscado con
+# --obfuscate para que ocupe lo mínimo (26 MB).
+# Deja el APK en la release rodante "latest" del repositorio público:
 #       https://github.com/R0ger0l1va/qvatube_apk/releases/latest/download/qvatube.apk
+#
+# El AAB para Google Play se compila aparte, solo al crear un tag (publish-play.yml).
+# Así este workflow no gasta tiempo ni disco compilando dos veces.
 #
 # NO se compila el APK de depuración: pesa ~225 MB (con los 4 ABI y los
 # símbolos) y llenaba el disco del runner ("No space left on device").
@@ -106,24 +108,7 @@ jobs:
         run: flutter test
 
       # ---------------------------------------------------------------------
-      # 1) AAB para Google Play: tiene que incluir TODAS las arquitecturas
-      #    (arm, arm64, x86_64) porque Play las reparte según el dispositivo.
-      # ---------------------------------------------------------------------
-      - name: AAB para Play Store
-        run: flutter build appbundle --release
-
-      - name: Guardar el AAB
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          cp build/app/outputs/bundle/release/*.aab dist/
-          ls -la dist
-
-      - name: Limpiar intermedios
-        run: flutter clean
-
-      # ---------------------------------------------------------------------
-      # 2) APK de distribución directa: SOLO arm64-v8a, con R8
+      # APK de distribución directa: SOLO arm64-v8a, con R8
       #    (isMinifyEnabled + isShrinkResources) y ofuscación de Dart.
       #    26 MB en vez de los 66 MB del APK universal.
       #    --split-per-abi es lo que hace que las librerías nativas de los
@@ -181,15 +166,6 @@ jobs:
             dist/qvatube.apk
             dist/latest.json
             dist/symbols
-
-      - name: Publicar el AAB como artefacto
-        uses: actions/upload-artifact@v4
-        with:
-          name: qvatube-aab-${{ github.sha }}
-          retention-days: 30
-          if-no-files-found: error
-          path: |
-            dist/*.aab
 
       # ---------------------------------------------------------------------
       # Release rodante: en cada push a main se actualiza la release
