@@ -28,7 +28,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     super.initState();
     final prefs = ref.read(sharedPreferencesProvider);
     _newBadges = prefs.getBool(AppConfig.showNewBadgesKey) ?? true;
-    _continueWatching = prefs.getBool(AppConfig.showContinueWatchingKey) ?? true;
+    _continueWatching =
+        prefs.getBool(AppConfig.showContinueWatchingKey) ?? true;
   }
 
   Future<void> _set(String key, bool value) async {
@@ -50,9 +51,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
         children: [
-          Text('Temporada', style: Theme.of(context).textTheme.displaySmall),
-          const SizedBox(height: 10),
-          _ThemeSelector(),
+          // Text('Temporada', style: Theme.of(context).textTheme.displaySmall),
+          // const SizedBox(height: 10),
+          // _ThemeSelector(),
           const SizedBox(height: 20),
           Text('Aplicación', style: Theme.of(context).textTheme.displaySmall),
           const SizedBox(height: 10),
@@ -178,7 +179,6 @@ class _SwitchRow extends StatelessWidget {
   }
 }
 
-
 /// Selector de tema (temporada).
 ///
 /// Los logos e iconos disponibles están declarados en `assets/theme.json`.
@@ -195,9 +195,8 @@ class _ThemeSelectorState extends ConsumerState<_ThemeSelector> {
   @override
   void initState() {
     super.initState();
-    _themeId = ref.read(sharedPreferencesProvider).getString(
-          AppConfig.themeIdKey,
-        ) ??
+    _themeId =
+        ref.read(sharedPreferencesProvider).getString(AppConfig.themeIdKey) ??
         AppAssets.current.id;
   }
 
@@ -207,9 +206,8 @@ class _ThemeSelectorState extends ConsumerState<_ThemeSelector> {
     await AppAssets.setTheme(id);
     if (!mounted) return;
     setState(() => _themeId = id);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Tema "$id" aplicado.')),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Tema "$id" aplicado.')));
   }
 
   @override
@@ -306,7 +304,6 @@ class _ThemeSelectorState extends ConsumerState<_ThemeSelector> {
   }
 }
 
-
 /// Muestra la versión instalada y enlaza con las releases de GitHub.
 class _VersionEntry extends StatelessWidget {
   @override
@@ -321,7 +318,11 @@ class _VersionEntry extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.info_outline, size: 20, color: AppColors.textSecondary),
+          const Icon(
+            Icons.info_outline,
+            size: 20,
+            color: AppColors.textSecondary,
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: Text(

@@ -42,7 +42,9 @@ class NotificationsScreen extends ConsumerWidget {
                   IconButton(
                     tooltip: 'Borrar todas',
                     onPressed: () async {
-                      await ref.read(catalogApiProvider).clearAllNotifications();
+                      await ref
+                          .read(catalogApiProvider)
+                          .clearAllNotifications();
                       ref.invalidate(notificationsProvider);
                     },
                     icon: const Icon(Icons.delete_outline, size: 20),
@@ -55,11 +57,15 @@ class NotificationsScreen extends ConsumerWidget {
         ],
       ),
       body: notifications.when(
-        loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        loading: () =>
+            const Center(child: CircularProgressIndicator(strokeWidth: 2)),
         error: (error, stack) => Center(
           child: Text(
             'No se pudieron cargar las notificaciones.',
-            style: AppTextStyles.body(fontSize: 13, color: AppColors.textSecondary),
+            style: AppTextStyles.body(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
           ),
         ),
         data: (data) {
@@ -134,7 +140,8 @@ class _NotificationTile extends StatelessWidget {
                   width: 44,
                   height: 44,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => const SizedBox(),
+                  errorBuilder: (context, error, stackTrace) =>
+                      const SizedBox(),
                 ),
               )
             else

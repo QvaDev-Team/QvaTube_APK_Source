@@ -135,9 +135,9 @@ class GenreRow {
       icon: json['icon'] as String?,
       items: rawItems is List
           ? rawItems
-              .whereType<Map>()
-              .map((e) => CatalogItem.fromJson(Map<String, dynamic>.from(e)))
-              .toList()
+                .whereType<Map>()
+                .map((e) => CatalogItem.fromJson(Map<String, dynamic>.from(e)))
+                .toList()
           : const [],
     );
   }
@@ -166,9 +166,9 @@ class CatalogPage {
     return CatalogPage(
       items: rawItems is List
           ? rawItems
-              .whereType<Map>()
-              .map((e) => CatalogItem.fromJson(Map<String, dynamic>.from(e)))
-              .toList()
+                .whereType<Map>()
+                .map((e) => CatalogItem.fromJson(Map<String, dynamic>.from(e)))
+                .toList()
           : const [],
       page: (json['page'] as num?)?.toInt() ?? 1,
       pages: (json['pages'] as num?)?.toInt() ?? 1,
@@ -408,7 +408,7 @@ class NotificationItem {
       body: json['body'] as String?,
       url: json['url'] as String?,
       imageUrl: json['image_url'] as String?,
-      read: json['read'] == true,
+      read: json['read'] == true || json['read'] == 1,
       createdAt: json['created_at'] as String?,
     );
   }

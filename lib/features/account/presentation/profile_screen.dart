@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:qvatube_apk/features/home/presentation/widgets/info_row.dart';
 
-import '../../../core/platform/device_channel.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text.dart';
 import '../../auth/application/auth_controller.dart';
-import '../../catalog/application/catalog_providers.dart';
 import '../../catalog/domain/catalog_models.dart';
 
 /// Pantalla de perfil del usuario (`GET /api/auth/me`).
@@ -96,26 +95,21 @@ class ProfileScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 16),
-          _InfoRow(
-            icon: Icons.confirmation_number_outlined,
-            label: 'Código de referido',
-            value: user?.referralCode ?? '—',
-            mono: true,
-          ),
-          _InfoRow(
+          InfoRow(
             icon: Icons.telegram,
             label: 'Telegram',
-            value: (user?.telegramLinked ?? false) ? 'Vinculado' : 'Sin vincular',
+            value: (user?.telegramLinked ?? false)
+                ? 'Vinculado'
+                : 'Sin vincular',
             accent: (user?.telegramLinked ?? false) ? AppColors.success : null,
           ),
           if (user?.planExpiresAt != null)
-            _InfoRow(
+            InfoRow(
               icon: Icons.event_available_outlined,
               label: 'Plan válido hasta',
               value: user!.planExpiresAt!,
             ),
-          const SizedBox(height: 20),
-          _TelegramLinkCard(),
+          // _TelegramLinkCard(),
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: () => context.push('/cuenta/nombre'),
@@ -166,178 +160,128 @@ class ProfileScreen extends ConsumerWidget {
   }
 }
 
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.mono = false,
-    this.accent,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final bool mono;
-  final Color? accent;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadii.md),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: accent ?? AppColors.textSecondary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              label,
-              style: AppTextStyles.body(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ),
-          Text(
-            value,
-            style: mono
-                ? AppTextStyles.mono(fontSize: 13, fontWeight: FontWeight.w700)
-                : AppTextStyles.body(fontSize: 13, fontWeight: FontWeight.w700),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Vinculación con Telegram (`POST /api/auth/link-code`).
-class _TelegramLinkCard extends ConsumerStatefulWidget {
-  @override
-  ConsumerState<_TelegramLinkCard> createState() => _TelegramLinkCardState();
-}
+// class _TelegramLinkCard extends ConsumerStatefulWidget {
+//   @override
+//   ConsumerState<_TelegramLinkCard> createState() => _TelegramLinkCardState();
+// }
 
-class _TelegramLinkCardState extends ConsumerState<_TelegramLinkCard> {
-  String? _code;
-  int? _expiresIn;
+// class _TelegramLinkCardState extends ConsumerState<_TelegramLinkCard> {
+//   String? _code;
+//   int? _expiresIn;
 
-  @override
-  Widget build(BuildContext context) {
-    final authState = ref.watch(authControllerProvider);
+//   @override
+//   Widget build(BuildContext context) {
+//     final authState = ref.watch(authControllerProvider);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadii.md),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.telegram, color: AppColors.telegram, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Vincular con Telegram',
-                  style: AppTextStyles.body(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Recibe códigos y avisos de tu cuenta directamente en Telegram.',
-            style: AppTextStyles.body(
-              fontSize: 12,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          if (authState.error != null) ...[
-            const SizedBox(height: 10),
-            Text(
-              authState.error!,
-              style: AppTextStyles.body(fontSize: 12, color: AppColors.danger),
-            ),
-          ],
-          if (_code != null) ...[
-            const SizedBox(height: 14),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceSecondary,
-                borderRadius: BorderRadius.circular(AppRadii.sm),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Text(
-                _code!,
-                style: AppTextStyles.mono(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 4,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Envía este código al bot de QvaTube'
-              '${_expiresIn != null ? ' (expira en ${_expiresIn! ~/ 60} min)' : ''}.',
-              style: AppTextStyles.body(
-                fontSize: 11.5,
-                color: AppColors.textMuted,
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: authState.isWorking
-                  ? null
-                  : () async {
-                      final link = await ref
-                          .read(authControllerProvider.notifier)
-                          .createTelegramLinkCode();
-                      if (!mounted) return;
-                      if (link?.code != null) {
-                        setState(() {
-                          _code = link!.code;
-                          _expiresIn = link.expiresIn;
-                        });
-                      }
-                    },
-              child: Text(_code == null ? 'Generar código' : 'Generar otro'),
-            ),
-          ),
-          if (_code != null) ...[
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () async {
-                  final config = await ref.read(siteConfigProvider.future);
-                  final bot = config.botUsername ?? 'qvatube_bot';
-                  await DeviceChannel.openUrl('https://t.me/$bot');
-                },
-                icon: const Icon(Icons.open_in_new, size: 16),
-                label: const Text('Abrir el bot de Telegram'),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
+//     return Container(
+//       padding: const EdgeInsets.all(16),
+//       decoration: BoxDecoration(
+//         color: AppColors.surface,
+//         borderRadius: BorderRadius.circular(AppRadii.md),
+//         border: Border.all(color: AppColors.border),
+//       ),
+//       child: Column(
+//         crossAxisAlignment: CrossAxisAlignment.start,
+//         children: [
+//           Row(
+//             children: [
+//               const Icon(Icons.telegram, color: AppColors.telegram, size: 20),
+//               const SizedBox(width: 10),
+//               Expanded(
+//                 child: Text(
+//                   'Vincular con Telegram',
+//                   style: AppTextStyles.body(
+//                     fontSize: 14,
+//                     fontWeight: FontWeight.w700,
+//                   ),
+//                 ),
+//               ),
+//             ],
+//           ),
+//           const SizedBox(height: 6),
+//           Text(
+//             'Recibe códigos y avisos de tu cuenta directamente en Telegram.',
+//             style: AppTextStyles.body(
+//               fontSize: 12,
+//               color: AppColors.textSecondary,
+//             ),
+//           ),
+//           if (authState.error != null) ...[
+//             const SizedBox(height: 10),
+//             Text(
+//               authState.error!,
+//               style: AppTextStyles.body(fontSize: 12, color: AppColors.danger),
+//             ),
+//           ],
+//           if (_code != null) ...[
+//             const SizedBox(height: 14),
+//             Container(
+//               width: double.infinity,
+//               padding: const EdgeInsets.symmetric(vertical: 12),
+//               alignment: Alignment.center,
+//               decoration: BoxDecoration(
+//                 color: AppColors.surfaceSecondary,
+//                 borderRadius: BorderRadius.circular(AppRadii.sm),
+//                 border: Border.all(color: AppColors.border),
+//               ),
+//               child: Text(
+//                 _code!,
+//                 style: AppTextStyles.mono(
+//                   fontSize: 22,
+//                   fontWeight: FontWeight.w700,
+//                   letterSpacing: 4,
+//                 ),
+//               ),
+//             ),
+//             const SizedBox(height: 8),
+//             Text(
+//               'Envía este código al bot de QvaTube'
+//               '${_expiresIn != null ? ' (expira en ${_expiresIn! ~/ 60} min)' : ''}.',
+//               style: AppTextStyles.body(
+//                 fontSize: 11.5,
+//                 color: AppColors.textMuted,
+//               ),
+//             ),
+//           ],
+//           const SizedBox(height: 12),
+//           SizedBox(
+//             width: double.infinity,
+//             child: ElevatedButton(
+//               onPressed: authState.isWorking
+//                   ? null
+//                   : () async {
+//                       final link = await ref
+//                           .read(authControllerProvider.notifier)
+//                           .createTelegramLinkCode();
+//                       if (!mounted) return;
+//                       if (link?.code != null) {
+//                         setState(() {
+//                           _code = link!.code;
+//                           _expiresIn = link.expiresIn;
+//                         });
+//                       }
+//                     },
+//               child: Text(_code == null ? 'Generar código' : 'Generar otro'),
+//             ),
+//           ),
+//           if (_code != null) ...[
+//             const SizedBox(height: 8),
+//             SizedBox(
+//               width: double.infinity,
+//               child: OutlinedButton.icon(
+//                 onPressed: () async {
+//                   final config = await ref.read(siteConfigProvider.future);
+//                   final bot = config.botUsername ?? 'qvatube_bot';
+//                   await DeviceChannel.openUrl('https://t.me/$bot');
+//                 },
+//                 icon: const Icon(Icons.open_in_new, size: 16),
+//                 label: const Text('Abrir el bot de Telegram'),
+//               ),
+//             ),
+//           ],
+//         ],
+//       ),
+//     );
+//   }
+// }

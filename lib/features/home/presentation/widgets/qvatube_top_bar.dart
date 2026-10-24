@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:qvatube_apk/features/home/presentation/widgets/badge_count.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
@@ -111,7 +112,8 @@ class _UserAvatar extends StatelessWidget {
                 ? Image.network(
                     url,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => _initials(label),
+                    errorBuilder: (context, error, stackTrace) =>
+                        _initials(label),
                   )
                 : _initials(label),
           ),
@@ -120,24 +122,9 @@ class _UserAvatar extends StatelessWidget {
           Positioned(
             right: -2,
             top: -2,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 16),
-              height: 16,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppColors.accent,
-                borderRadius: BorderRadius.circular(AppRadii.pill),
-                border: Border.all(color: AppColors.background, width: 2),
-              ),
-              child: Text(
-                unreadCount > 9 ? '9+' : '$unreadCount',
-                style: AppTextStyles.mono(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.accentInk,
-                ),
-              ),
+            child: AppBadge(
+              count: unreadCount,
+              haloColor: AppColors.background,
             ),
           ),
       ],

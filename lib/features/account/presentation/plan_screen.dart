@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:qvatube_apk/features/auth/application/auth_controller.dart';
+import 'package:qvatube_apk/features/home/presentation/widgets/info_row.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text.dart';
@@ -16,6 +18,8 @@ class PlanScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final usage = ref.watch(planUsageProvider);
     final plans = ref.watch(plansProvider);
+    final authState = ref.watch(authControllerProvider);
+    final user = authState.user;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -91,14 +95,26 @@ class PlanScreen extends ConsumerWidget {
               },
             ),
             const SizedBox(height: 20),
-            Text('Planes disponibles', style: Theme.of(context).textTheme.displaySmall),
+            InfoRow(
+              icon: Icons.confirmation_number_outlined,
+              label: 'Código de referido',
+              value: user?.referralCode ?? '—',
+              mono: true,
+            ),
+            const SizedBox(height: 20),
+
+            Text(
+              'Planes disponibles',
+              style: Theme.of(context).textTheme.displaySmall,
+            ),
             const SizedBox(height: 12),
             plans.when(
               loading: () => const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
                 child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
               ),
-              error: (error, stack) => const Text('No se pudo cargar el catálogo de planes.'),
+              error: (error, stack) =>
+                  const Text('No se pudo cargar el catálogo de planes.'),
               data: (items) => Column(
                 children: [
                   for (final plan in items)
@@ -146,7 +162,8 @@ class PlanScreen extends ConsumerWidget {
                               ),
                               _Chip(label: '${plan.streamLimit ?? 0} streams'),
                               _Chip(
-                                label: '${plan.musicDownloadLimit ?? 0} de música',
+                                label:
+                                    '${plan.musicDownloadLimit ?? 0} de música',
                               ),
                               if ((plan.priceUsd ?? 0) > 0)
                                 _Chip(label: '\$${plan.priceUsd} USD'),

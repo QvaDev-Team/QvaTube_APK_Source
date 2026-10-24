@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:qvatube_apk/features/catalog/application/catalog_providers.dart';
+import 'package:qvatube_apk/features/home/presentation/widgets/badge_count.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
@@ -27,6 +29,10 @@ class _AccountMenuSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authControllerProvider);
     final user = authState.user;
+
+    final unreadNotifications = authState.isAuthenticated
+        ? ref.watch(notificationsProvider).value?.unread ?? 0
+        : 0;
 
     return SafeArea(
       top: false,
@@ -128,16 +134,6 @@ class _AccountMenuSheet extends ConsumerWidget {
                   onTap: () => _go(context, '/cuenta/perfil'),
                 ),
                 _MenuTile(
-                  icon: Icons.edit_outlined,
-                  label: 'Cambiar nombre visible',
-                  onTap: () => _go(context, '/cuenta/nombre'),
-                ),
-                _MenuTile(
-                  icon: Icons.camera_alt_outlined,
-                  label: 'Foto de perfil',
-                  onTap: () => _go(context, '/cuenta/avatar'),
-                ),
-                _MenuTile(
                   icon: Icons.bolt,
                   label: 'Plan y suscripción',
                   onTap: () => _go(context, '/cuenta/plan'),
@@ -155,6 +151,7 @@ class _AccountMenuSheet extends ConsumerWidget {
                 _MenuTile(
                   icon: Icons.notifications_none,
                   label: 'Notificaciones',
+                  badgeCount: unreadNotifications,
                   onTap: () => _go(context, '/cuenta/notificaciones'),
                 ),
                 _MenuTile(
@@ -200,6 +197,7 @@ class _MenuTile extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.badgeCount = 0,
     this.accent,
     this.danger = false,
   });
@@ -209,18 +207,31 @@ class _MenuTile extends StatelessWidget {
   final VoidCallback onTap;
   final Color? accent;
   final bool danger;
+  final int badgeCount;
 
   @override
   Widget build(BuildContext context) {
-    final color = danger
-        ? AppColors.danger
-        : accent ?? AppColors.textSecondary;
+    final color = danger ? AppColors.danger : accent ?? AppColors.textSecondary;
 
     return ListTile(
       onTap: onTap,
       dense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-      leading: Icon(icon, size: 20, color: color),
+      leading: badgeCount > 0
+          ? Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(icon, size: 20, color: color),
+                Positioned(
+                  right: -9,
+                  left: 12,
+                  bottom: 9,
+                  child: AppBadge(count: badgeCount),
+                ),
+              ],
+            )
+          : Icon(icon, size: 20, color: color),
+
       title: Text(
         label,
         style: AppTextStyles.body(
