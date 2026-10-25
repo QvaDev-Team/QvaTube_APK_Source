@@ -178,8 +178,22 @@ class AppUpdateService {
         : data;
     final info = AppUpdateInfo.fromJson(payload);
     if (info.versionCode <= 0 || info.url.isEmpty) return null;
-    return info;
+    return info.url.contains(_latestDownload)
+        ? AppUpdateInfo(
+            versionCode: info.versionCode,
+            versionName: info.versionName,
+            url: info.url.replaceFirst(_latestDownload, _tagDownload),
+            notes: info.notes,
+            sizeMb: info.sizeMb,
+            publishedAt: info.publishedAt,
+          )
+        : info;
   }
+
+  // GitHub no resuelve `/releases/latest/download/...` si la release está
+  // marcada como pre-release (devuelve 404). La ruta por tag sí funciona.
+  static const String _latestDownload = '/releases/latest/download/';
+  static const String _tagDownload = '/releases/download/latest/';
 
   Future<Directory> _cacheDir() async {
     final path = await DeviceChannel.cacheDirectory();

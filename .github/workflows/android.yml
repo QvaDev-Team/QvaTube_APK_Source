@@ -5,7 +5,7 @@ name: Android CI
 # Compila el APK de release **solo arm64**, minificado con R8 y ofuscado con
 # --obfuscate para que ocupe lo mínimo (26 MB).
 # Deja el APK en la release rodante "latest" del repositorio público:
-#       https://github.com/R0ger0l1va/qvatube_apk/releases/latest/download/qvatube.apk
+#       https://github.com/R0ger0l1va/qvatube_apk/releases/download/latest/qvatube.apk
 #
 # El AAB para Google Play se compila aparte, solo al crear un tag (publish-play.yml).
 # Así este workflow no gasta tiempo ni disco compilando dos veces.
@@ -143,7 +143,7 @@ jobs:
           VERSION_CODE=$(echo "$VERSION_LINE" | sed -E 's/.*\+([0-9]+).*/\1/')
           SIZE_MB=$(awk "BEGIN {printf \"%.1f\", $(stat -c%s dist/qvatube.apk) / 1048576}")
           NOTES=$(git log -1 --pretty=%B | tr '\n' ' ' | tr -s ' ')
-          URL="https://github.com/$DIST_REPO/releases/latest/download/qvatube.apk"
+          URL="https://github.com/$DIST_REPO/releases/download/latest/qvatube.apk"
           jq -n \
             --argjson version_code "$VERSION_CODE" \
             --arg version_name "$VERSION_NAME" \
@@ -201,7 +201,6 @@ jobs:
             --repo "$DIST_REPO" \
             --target main \
             --title "QvaTube (última versión)" \
-            --prerelease \
             --notes "$(cat <<EOF
           ## QvaTube — build automático
 
@@ -212,7 +211,7 @@ jobs:
           | Fecha | ${{ github.event.repository.updated_at }} |
 
           **Descarga directa (siempre la última):**
-          https://github.com/$DIST_REPO/releases/latest/download/qvatube.apk
+          https://github.com/$DIST_REPO/releases/download/latest/qvatube.apk
 
           \`qvatube.apk\` = APK de release para **arm64** (Android 7+),
           minificado con R8 y con el código de Dart ofuscado (~26 MB).
