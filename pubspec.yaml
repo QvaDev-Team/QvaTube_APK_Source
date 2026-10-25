@@ -52,6 +52,7 @@ dependencies:
   firebase_messaging: ^17.0.0
   flutter_svg: ^2.3.0
   shadcn_ui: ^0.57.2
+  lucide_flutter: ^1.47.0
 
 dev_dependencies:
   flutter_test:

@@ -5,6 +5,10 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
 
+const double _navBarHeight = 66;
+const double _navLabelGap = 4;
+const double _navLabelHeight = 13;
+
 /// Ítem de la barra de navegación inferior.
 class QvaBottomNavItem {
   const QvaBottomNavItem({
@@ -22,10 +26,9 @@ class QvaBottomNavItem {
 
 /// Barra de navegación inferior de QvaTube (spec §6.2).
 ///
-/// - Píldora deslizante de 50x38px con fondo `accentSoft` y borde accent.
+/// - Píldora deslizante de 50x34px con fondo `accentSoft` y borde accent.
 /// - Glow respiratorio detrás de la pestaña activa.
-/// - Iconos centrados verticalmente dentro de la píldora activa (sin
-///   etiquetas de texto debajo).
+/// - La etiqueta de la pestaña activa se muestra debajo del icono.
 class QvaBottomNav extends StatefulWidget {
   const QvaBottomNav({
     super.key,
@@ -104,71 +107,79 @@ class _QvaBottomNavState extends State<QvaBottomNav>
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 58,
+          height: _navBarHeight,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: LayoutBuilder(
-            builder: (context, constraints) {
-              final slot = constraints.maxWidth / count;
-              final pillWidth =
-                  math.min(_maxPillWidth, slot * _pillWidthFactor);
-              final pillHeight =
-                  math.min(_maxPillHeight, slot * _pillHeightFactor);
-              final pillRadius = pillHeight / 2;
-              return Stack(
-                alignment: Alignment.topCenter,
-                children: [
-                  // Píldora deslizante con glow respiratorio.
-                  AnimatedBuilder(
-                    animation: _glowController,
-                    builder: (context, child) {
-                      final opacity = 0.22 + (_glowController.value * 0.20);
-                      return Positioned(
-                        left: slot * _pillCenter + (slot - pillWidth) / 2,
-                        top: (58 - pillHeight) / 2,
-                        child: Container(
-                          width: pillWidth,
-                          height: pillHeight,
-                          decoration: BoxDecoration(
-                            color: AppColors.accentSoft,
-                            // Radio = alto/2 → óvalo perfecto.
-                            borderRadius: BorderRadius.circular(pillRadius),
-                            border: Border.all(
-                              color: AppColors.accent.withValues(alpha: 0.6),
-                            ),
-                            boxShadow: [
-                              // Halo interior suave (no se corta en los
-                              // extremos de la barra).
-                              BoxShadow(
-                                color: AppColors.accent.withValues(
-                                  alpha: opacity,
-                                ),
-                                blurRadius: 8,
-                                spreadRadius: 0,
+              builder: (context, constraints) {
+                final slot = constraints.maxWidth / count;
+                final pillWidth = math.min(
+                  _maxPillWidth,
+                  slot * _pillWidthFactor,
+                );
+                final pillHeight = math.min(
+                  _maxPillHeight,
+                  slot * _pillHeightFactor,
+                );
+                final pillRadius = pillHeight / 2;
+                final pillTop =
+                    (_navBarHeight -
+                        (pillHeight + _navLabelGap + _navLabelHeight)) /
+                    2;
+                return Stack(
+                  alignment: Alignment.topCenter,
+                  children: [
+                    // Píldora deslizante con glow respiratorio.
+                    AnimatedBuilder(
+                      animation: _glowController,
+                      builder: (context, child) {
+                        final opacity = 0.22 + (_glowController.value * 0.20);
+                        return Positioned(
+                          left: slot * _pillCenter + (slot - pillWidth) / 2,
+                          top: pillTop,
+                          child: Container(
+                            width: pillWidth,
+                            height: pillHeight,
+                            decoration: BoxDecoration(
+                              color: AppColors.accentSoft,
+                              // Radio = alto/2 → óvalo perfecto.
+                              borderRadius: BorderRadius.circular(pillRadius),
+                              border: Border.all(
+                                color: AppColors.accent.withValues(alpha: 0.6),
                               ),
-                            ],
+                              boxShadow: [
+                                // Halo interior suave (no se corta en los
+                                // extremos de la barra).
+                                BoxShadow(
+                                  color: AppColors.accent.withValues(
+                                    alpha: opacity,
+                                  ),
+                                  blurRadius: 8,
+                                  spreadRadius: 0,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
-                  Row(
-                    children: [
-                      for (var index = 0; index < count; index++)
-                        Expanded(
-                          child: _NavButton(
-                            item: widget.items[index],
-                            isActive: index == widget.currentIndex,
-                            pillWidth: pillWidth,
-                            pillHeight: pillHeight,
-                            onTap: () => widget.onTap(index),
+                        );
+                      },
+                    ),
+                    Row(
+                      children: [
+                        for (var index = 0; index < count; index++)
+                          Expanded(
+                            child: _NavButton(
+                              item: widget.items[index],
+                              isActive: index == widget.currentIndex,
+                              pillWidth: pillWidth,
+                              pillHeight: pillHeight,
+                              onTap: () => widget.onTap(index),
+                            ),
                           ),
-                        ),
-                    ],
-                  ),
-                ],
-              );
-            },
+                      ],
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -200,55 +211,78 @@ class _NavButton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadii.md),
       child: SizedBox(
-        height: 58,
-        child: Center(
-          child: SizedBox(
-            width: pillWidth,
-            height: pillHeight,
-            child: Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.center,
-              children: [
-                AnimatedScale(
-                  scale: isActive ? 1.12 : 1,
-                  duration: const Duration(milliseconds: 200),
-                  child: Icon(
-                    isActive ? (item.activeIcon ?? item.icon) : item.icon,
-                    size: 22,
-                    color: color,
-                  ),
-                ),
-                if (item.badgeCount > 0)
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: Container(
-                      constraints: const BoxConstraints(minWidth: 13),
-                      height: 13,
-                      padding: const EdgeInsets.symmetric(horizontal: 3),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: AppColors.accent,
-                        borderRadius: BorderRadius.circular(AppRadii.pill),
-                        // Borde del color de fondo para despegarlo del icono.
-                        border: Border.all(
-                          color: AppColors.background,
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Text(
-                        item.badgeCount > 99 ? '99+' : '${item.badgeCount}',
-                        style: AppTextStyles.mono(
-                          fontSize: 8,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.accentInk,
-                        ).copyWith(height: 1),
-                      ),
+        height: _navBarHeight,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: pillWidth,
+              height: pillHeight,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  AnimatedScale(
+                    scale: isActive ? 1.12 : 1,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      isActive ? (item.activeIcon ?? item.icon) : item.icon,
+                      size: 22,
+                      color: color,
                     ),
                   ),
-              ],
+                  if (item.badgeCount > 0)
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: Container(
+                        constraints: const BoxConstraints(minWidth: 13),
+                        height: 13,
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: AppColors.accent,
+                          borderRadius: BorderRadius.circular(AppRadii.pill),
+                          // Borde del color de fondo para despegarlo del icono.
+                          border: Border.all(
+                            color: AppColors.background,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Text(
+                          item.badgeCount > 99 ? '99+' : '${item.badgeCount}',
+                          style: AppTextStyles.mono(
+                            fontSize: 8,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.accentInk,
+                          ).copyWith(height: 1),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
+            const SizedBox(height: _navLabelGap),
+            SizedBox(
+              height: _navLabelHeight,
+              child: AnimatedOpacity(
+                opacity: isActive ? 1 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    item.label,
+                    maxLines: 1,
+                    style: AppTextStyles.body(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      color: color,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

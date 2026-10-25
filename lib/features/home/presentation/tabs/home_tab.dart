@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:qvatube_apk/core/utils/icon_mapper.dart';
 
 import '../../../../core/config/app_config.dart';
 import '../../../../core/storage/app_preferences.dart';
@@ -65,13 +66,24 @@ class HomeTab extends ConsumerWidget {
             error: (error, stack) => const SizedBox.shrink(),
             data: (data) {
               if (data.items.isEmpty) return const SizedBox.shrink();
-              final title = data.seasonLabel != null
-                  ? 'Recomendaciones · ${data.seasonLabel}'
-                  : 'Recomendaciones';
+              final seasonLabel = data.seasonLabel;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SectionTitle(title: title),
+                  SectionTitle(
+                    title: seasonLabel != null
+                        ? 'Recomendaciones:'
+                        : 'Recomendaciones',
+                    highlight: seasonLabel != null
+                        ? ' Especial $seasonLabel'
+                        : null,
+                    accent: '#FF8A1F',
+                    icon: Icon(
+                      getIconFromName(
+                        'star',
+                      ), // Convierte "spark" a Icons.auto_awesome
+                    ),
+                  ),
                   MediaCarousel(items: data.items, showNewBadge: showNewBadges),
                   const SizedBox(height: 26),
                 ],
@@ -90,6 +102,11 @@ class HomeTab extends ConsumerWidget {
                     SectionTitle(
                       title: row.label ?? 'Contenido',
                       accent: row.accent,
+                      icon: Icon(
+                        getIconFromName(
+                          row.icon,
+                        ), // Convierte "spark" a Icons.auto_awesome
+                      ),
                     ),
                     MediaCarousel(
                       items: row.items,
