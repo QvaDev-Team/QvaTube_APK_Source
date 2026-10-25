@@ -1,26 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:qvatube_apk/features/auth/presentation/screens/telegram_verification_screen.dart';
 
-import '../core/storage/app_preferences.dart';
-import '../features/auth/application/auth_controller.dart';
-import '../features/auth/presentation/forgot_password_screen.dart';
-import '../features/auth/presentation/login_screen.dart';
-import '../features/auth/presentation/register_screen.dart';
-import '../features/auth/presentation/telegram_verification_screen.dart';
-import '../features/account/presentation/avatar_screen.dart';
-import '../features/account/presentation/community_screen.dart';
-import '../features/account/presentation/edit_name_screen.dart';
-import '../features/account/presentation/favorites_screen.dart';
-import '../features/account/presentation/notifications_screen.dart';
-import '../features/account/presentation/plan_screen.dart';
-import '../features/account/presentation/profile_screen.dart';
-import '../features/account/presentation/settings_screen.dart';
-import '../features/home/presentation/home_shell.dart';
-import '../features/home/presentation/pending_screen.dart';
-import '../features/home/presentation/tabs/catalog_tab.dart';
-import '../features/home/presentation/tabs/home_tab.dart';
-import '../features/onboarding/presentation/intro_screen.dart';
+import '../storage/app_preferences.dart';
+import '../../features/auth/presentation/providers/auth_controller.dart';
+import '../../features/auth/presentation/screens/forgot_password_screen.dart';
+import '../../features/auth/presentation/screens/login_screen.dart';
+import '../../features/auth/presentation/screens/register_screen.dart';
+import '../../features/account/presentation/avatar_screen.dart';
+import '../../features/account/presentation/community_screen.dart';
+import '../../features/account/presentation/edit_name_screen.dart';
+import '../../features/account/presentation/favorites_screen.dart';
+import '../../features/account/presentation/notifications_screen.dart';
+import '../../features/account/presentation/plan_screen.dart';
+import '../../features/account/presentation/profile_screen.dart';
+import '../../features/account/presentation/settings_screen.dart';
+import '../../features/home/presentation/home_shell.dart';
+import '../../features/home/presentation/pending_screen.dart';
+import '../../features/home/presentation/tabs/catalog_tab.dart';
+import '../../features/home/presentation/tabs/home_tab.dart';
+import '../../features/onboarding/presentation/intro_screen.dart';
 
 /// Navigator raíz (se usa también para mostrar diálogos globales, como el
 /// aviso de actualización, desde un contexto que está por encima del
@@ -92,7 +92,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         return canBrowse ? Routes.home : Routes.login;
       }
 
-      final isProtected = location == Routes.home ||
+      final isProtected =
+          location == Routes.home ||
           location == Routes.popular ||
           location == Routes.television ||
           location == Routes.movies ||
@@ -147,7 +148,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: Routes.search,
         builder: (context, state) => const PendingScreen(
           title: 'Buscar',
-          description: 'El buscador se alimentará del catálogo de QvaTube '
+          description:
+              'El buscador se alimentará del catálogo de QvaTube '
               'cuando se definan los endpoints de búsqueda.',
           icon: Icons.search,
         ),
@@ -181,7 +183,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: Routes.television,
                 builder: (context, state) => const PendingScreen(
                   title: 'Televisión',
-                  description: 'La lista de canales en vivo no está expuesta '
+                  description:
+                      'La lista de canales en vivo no está expuesta '
                       'por la API (la web la tiene embebida). Se conectará '
                       'cuando el backend exponga GET /api/tv/channels.',
                   icon: Icons.live_tv,
@@ -213,7 +216,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                   title: 'Series',
                   icon: Icons.tv,
                   categoryKey: 'series',
-                  description: 'Series por temporada, con episodios nuevos '
+                  description:
+                      'Series por temporada, con episodios nuevos '
                       'cada semana.',
                 ),
               ),
@@ -237,7 +241,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                   title: 'Anime',
                   icon: Icons.auto_awesome,
                   categoryKey: 'anime',
-                  description: 'Series de anime por temporada, con episodios '
+                  description:
+                      'Series de anime por temporada, con episodios '
                       'nuevos cada semana.',
                 ),
               ),
@@ -267,7 +272,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                   icon: Icons.music_note,
                   categoryKey: 'music',
                   gridAspectRatio: 0.68,
-                  description: 'Álbumes completos con carátula cuadrada y '
+                  description:
+                      'Álbumes completos con carátula cuadrada y '
                       'reproductor.',
                 ),
               ),
@@ -325,7 +331,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/cuenta/descargas',
         builder: (context, state) => const PendingScreen(
           title: 'Mis descargas',
-          description: 'Las descargas se autorizan con POST '
+          description:
+              'Las descargas se autorizan con POST '
               '/api/download/authorize. Esta pantalla se conectará cuando se '
               'defina la lista local de descargas.',
           icon: Icons.download,

@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/platform/device_channel.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text.dart';
-import '../../auth/application/auth_controller.dart';
+import '../../auth/presentation/providers/auth_controller.dart';
 import '../../catalog/domain/catalog_models.dart';
 
 /// Foto de perfil.
@@ -81,7 +81,10 @@ class AvatarScreen extends ConsumerWidget {
               ),
               child: Text(
                 authState.error!,
-                style: AppTextStyles.body(fontSize: 12.5, color: AppColors.danger),
+                style: AppTextStyles.body(
+                  fontSize: 12.5,
+                  color: AppColors.danger,
+                ),
               ),
             ),
           ],

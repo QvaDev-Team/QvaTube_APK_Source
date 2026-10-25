@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'app/router.dart';
+import 'core/router/router.dart';
 import 'core/config/app_config.dart';
 import 'core/storage/app_preferences.dart';
 import 'core/theme/app_assets.dart';
-import 'features/auth/application/auth_controller.dart';
+import 'features/auth/presentation/providers/auth_controller.dart';
 import 'features/update/presentation/update_checker.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
@@ -17,15 +17,11 @@ Future<void> main() async {
 
   // Assets de la temporada (assets/theme.json). Se respeta el tema elegido
   // en Configuración; si no hay ninguno, se usa el "active" del manifiesto.
-  await AppAssets.init(
-    themeId: preferences.getString(AppConfig.themeIdKey),
-  );
+  await AppAssets.init(themeId: preferences.getString(AppConfig.themeIdKey));
 
   runApp(
     ProviderScope(
-      overrides: [
-        sharedPreferencesProvider.overrideWithValue(preferences),
-      ],
+      overrides: [sharedPreferencesProvider.overrideWithValue(preferences)],
       child: const QvaTubeApp(),
     ),
   );
@@ -73,9 +69,7 @@ class _QvaTubeAppState extends ConsumerState<QvaTubeApp> {
           child: ColoredBox(
             color: AppColors.background,
             // Aviso de versión nueva al abrir la app.
-            child: UpdateChecker(
-              child: child ?? const SizedBox.shrink(),
-            ),
+            child: UpdateChecker(child: child ?? const SizedBox.shrink()),
           ),
         );
       },

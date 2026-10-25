@@ -19,10 +19,7 @@ class AuthBackdrop extends StatelessWidget {
               gradient: RadialGradient(
                 center: Alignment(0, -0.8),
                 radius: 1.2,
-                colors: [
-                  Color(0x33241A16),
-                  AppColors.background,
-                ],
+                colors: [Color(0x33241A16), AppColors.background],
               ),
             ),
           ),
@@ -60,7 +57,7 @@ class AuthNotice extends StatelessWidget {
         ),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(
             icon ?? (isError ? Icons.error_outline : Icons.info_outline),

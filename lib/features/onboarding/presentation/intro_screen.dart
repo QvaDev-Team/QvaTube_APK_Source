@@ -6,7 +6,7 @@ import '../../../core/storage/app_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text.dart';
 import '../../../core/widgets/app_logo.dart';
-import '../../auth/application/auth_controller.dart';
+import '../../auth/presentation/providers/auth_controller.dart';
 
 /// Pantalla de introducción: se muestra una sola vez, antes del login.
 ///
@@ -43,21 +43,7 @@ class _IntroScreenState extends ConsumerState<IntroScreen> {
               children: [
                 Align(
                   alignment: Alignment.topRight,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: IconButton(
-                      onPressed: _close,
-                      tooltip: 'Cerrar',
-                      icon: const Icon(Icons.close),
-                      style: IconButton.styleFrom(
-                        backgroundColor: AppColors.surfaceSecondary,
-                        foregroundColor: AppColors.textPrimary,
-                        shape: const CircleBorder(
-                          side: BorderSide(color: AppColors.border),
-                        ),
-                      ),
-                    ),
-                  ),
+                  child: Padding(padding: const EdgeInsets.all(12)),
                 ),
                 Expanded(
                   child: SingleChildScrollView(
@@ -65,15 +51,9 @@ class _IntroScreenState extends ConsumerState<IntroScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Center(
-                          child: AppLogo(height: 96),
-                        ),
+                        const Center(child: AppLogo(height: 96)),
                         const SizedBox(height: 20),
-                        Text(
-                          'QvaTube',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.displayMedium,
-                        ),
+
                         const SizedBox(height: 6),
                         Text(
                           'Streaming cubano — películas, series, novelas, anime, '
@@ -164,10 +144,7 @@ class _IntroBackdrop extends StatelessWidget {
           gradient: RadialGradient(
             center: Alignment(0, -0.6),
             radius: 1.1,
-            colors: [
-              Color(0x331B1714),
-              AppColors.background,
-            ],
+            colors: [Color(0x331B1714), AppColors.background],
           ),
         ),
       ),

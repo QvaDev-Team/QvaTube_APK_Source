@@ -5,7 +5,7 @@ import 'package:qvatube_apk/features/home/presentation/widgets/info_row.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text.dart';
-import '../../auth/application/auth_controller.dart';
+import '../../auth/presentation/providers/auth_controller.dart';
 import '../../catalog/domain/catalog_models.dart';
 
 /// Pantalla de perfil del usuario (`GET /api/auth/me`).

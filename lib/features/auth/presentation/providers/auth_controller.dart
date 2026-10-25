@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/network/api_client.dart';
-import '../../../core/storage/app_preferences.dart';
-import '../data/auth_repository.dart';
-import '../domain/auth_models.dart';
+import '../../../../core/network/api_client.dart';
+import '../../../../core/storage/app_preferences.dart';
+import '../../data/auth_repository.dart';
+import '../../domain/auth_models.dart';
 import 'auth_providers.dart';
 
 enum AuthStatus {
@@ -99,10 +99,7 @@ class AuthController extends Notifier<AuthState> {
   }
 
   /// `POST /api/auth/login`
-  Future<bool> login({
-    required String email,
-    required String password,
-  }) async {
+  Future<bool> login({required String email, required String password}) async {
     state = state.copyWith(isWorking: true, clearError: true, clearInfo: true);
     try {
       final user = await _repository.login(email: email, password: password);
@@ -171,10 +168,7 @@ class AuthController extends Notifier<AuthState> {
       state = state.copyWith(isWorking: false, user: user);
       return true;
     } catch (error) {
-      state = state.copyWith(
-        isWorking: false,
-        error: authErrorMessage(error),
-      );
+      state = state.copyWith(isWorking: false, error: authErrorMessage(error));
       return false;
     }
   }
@@ -193,10 +187,7 @@ class AuthController extends Notifier<AuthState> {
       state = state.copyWith(isWorking: false, user: user);
       return true;
     } catch (error) {
-      state = state.copyWith(
-        isWorking: false,
-        error: authErrorMessage(error),
-      );
+      state = state.copyWith(isWorking: false, error: authErrorMessage(error));
       return false;
     }
   }
@@ -210,10 +201,7 @@ class AuthController extends Notifier<AuthState> {
       state = state.copyWith(isWorking: false, user: user);
       return true;
     } catch (error) {
-      state = state.copyWith(
-        isWorking: false,
-        error: authErrorMessage(error),
-      );
+      state = state.copyWith(isWorking: false, error: authErrorMessage(error));
       return false;
     }
   }
@@ -226,10 +214,7 @@ class AuthController extends Notifier<AuthState> {
       state = state.copyWith(isWorking: false);
       return code;
     } catch (error) {
-      state = state.copyWith(
-        isWorking: false,
-        error: authErrorMessage(error),
-      );
+      state = state.copyWith(isWorking: false, error: authErrorMessage(error));
       return null;
     }
   }
@@ -242,10 +227,7 @@ class AuthController extends Notifier<AuthState> {
       state = state.copyWith(isWorking: false);
       return token;
     } catch (error) {
-      state = state.copyWith(
-        isWorking: false,
-        error: authErrorMessage(error),
-      );
+      state = state.copyWith(isWorking: false, error: authErrorMessage(error));
       return null;
     }
   }
@@ -266,10 +248,7 @@ class AuthController extends Notifier<AuthState> {
       state = state.copyWith(isWorking: false);
       return true;
     } catch (error) {
-      state = state.copyWith(
-        isWorking: false,
-        error: authErrorMessage(error),
-      );
+      state = state.copyWith(isWorking: false, error: authErrorMessage(error));
       return false;
     }
   }
@@ -291,8 +270,9 @@ class AuthController extends Notifier<AuthState> {
   }
 }
 
-final authControllerProvider =
-    NotifierProvider<AuthController, AuthState>(AuthController.new);
+final authControllerProvider = NotifierProvider<AuthController, AuthState>(
+  AuthController.new,
+);
 
 /// Notificador para que `go_router` reaccione a los cambios de sesión.
 final authSessionNotifierProvider = Provider<ChangeNotifier>((ref) {

@@ -6,7 +6,7 @@ import 'package:qvatube_apk/features/home/presentation/widgets/badge_count.dart'
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
-import '../../../auth/application/auth_controller.dart';
+import '../../../auth/presentation/providers/auth_controller.dart';
 
 /// Menú de cuenta que se despliega al pulsar el avatar (spec §6.1).
 Future<void> showAccountMenuSheet(BuildContext context, WidgetRef ref) {

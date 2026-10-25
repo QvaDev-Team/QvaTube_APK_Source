@@ -91,7 +91,9 @@ class _CatalogTabState extends ConsumerState<CatalogTab> {
     }
 
     try {
-      final page = await ref.read(catalogApiProvider).catalog(
+      final page = await ref
+          .read(catalogApiProvider)
+          .catalog(
             categoryKey: widget.categoryKey,
             page: reset ? 1 : _page + 1,
             genre: _genre,
@@ -162,29 +164,6 @@ class _CatalogTabState extends ConsumerState<CatalogTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Icon(widget.icon, size: 20, color: AppColors.accent),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          widget.title,
-                          style: Theme.of(context).textTheme.displaySmall,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (widget.description != null) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      widget.description!,
-                      style: AppTextStyles.body(
-                        fontSize: 12.5,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 14),
                   _CatalogHeaderCard(
                     genre: _genre,
                     genres: _genres,
@@ -192,9 +171,8 @@ class _CatalogTabState extends ConsumerState<CatalogTab> {
                     allowSort: widget.allowSort,
                     allowGenreFilter: widget.allowGenreFilter,
                     onGenreTap: () => _showGenrePicker(context),
-                    onSortToggle: () => _setSort(
-                      _sort == 'date' ? 'alpha' : 'date',
-                    ),
+                    onSortToggle: () =>
+                        _setSort(_sort == 'date' ? 'alpha' : 'date'),
                   ),
                 ],
               ),
@@ -204,9 +182,7 @@ class _CatalogTabState extends ConsumerState<CatalogTab> {
             const SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 48),
-                child: Center(
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
               ),
             )
           else if (_error != null && _items.isEmpty)
@@ -254,16 +230,13 @@ class _CatalogTabState extends ConsumerState<CatalogTab> {
                   crossAxisSpacing: 10,
                   childAspectRatio: widget.gridAspectRatio,
                 ),
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final item = _items[index];
-                    return MediaCard(
-                      item: item,
-                      onTap: () => showItemSheet(context, item),
-                    );
-                  },
-                  childCount: _items.length,
-                ),
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final item = _items[index];
+                  return MediaCard(
+                    item: item,
+                    onTap: () => showItemSheet(context, item),
+                  );
+                }, childCount: _items.length),
               ),
             ),
           if (_loadingMore)
@@ -394,7 +367,10 @@ class _CatalogHeaderCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppRadii.pill),
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceSecondary,
                   borderRadius: BorderRadius.circular(AppRadii.pill),

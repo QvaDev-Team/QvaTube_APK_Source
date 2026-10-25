@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text.dart';
-import '../../../core/widgets/otp_code_input.dart';
-import '../application/auth_controller.dart';
-import 'widgets/auth_scaffold.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text.dart';
+import '../../../../core/widgets/otp_code_input.dart';
+import '../providers/auth_controller.dart';
+import '../widgets/auth_scaffold.dart';
 
 /// Recuperación de contraseña en dos pasos.
 ///
@@ -84,7 +84,8 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                       const SizedBox(height: 10),
                       const AuthHeader(
                         title: 'Recuperar contraseña',
-                        subtitle: 'Te enviaremos un código por Telegram para '
+                        subtitle:
+                            'Te enviaremos un código por Telegram para '
                             'restablecer tu contraseña.',
                       ),
                       const SizedBox(height: 22),
@@ -108,9 +109,8 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                           if (text.isEmpty) {
                             return 'Ingresa tu correo electrónico.';
                           }
-                          if (!RegExp(
-                            r'^[\w.+-]+@[\w-]+\.[\w.-]+$',
-                          ).hasMatch(text)) {
+                          if (!RegExp(r'^[\w.+-]+@[\w-]+\.[\w.-]+$')
+                              .hasMatch(text)) {
                             return 'El correo no tiene un formato válido.';
                           }
                           return null;
@@ -185,7 +185,9 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
       _hasError = false;
     });
 
-    final ok = await ref.read(authControllerProvider.notifier).resetPassword(
+    final ok = await ref
+        .read(authControllerProvider.notifier)
+        .resetPassword(
           token: widget.token ?? '',
           code: _code,
           newPassword: _passwordController.text,
@@ -233,7 +235,8 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                       const SizedBox(height: 10),
                       const AuthHeader(
                         title: 'Nueva contraseña',
-                        subtitle: 'Introduce el código de 6 dígitos que '
+                        subtitle:
+                            'Introduce el código de 6 dígitos que '
                             'recibiste por Telegram.',
                       ),
                       const SizedBox(height: 22),

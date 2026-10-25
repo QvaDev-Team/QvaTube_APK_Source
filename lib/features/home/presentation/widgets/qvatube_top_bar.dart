@@ -8,7 +8,7 @@ import 'package:qvatube_apk/features/home/presentation/widgets/badge_count.dart'
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
 import '../../../../core/widgets/app_logo.dart';
-import '../../../auth/application/auth_controller.dart';
+import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../catalog/application/catalog_providers.dart';
 import '../../../catalog/domain/catalog_models.dart';
 import 'account_menu_sheet.dart';

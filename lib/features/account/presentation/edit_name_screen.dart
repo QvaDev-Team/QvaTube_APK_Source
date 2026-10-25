@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text.dart';
-import '../../auth/application/auth_controller.dart';
+import '../../auth/presentation/providers/auth_controller.dart';
 
 /// Cambio del nombre visible (`POST /api/auth/update-name`).
 class EditNameScreen extends ConsumerStatefulWidget {
@@ -37,9 +37,8 @@ class _EditNameScreenState extends ConsumerState<EditNameScreen> {
         .updateDisplayName(_controller.text.trim());
     if (!mounted) return;
     if (ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nombre actualizado.')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Nombre actualizado.')));
       context.pop();
     }
   }
@@ -78,7 +77,10 @@ class _EditNameScreenState extends ConsumerState<EditNameScreen> {
                 const SizedBox(height: 12),
                 Text(
                   authState.error!,
-                  style: AppTextStyles.body(fontSize: 12.5, color: AppColors.danger),
+                  style: AppTextStyles.body(
+                    fontSize: 12.5,
+                    color: AppColors.danger,
+                  ),
                 ),
               ],
               const SizedBox(height: 18),

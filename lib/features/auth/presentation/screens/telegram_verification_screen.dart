@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text.dart';
-import '../../../core/widgets/otp_code_input.dart';
-import '../application/auth_providers.dart';
-import '../data/auth_repository.dart';
-import '../domain/auth_models.dart';
-import 'widgets/auth_scaffold.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text.dart';
+import '../../../../core/widgets/otp_code_input.dart';
+import '../providers/auth_providers.dart';
+import '../../data/auth_repository.dart';
+import '../../domain/auth_models.dart';
+import '../widgets/auth_scaffold.dart';
 
 /// Puerta de verificación anti-abuso por Telegram (spec §6.9).
 ///
@@ -231,11 +231,7 @@ class _TelegramBadge extends StatelessWidget {
           shape: BoxShape.circle,
           border: Border.all(color: AppColors.telegram),
         ),
-        child: const Icon(
-          Icons.telegram,
-          color: AppColors.telegram,
-          size: 30,
-        ),
+        child: const Icon(Icons.telegram, color: AppColors.telegram, size: 30),
       ),
     );
   }
