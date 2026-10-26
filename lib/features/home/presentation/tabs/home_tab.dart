@@ -314,255 +314,255 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-class _CommunityBanner extends ConsumerWidget {
-  const _CommunityBanner();
+// class _CommunityBanner extends ConsumerWidget {
+//   const _CommunityBanner();
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadii.lg),
-        border: Border.all(color: const Color(0x55FF3D1A)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.accent.withValues(alpha: 0.18),
-            blurRadius: 24,
-            spreadRadius: 1,
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.accentSoft,
-            ),
-            child: const Icon(
-              Icons.rocket_launch_outlined,
-              color: AppColors.accent,
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Instala la APK de QvaTube',
-                  style: AppTextStyles.body(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'La versión Android más ligera para tu teléfono.',
-                  style: AppTextStyles.body(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          InkWell(
-            onTap: () async {
-              final config = await ref.read(siteConfigProvider.future);
-              final url = config.whatsappUrl;
-              if (url != null && url.isNotEmpty) {
-                await DeviceChannel.openUrl(url);
-              }
-            },
-            borderRadius: BorderRadius.circular(AppRadii.pill),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.accent,
-                borderRadius: BorderRadius.circular(AppRadii.pill),
-              ),
-              child: Text(
-                'Unirme',
-                style: AppTextStyles.body(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.accentInk,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+//   @override
+//   Widget build(BuildContext context, WidgetRef ref) {
+//     return Container(
+//       padding: const EdgeInsets.all(16),
+//       decoration: BoxDecoration(
+//         color: AppColors.surface,
+//         borderRadius: BorderRadius.circular(AppRadii.lg),
+//         border: Border.all(color: const Color(0x55FF3D1A)),
+//         boxShadow: [
+//           BoxShadow(
+//             color: AppColors.accent.withValues(alpha: 0.18),
+//             blurRadius: 24,
+//             spreadRadius: 1,
+//           ),
+//         ],
+//       ),
+//       child: Row(
+//         children: [
+//           Container(
+//             width: 46,
+//             height: 46,
+//             alignment: Alignment.center,
+//             decoration: const BoxDecoration(
+//               shape: BoxShape.circle,
+//               color: AppColors.accentSoft,
+//             ),
+//             child: const Icon(
+//               Icons.rocket_launch_outlined,
+//               color: AppColors.accent,
+//               size: 22,
+//             ),
+//           ),
+//           const SizedBox(width: 14),
+//           Expanded(
+//             child: Column(
+//               crossAxisAlignment: CrossAxisAlignment.start,
+//               children: [
+//                 Text(
+//                   'Instala la APK de QvaTube',
+//                   style: AppTextStyles.body(
+//                     fontSize: 14,
+//                     fontWeight: FontWeight.w700,
+//                   ),
+//                 ),
+//                 const SizedBox(height: 4),
+//                 Text(
+//                   'La versión Android más ligera para tu teléfono.',
+//                   style: AppTextStyles.body(
+//                     fontSize: 12,
+//                     color: AppColors.textSecondary,
+//                   ),
+//                 ),
+//               ],
+//             ),
+//           ),
+//           InkWell(
+//             onTap: () async {
+//               final config = await ref.read(siteConfigProvider.future);
+//               final url = config.whatsappUrl;
+//               if (url != null && url.isNotEmpty) {
+//                 await DeviceChannel.openUrl(url);
+//               }
+//             },
+//             borderRadius: BorderRadius.circular(AppRadii.pill),
+//             child: Container(
+//               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+//               decoration: BoxDecoration(
+//                 color: AppColors.accent,
+//                 borderRadius: BorderRadius.circular(AppRadii.pill),
+//               ),
+//               child: Text(
+//                 'Unirme',
+//                 style: AppTextStyles.body(
+//                   fontSize: 12.5,
+//                   fontWeight: FontWeight.w800,
+//                   color: AppColors.accentInk,
+//                 ),
+//               ),
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
 
-class _HowItWorks extends StatelessWidget {
-  const _HowItWorks();
+// class _HowItWorks extends StatelessWidget {
+//   const _HowItWorks();
 
-  static const List<String> _steps = [
-    'Elige tu contenido',
-    'Reproduce o descarga directo a tu móvil',
-    'Ahorra megas',
-  ];
+//   static const List<String> _steps = [
+//     'Elige tu contenido',
+//     'Reproduce o descarga directo a tu móvil',
+//     'Ahorra megas',
+//   ];
 
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        for (var index = 0; index < _steps.length; index++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 30,
-                  height: 30,
-                  alignment: Alignment.center,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.accent,
-                  ),
-                  child: Text(
-                    '${index + 1}',
-                    style: AppTextStyles.body(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.accentInk,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    _steps[index],
-                    style: AppTextStyles.body(fontSize: 13),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
+//   @override
+//   Widget build(BuildContext context) {
+//     return Column(
+//       children: [
+//         for (var index = 0; index < _steps.length; index++)
+//           Padding(
+//             padding: const EdgeInsets.only(bottom: 12),
+//             child: Row(
+//               children: [
+//                 Container(
+//                   width: 30,
+//                   height: 30,
+//                   alignment: Alignment.center,
+//                   decoration: const BoxDecoration(
+//                     shape: BoxShape.circle,
+//                     color: AppColors.accent,
+//                   ),
+//                   child: Text(
+//                     '${index + 1}',
+//                     style: AppTextStyles.body(
+//                       fontSize: 13,
+//                       fontWeight: FontWeight.w800,
+//                       color: AppColors.accentInk,
+//                     ),
+//                   ),
+//                 ),
+//                 const SizedBox(width: 12),
+//                 Expanded(
+//                   child: Text(
+//                     _steps[index],
+//                     style: AppTextStyles.body(fontSize: 13),
+//                   ),
+//                 ),
+//               ],
+//             ),
+//           ),
+//       ],
+//     );
+//   }
+// }
 
-class _StatsGrid extends ConsumerWidget {
-  const _StatsGrid();
+// class _StatsGrid extends ConsumerWidget {
+//   const _StatsGrid();
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final stats = ref.watch(siteStatsProvider);
-    final reviews = ref.watch(reviewsProvider);
+//   @override
+//   Widget build(BuildContext context, WidgetRef ref) {
+//     final stats = ref.watch(siteStatsProvider);
+//     final reviews = ref.watch(reviewsProvider);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        reviews.when(
-          loading: () => const SizedBox(height: 40),
-          error: (error, stack) => const SizedBox.shrink(),
-          data: (data) => Row(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    data.average.toStringAsFixed(1),
-                    style: Theme.of(context).textTheme.displayLarge,
-                  ),
-                  Row(
-                    children: List.generate(
-                      5,
-                      (index) => Icon(
-                        index < data.average.round()
-                            ? Icons.star
-                            : Icons.star_border,
-                        size: 14,
-                        color: AppColors.accent,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    '${data.total} reseñas',
-                    style: AppTextStyles.body(
-                      fontSize: 11,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 18),
-              Expanded(
-                child: Text(
-                  'Lo que dice la comunidad sobre QvaTube.',
-                  style: AppTextStyles.body(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        stats.when(
-          loading: () => const SizedBox.shrink(),
-          error: (error, stack) => const SizedBox.shrink(),
-          data: (data) {
-            final entries = <({String label, String value})>[
-              (label: 'Películas indexadas', value: '${data.moviesCount ?? 0}'),
-              (label: 'Series', value: '${data.seriesCount ?? 0}'),
-              (label: 'Música', value: '${data.musicCount ?? 0}'),
-              (label: 'Usuarios activos', value: '${data.onlineNow ?? 0}'),
-            ];
-            return GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 2.2,
-              children: [
-                for (final entry in entries)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(AppRadii.md),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          entry.value,
-                          style: AppTextStyles.display(fontSize: 22),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          entry.label,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.body(
-                            fontSize: 11,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
-      ],
-    );
-  }
-}
+//     return Column(
+//       crossAxisAlignment: CrossAxisAlignment.start,
+//       children: [
+//         reviews.when(
+//           loading: () => const SizedBox(height: 40),
+//           error: (error, stack) => const SizedBox.shrink(),
+//           data: (data) => Row(
+//             children: [
+//               Column(
+//                 crossAxisAlignment: CrossAxisAlignment.start,
+//                 children: [
+//                   Text(
+//                     data.average.toStringAsFixed(1),
+//                     style: Theme.of(context).textTheme.displayLarge,
+//                   ),
+//                   Row(
+//                     children: List.generate(
+//                       5,
+//                       (index) => Icon(
+//                         index < data.average.round()
+//                             ? Icons.star
+//                             : Icons.star_border,
+//                         size: 14,
+//                         color: AppColors.accent,
+//                       ),
+//                     ),
+//                   ),
+//                   Text(
+//                     '${data.total} reseñas',
+//                     style: AppTextStyles.body(
+//                       fontSize: 11,
+//                       color: AppColors.textMuted,
+//                     ),
+//                   ),
+//                 ],
+//               ),
+//               const SizedBox(width: 18),
+//               Expanded(
+//                 child: Text(
+//                   'Lo que dice la comunidad sobre QvaTube.',
+//                   style: AppTextStyles.body(
+//                     fontSize: 12,
+//                     color: AppColors.textSecondary,
+//                   ),
+//                 ),
+//               ),
+//             ],
+//           ),
+//         ),
+//         const SizedBox(height: 16),
+//         stats.when(
+//           loading: () => const SizedBox.shrink(),
+//           error: (error, stack) => const SizedBox.shrink(),
+//           data: (data) {
+//             final entries = <({String label, String value})>[
+//               (label: 'Películas indexadas', value: '${data.moviesCount ?? 0}'),
+//               (label: 'Series', value: '${data.seriesCount ?? 0}'),
+//               (label: 'Música', value: '${data.musicCount ?? 0}'),
+//               (label: 'Usuarios activos', value: '${data.onlineNow ?? 0}'),
+//             ];
+//             return GridView.count(
+//               crossAxisCount: 2,
+//               shrinkWrap: true,
+//               physics: const NeverScrollableScrollPhysics(),
+//               mainAxisSpacing: 10,
+//               crossAxisSpacing: 10,
+//               childAspectRatio: 2.2,
+//               children: [
+//                 for (final entry in entries)
+//                   Container(
+//                     padding: const EdgeInsets.all(12),
+//                     decoration: BoxDecoration(
+//                       color: AppColors.surface,
+//                       borderRadius: BorderRadius.circular(AppRadii.md),
+//                       border: Border.all(color: AppColors.border),
+//                     ),
+//                     child: Column(
+//                       crossAxisAlignment: CrossAxisAlignment.start,
+//                       mainAxisAlignment: MainAxisAlignment.center,
+//                       children: [
+//                         Text(
+//                           entry.value,
+//                           style: AppTextStyles.display(fontSize: 22),
+//                         ),
+//                         const SizedBox(height: 2),
+//                         Text(
+//                           entry.label,
+//                           maxLines: 2,
+//                           overflow: TextOverflow.ellipsis,
+//                           style: AppTextStyles.body(
+//                             fontSize: 11,
+//                             color: AppColors.textMuted,
+//                           ),
+//                         ),
+//                       ],
+//                     ),
+//                   ),
+//               ],
+//             );
+//           },
+//         ),
+//       ],
+//     );
+//   }
+// }
