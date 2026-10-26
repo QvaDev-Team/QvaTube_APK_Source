@@ -10,32 +10,32 @@ import 'widgets/qvatube_top_bar.dart';
 /// Contenedor principal de la app tras el login.
 ///
 /// - Barra superior fija con logo, buscador y avatar de usuario.
-/// - Barra de navegación inferior con 5 secciones y "Inicio" en el centro.
+/// - Barra de navegación inferior con 9 secciones e "Inicio" a la izquierda.
 class HomeShell extends ConsumerWidget {
   const HomeShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
-  /// 9 secciones: 4 a la izquierda, **Inicio en el medio** y 4 a la derecha.
+  /// 9 secciones: **Inicio a la izquierda** y el resto a su derecha.
   static const List<({String label, IconData icon, IconData? activeIcon})>
       _definitions = [
-    (label: 'Popular', icon: Icons.local_fire_department, activeIcon: null),
-    (label: 'TV', icon: Icons.live_tv, activeIcon: null),
-    (label: 'Películas', icon: Icons.movie_outlined, activeIcon: null),
-    (label: 'Series', icon: Icons.tv, activeIcon: null),
     (
       label: 'Inicio',
       icon: Icons.home_outlined,
       activeIcon: Icons.home
     ),
+    (label: 'Popular', icon: Icons.local_fire_department, activeIcon: null),
+    (label: 'TV', icon: Icons.live_tv, activeIcon: null),
+    (label: 'Películas', icon: Icons.movie_outlined, activeIcon: null),
+    (label: 'Series', icon: Icons.tv, activeIcon: null),
     (label: 'Anime', icon: Icons.auto_awesome, activeIcon: null),
     (label: 'Novelas', icon: Icons.favorite_border, activeIcon: null),
     (label: 'Música', icon: Icons.music_note, activeIcon: null),
     (label: 'Libros', icon: Icons.menu_book, activeIcon: null),
   ];
 
-  /// Índice de la pestaña de Inicio (siempre en el medio).
-  static const int homeIndex = 4;
+  /// Índice de la pestaña de Inicio (primera a la izquierda).
+  static const int homeIndex = 0;
 
   void _onTap(int index) {
     navigationShell.goBranch(
@@ -53,11 +53,11 @@ class HomeShell extends ConsumerWidget {
     // Los badges de estrenos van en Inicio (total), Películas, Series y
     // Anime, que son las categorías con contador en el backend.
     final badges = <int>[
+      totalNew,
       0,
       0,
       counts['movie'] ?? 0,
       counts['series'] ?? 0,
-      totalNew,
       counts['anime'] ?? 0,
       0,
       0,

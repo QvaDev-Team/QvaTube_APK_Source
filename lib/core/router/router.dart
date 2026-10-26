@@ -162,6 +162,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
         branches: [
           StatefulShellBranch(
+            navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'inicio'),
+            routes: [
+              GoRoute(
+                path: Routes.home,
+                builder: (context, state) => const HomeTab(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
             navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'popular'),
             routes: [
               GoRoute(
@@ -221,15 +230,6 @@ final routerProvider = Provider<GoRouter>((ref) {
                       'Series por temporada, con episodios nuevos '
                       'cada semana.',
                 ),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'inicio'),
-            routes: [
-              GoRoute(
-                path: Routes.home,
-                builder: (context, state) => const HomeTab(),
               ),
             ],
           ),
