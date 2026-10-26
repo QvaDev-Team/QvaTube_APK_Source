@@ -65,7 +65,7 @@ class LiveStatsBar extends ConsumerWidget {
             value: online != null ? '$online' : '-',
             label: 'conectados',
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
 
           // ▶ {N}/{Cap} viendo
           _StatPill(
@@ -79,7 +79,7 @@ class LiveStatsBar extends ConsumerWidget {
                 : '-/-',
             label: 'viendo',
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
 
           // ✨ {N} nuevo hoy
           _StatPill(
@@ -91,7 +91,7 @@ class LiveStatsBar extends ConsumerWidget {
             value: newToday != null ? '$newToday' : '-',
             label: 'nuevo hoy',
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
 
           // 📥 {N} hoy
           _StatPill(
@@ -131,7 +131,7 @@ class _StatPill extends StatelessWidget {
         Text(
           value,
           style: AppTextStyles.mono(
-            fontSize: 11,
+            fontSize: 10.5,
             fontWeight: FontWeight.w700,
             color: const Color(0xFFE5E7EB),
           ),
@@ -140,7 +140,7 @@ class _StatPill extends StatelessWidget {
         Text(
           label,
           style: AppTextStyles.body(
-            fontSize: 11,
+            fontSize: 10.5,
             color: const Color(0xFF9CA3AF),
           ),
         ),
@@ -148,4 +148,3 @@ class _StatPill extends StatelessWidget {
     );
   }
 }
-

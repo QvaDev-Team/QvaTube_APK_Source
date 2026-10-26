@@ -49,31 +49,37 @@ class QvaTopBar extends ConsumerWidget {
             bottom: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const AppLogo(height: 26),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Center(
+                  Row(
+                    children: [
+                      const AppLogo(height: 26),
+                      const Spacer(),
+                      if (showSearch)
+                        IconButton(
+                          onPressed: () => context.push('/buscar'),
+                          tooltip: 'Buscar',
+                          icon: const Icon(Icons.search),
+                          style: IconButton.styleFrom(
+                            foregroundColor: AppColors.textSecondary,
+                          ),
+                        ),
+                      const SizedBox(width: 4),
+                      _UserAvatar(
+                        label: user?.initials ?? 'Q',
+                        imageUrl: absoluteMediaUrl(user?.avatarUrl),
+                        unreadCount: unread,
+                        onTap: () => showAccountMenuSheet(context, ref),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.only(right: 8),
                       child: LiveStatsBar(),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (showSearch)
-                    IconButton(
-                      onPressed: () => context.push('/buscar'),
-                      tooltip: 'Buscar',
-                      icon: const Icon(Icons.search),
-                      style: IconButton.styleFrom(
-                        foregroundColor: AppColors.textSecondary,
-                      ),
-                    ),
-                  const SizedBox(width: 4),
-                  _UserAvatar(
-                    label: user?.initials ?? 'Q',
-                    imageUrl: absoluteMediaUrl(user?.avatarUrl),
-                    unreadCount: unread,
-                    onTap: () => showAccountMenuSheet(context, ref),
                   ),
                 ],
               ),
