@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
 import '../../../catalog/application/catalog_providers.dart';
 
@@ -22,7 +21,7 @@ class LiveStatsBar extends ConsumerWidget {
         newToday: null,
         downloadsToday: null,
       ),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
       data: (stats) => _buildContent(
         online: stats.onlineNow ?? 0,
         watchingNow: stats.watchingNow ?? 0,

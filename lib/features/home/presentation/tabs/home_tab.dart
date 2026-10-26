@@ -10,7 +10,6 @@ import '../../../../core/theme/app_text.dart';
 import '../../../../core/widgets/app_logo.dart';
 import '../../../../core/widgets/app_skeleton.dart';
 import '../../../catalog/application/catalog_providers.dart';
-import '../../../catalog/domain/catalog_models.dart';
 import '../widgets/content_detail_sheet.dart';
 import '../widgets/media_card.dart';
 import '../widgets/section_header.dart';

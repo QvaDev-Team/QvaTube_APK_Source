@@ -5,8 +5,6 @@ import '../../../../core/network/api_client.dart';
 import '../../../../core/platform/device_channel.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
-import '../../../../core/widgets/app_cached_image.dart';
-import '../../../../core/widgets/app_skeleton.dart';
 import '../../../catalog/application/catalog_providers.dart';
 import '../../../catalog/domain/catalog_models.dart';
 
@@ -573,7 +571,7 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                               height: 32,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Colors.white.withOpacity(0.08),
+                                color: Colors.white.withValues(alpha: 0.08),
                               ),
                               child: const Icon(
                                 Icons.download,
