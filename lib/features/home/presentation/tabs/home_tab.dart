@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qvatube_apk/core/utils/icon_mapper.dart';
@@ -141,13 +142,7 @@ class HomeTab extends ConsumerWidget {
               );
             },
           ),
-          // const _CommunityBanner(),
-          // const SizedBox(height: 26),
-          // const SectionTitle(title: 'Cómo funciona'),
-          // const _HowItWorks(),
-          // const SizedBox(height: 26),
-          // const SectionTitle(title: 'Reseñas y estadísticas'),
-          // const _StatsGrid(),
+          
         ],
       ),
     );
