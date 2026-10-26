@@ -5,6 +5,7 @@ import '../../../core/platform/device_channel.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text.dart';
 import '../../catalog/application/catalog_providers.dart';
+import '../../catalog/domain/catalog_models.dart';
 
 /// Pantalla "Mis descargas" en el menú de cuenta.
 class DownloadsScreen extends ConsumerWidget {
@@ -12,6 +13,8 @@ class DownloadsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final planUsage = ref.watch(planUsageProvider);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -66,10 +69,24 @@ class DownloadsScreen extends ConsumerWidget {
               ],
             ),
           ),
+          ...planUsage.maybeWhen(
+            data: (result) {
+              final usage = result.usage;
+              if (usage == null) return const <Widget>[];
+              return <Widget>[
+                const SizedBox(height: 16),
+                _DownloadQuotaCard(usage: usage),
+              ];
+            },
+            orElse: () => const <Widget>[],
+          ),
           const SizedBox(height: 24),
           Text(
             'CÓMO DESCARGAR',
-            style: AppTextStyles.display(fontSize: 14, color: AppColors.textMuted),
+            style: AppTextStyles.display(
+              fontSize: 14,
+              color: AppColors.textMuted,
+            ),
           ),
           const SizedBox(height: 12),
           const _DownloadStep(
@@ -103,6 +120,135 @@ class DownloadsScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Consumo real de descargas del plan (`GET /api/plans/me`), igual que en la web.
+class _DownloadQuotaCard extends StatelessWidget {
+  const _DownloadQuotaCard({required this.usage});
+
+  final PlanUsage usage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadii.md),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.data_usage, size: 18, color: AppColors.accent),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Consumo de descargas',
+                  style: AppTextStyles.body(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              if (usage.planName != null && usage.planName!.isNotEmpty)
+                Text(
+                  usage.planName!.toUpperCase(),
+                  style: AppTextStyles.mono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.accent,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _QuotaRow(
+            icon: Icons.movie_outlined,
+            label: 'Video',
+            used: usage.downloadsUsed,
+            limit: usage.downloadLimit,
+            unlimited: usage.unlimited,
+          ),
+          const SizedBox(height: 8),
+          _QuotaRow(
+            icon: Icons.music_note,
+            label: 'Música',
+            used: usage.musicDownloadsUsed,
+            limit: usage.musicDownloadLimit,
+            unlimited: usage.unlimited,
+          ),
+          if (usage.resetInSeconds != null && usage.resetInSeconds! > 0) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Se renueva en ${_formatRemaining(usage.resetInSeconds!)}.',
+              style: AppTextStyles.body(
+                fontSize: 11.5,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static String _formatRemaining(int seconds) {
+    final days = seconds ~/ 86400;
+    final hours = (seconds % 86400) ~/ 3600;
+    final minutes = (seconds % 3600) ~/ 60;
+    if (days > 0) return '$days d $hours h';
+    if (hours > 0) return '$hours h $minutes min';
+    return '$minutes min';
+  }
+}
+
+class _QuotaRow extends StatelessWidget {
+  const _QuotaRow({
+    required this.icon,
+    required this.label,
+    required this.used,
+    required this.limit,
+    required this.unlimited,
+  });
+
+  final IconData icon;
+  final String label;
+  final int? used;
+  final int? limit;
+  final bool unlimited;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = unlimited || limit == null
+        ? '${used ?? 0} · Ilimitadas'
+        : '${used ?? 0} de $limit';
+
+    return Row(
+      children: [
+        Icon(icon, size: 15, color: AppColors.textMuted),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: AppTextStyles.body(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: AppTextStyles.mono(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -175,4 +321,3 @@ class _DownloadStep extends StatelessWidget {
     );
   }
 }
-

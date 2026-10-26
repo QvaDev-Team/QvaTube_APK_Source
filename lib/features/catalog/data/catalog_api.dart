@@ -114,7 +114,7 @@ class CatalogApi {
 
   /// GET /api/recommendations
   Future<({List<CatalogItem> items, String? seasonLabel, String? source})>
-      recommendations() async {
+  recommendations() async {
     final response = await _client.get(
       Endpoints.catalog.recommendations,
       operation: 'las recomendaciones',
@@ -124,9 +124,9 @@ class CatalogApi {
     return (
       items: rawItems is List
           ? rawItems
-              .whereType<Map>()
-              .map((e) => CatalogItem.fromJson(Map<String, dynamic>.from(e)))
-              .toList()
+                .whereType<Map>()
+                .map((e) => CatalogItem.fromJson(Map<String, dynamic>.from(e)))
+                .toList()
           : const <CatalogItem>[],
       seasonLabel: data['season_label'] as String?,
       source: data['source'] as String?,
@@ -194,9 +194,12 @@ class CatalogApi {
     return (
       items: rawItems is List
           ? rawItems
-              .whereType<Map>()
-              .map((e) => NotificationItem.fromJson(Map<String, dynamic>.from(e)))
-              .toList()
+                .whereType<Map>()
+                .map(
+                  (e) =>
+                      NotificationItem.fromJson(Map<String, dynamic>.from(e)),
+                )
+                .toList()
           : const <NotificationItem>[],
       unread: (data['unread'] as num?)?.toInt() ?? 0,
     );
@@ -234,9 +237,7 @@ class CatalogApi {
       Endpoints.plans.plans,
       operation: 'el catálogo de planes',
     );
-    return _list(response.data)
-        .map(PlanInfo.fromJson)
-        .toList();
+    return _list(response.data).map(PlanInfo.fromJson).toList();
   }
 
   /// GET /api/plans/me
@@ -276,7 +277,8 @@ class CatalogApi {
   }
 
   /// GET /api/reviews
-  Future<({double average, int total, List<ReviewItem> reviews})> reviews() async {
+  Future<({double average, int total, List<ReviewItem> reviews})>
+  reviews() async {
     final response = await _client.get(
       Endpoints.reviews.reviews,
       operation: 'las reseñas',
@@ -288,9 +290,9 @@ class CatalogApi {
       total: (data['total'] as num?)?.toInt() ?? 0,
       reviews: rawReviews is List
           ? rawReviews
-              .whereType<Map>()
-              .map((e) => ReviewItem.fromJson(Map<String, dynamic>.from(e)))
-              .toList()
+                .whereType<Map>()
+                .map((e) => ReviewItem.fromJson(Map<String, dynamic>.from(e)))
+                .toList()
           : const <ReviewItem>[],
     );
   }
@@ -303,10 +305,7 @@ class CatalogApi {
   }) async {
     final response = await _client.post(
       Endpoints.downloads.authorize,
-      body: <String, dynamic>{
-        'chat_id': chatId,
-        'msg_id': msgId,
-      },
+      body: <String, dynamic>{'chat_id': chatId, 'msg_id': msgId},
       operation: 'la autorización de descarga',
     );
     return _map(response.data);
@@ -315,28 +314,53 @@ class CatalogApi {
   /// POST /api/download/authorize-season
   /// Autoriza la descarga de una temporada completa y devuelve el deep link.
   Future<Map<String, dynamic>> authorizeSeasonDownload({
-    required int chatId,
-    required String seasonId,
+    required String categoryKey,
+    required String title,
+    required int season,
   }) async {
     final response = await _client.post(
       Endpoints.downloads.authorizeSeason,
       body: <String, dynamic>{
-        'chat_id': chatId,
-        'season_id': seasonId,
+        'category_key': categoryKey,
+        'title': title,
+        'season': season,
       },
       operation: 'la autorización de descarga de temporada',
     );
     return _map(response.data);
   }
 
+  /// GET /api/info
+  /// Ficha TMDb del título (sinopsis, reparto, tráiler, año y nota).
+  Future<ContentInfo> info(String title, {String? type}) async {
+    final response = await _client.get(
+      Endpoints.catalog.info,
+      query: <String, dynamic>{
+        'title': title,
+        if (type != null && type.isNotEmpty) 'type': type,
+      },
+      operation: 'la ficha del contenido',
+    );
+    return ContentInfo.fromJson(_map(response.data));
+  }
+
   /// GET /api/episodes
   /// Obtiene los episodios de una serie o temporada.
+  ///
+  /// La web usa `cat` + `title`; el servidor ignora `chat_id`/`msg_id` cuando
+  /// se envía el título agrupado.
   Future<List<Map<String, dynamic>>> episodes({
+    String? categoryKey,
+    String? title,
     int? chatId,
     int? msgId,
     String? itemKey,
   }) async {
     final query = <String, dynamic>{};
+    if (categoryKey != null && categoryKey.isNotEmpty) {
+      query['cat'] = categoryKey;
+    }
+    if (title != null && title.isNotEmpty) query['title'] = title;
     if (chatId != null) query['chat_id'] = chatId;
     if (msgId != null) query['msg_id'] = msgId;
     if (itemKey != null && itemKey.isNotEmpty) query['item_key'] = itemKey;
@@ -348,15 +372,20 @@ class CatalogApi {
     );
     final data = response.data;
     if (data is List) {
-      return data.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      return data
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
     }
     if (data is Map) {
       final items = data['items'] ?? data['episodes'];
       if (items is List) {
-        return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+        return items
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
       }
     }
     return const [];
   }
 }
-

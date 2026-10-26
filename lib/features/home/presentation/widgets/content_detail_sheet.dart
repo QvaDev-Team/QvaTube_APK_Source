@@ -5,6 +5,7 @@ import '../../../../core/network/api_client.dart';
 import '../../../../core/platform/device_channel.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
+import '../../../../core/widgets/app_cached_image.dart';
 import '../../../catalog/application/catalog_providers.dart';
 import '../../../catalog/domain/catalog_models.dart';
 
@@ -29,26 +30,67 @@ class _ContentDetailSheet extends ConsumerStatefulWidget {
   final CatalogItem item;
 
   @override
-  ConsumerState<_ContentDetailSheet> createState() => _ContentDetailSheetState();
+  ConsumerState<_ContentDetailSheet> createState() =>
+      _ContentDetailSheetState();
 }
 
 class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
   bool _loadingAction = false;
   bool _loadingEpisodes = false;
+  bool _loadingInfo = false;
+  bool _isUnlimitedPlan = false;
+  ContentInfo? _info;
   List<Map<String, dynamic>> _episodes = [];
   String? _episodesError;
+  int _selectedSeason = 1;
 
   bool get _isSeries =>
+      widget.item.isSeries ||
       widget.item.categoryKey == 'series' ||
       widget.item.categoryKey == 'anime' ||
-      widget.item.categoryKey == 'novela' ||
-      widget.item.episodeCount > 0;
+      widget.item.categoryKey == 'novela';
+
+  String? get _title {
+    final title = widget.item.title;
+    return title == null || title.isEmpty ? null : title;
+  }
 
   @override
   void initState() {
     super.initState();
+    _fetchInfo();
     if (_isSeries) {
       _fetchEpisodes();
+      _fetchPlan();
+    }
+  }
+
+  Future<void> _fetchInfo() async {
+    final title = _title;
+    final type = widget.item.tmdbType;
+    if (title == null || type == null || type.isEmpty) return;
+
+    setState(() => _loadingInfo = true);
+    try {
+      final info = await ref.read(catalogApiProvider).info(title, type: type);
+      if (!mounted) return;
+      setState(() {
+        _info = info;
+        _loadingInfo = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingInfo = false);
+    }
+  }
+
+  Future<void> _fetchPlan() async {
+    try {
+      final result = await ref.read(planUsageProvider.future);
+      if (!mounted) return;
+      setState(() => _isUnlimitedPlan = result.usage?.unlimited ?? false);
+    } catch (_) {
+      // Sin sesión o sin red: se mantiene oculto el botón de temporada.
     }
   }
 
@@ -59,39 +101,83 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
     });
 
     try {
-      final list = await ref.read(catalogApiProvider).episodes(
-            chatId: widget.item.chatId,
-            msgId: widget.item.msgId,
-            itemKey: widget.item.itemKey,
-          );
+      final list = await ref
+          .read(catalogApiProvider)
+          .episodes(categoryKey: widget.item.categoryKey, title: _title);
       if (!mounted) return;
       setState(() {
         _episodes = list;
         _loadingEpisodes = false;
+        _selectedSeason = _defaultSeason(list);
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _loadingEpisodes = false;
-        // Si no responde el endpoint de episodios, generamos la lista basada en episodeCount para mostrar UI
-        if (_episodes.isEmpty && widget.item.episodeCount > 0) {
-          _episodes = List.generate(
-            widget.item.episodeCount,
-            (index) => {
-              'title': 'T1 · E${(index + 1).toString().padLeft(2, '0')}',
-              'size': widget.item.size != null && widget.item.episodeCount > 0
-                  ? widget.item.size! ~/ widget.item.episodeCount
-                  : 126 * 1024 * 1024,
-              'episode_number': index + 1,
-              'msg_id': (widget.item.msgId ?? 1000) + index + 1,
-              'chat_id': widget.item.chatId,
-            },
-          );
-        } else {
-          _episodesError = 'No se pudieron cargar los episodios.';
-        }
+        _episodes = const [];
+        _episodesError = 'No se pudieron cargar los episodios.';
       });
     }
+  }
+
+  int _defaultSeason(List<Map<String, dynamic>> episodes) {
+    final seasons = <int>{
+      for (final ep in episodes) (ep['season'] as num?)?.toInt() ?? 0,
+    };
+    if (seasons.isEmpty) return 1;
+    final numbered = seasons.where((s) => s > 0).toList()..sort();
+    if (numbered.isNotEmpty) return numbered.first;
+    final all = seasons.toList()..sort();
+    return all.first;
+  }
+
+  List<int> get _seasons {
+    final seasons = <int>{
+      for (final ep in _episodes) (ep['season'] as num?)?.toInt() ?? 0,
+    };
+    return seasons.toList()..sort();
+  }
+
+  List<Map<String, dynamic>> get _seasonEpisodes => _episodes
+      .where((ep) => ((ep['season'] as num?)?.toInt() ?? 0) == _selectedSeason)
+      .toList();
+
+  String _seasonLabel(int season) {
+    if (season > 0) return 'Temporada $season';
+    if (season == -1) return 'OVA';
+    if (season == -2) return 'Especiales';
+    if (season == -3) return 'ONA';
+    if (season < -3) return 'Especial T${season + 1000}';
+    return 'Otros';
+  }
+
+  String _episodeLabel(Map<String, dynamic> ep, int index) {
+    final season = (ep['season'] as num?)?.toInt() ?? 0;
+    final number = (ep['episode'] as num?)?.toInt();
+    final padded = number != null
+        ? number.toString().padLeft(2, '0')
+        : (index + 1).toString().padLeft(2, '0');
+    if (season > 0) return 'T$season · E$padded';
+    if (season == -1) return 'OVA $padded';
+    if (season == -2) return 'Especial $padded';
+    if (season == -3) return 'ONA $padded';
+    return 'E$padded';
+  }
+
+  String? _downloadLink(Map<String, dynamic> response) {
+    final url =
+        response['url']?.toString() ??
+        response['deep_link']?.toString() ??
+        response['telegram_url']?.toString();
+    return url == null || url.isEmpty ? null : url;
+  }
+
+  Future<void> _openTelegram(String fallbackPayload) async {
+    final botConfig = await ref
+        .read(siteConfigProvider.future)
+        .catchError((_) => const SiteConfig());
+    final bot = botConfig.botUsername ?? 'qvatube_bot';
+    await DeviceChannel.openUrl('https://t.me/$bot?start=$fallbackPayload');
   }
 
   Future<void> _handleDownloadMovie() async {
@@ -101,7 +187,9 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
     if (chatId == null || msgId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Este contenido no tiene identificador de descarga asignado.'),
+          content: Text(
+            'Este contenido no tiene identificador de descarga asignado.',
+          ),
         ),
       );
       return;
@@ -109,71 +197,62 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
 
     setState(() => _loadingAction = true);
     try {
-      final response = await ref.read(catalogApiProvider).authorizeDownload(
-            chatId: chatId,
-            msgId: msgId,
-          );
+      final response = await ref
+          .read(catalogApiProvider)
+          .authorizeDownload(chatId: chatId, msgId: msgId);
       if (!mounted) return;
       setState(() => _loadingAction = false);
 
-      final url = response['url']?.toString() ??
-          response['deep_link']?.toString() ??
-          response['telegram_url']?.toString();
-
-      if (url != null && url.isNotEmpty) {
+      final url = _downloadLink(response);
+      if (url != null) {
         await DeviceChannel.openUrl(url);
       } else {
-        // Fallback a bot de Telegram con start payload si existe
-        final botConfig = await ref.read(siteConfigProvider.future);
-        final bot = botConfig.botUsername ?? 'qvatube_bot';
-        await DeviceChannel.openUrl('https://t.me/$bot?start=dl_${chatId}_$msgId');
+        await _openTelegram('dl_${chatId}_$msgId');
       }
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _loadingAction = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
-    } catch (e) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
       if (!mounted) return;
       setState(() => _loadingAction = false);
-      // Fallback amigable abriendo Telegram
-      final botConfig = await ref.read(siteConfigProvider.future).catchError((_) => const SiteConfig());
-      final bot = botConfig.botUsername ?? 'qvatube_bot';
-      await DeviceChannel.openUrl('https://t.me/$bot?start=dl_${chatId}_$msgId');
+      await _openTelegram('dl_${chatId}_$msgId');
     }
   }
 
   Future<void> _handleDownloadSeason() async {
-    final chatId = widget.item.chatId;
-    if (chatId == null) return;
+    final categoryKey = widget.item.categoryKey;
+    final title = _title;
+    if (categoryKey == null || categoryKey.isEmpty || title == null) return;
 
     setState(() => _loadingAction = true);
     try {
-      final response = await ref.read(catalogApiProvider).authorizeSeasonDownload(
-            chatId: chatId,
-            seasonId: 'season_1',
+      final response = await ref
+          .read(catalogApiProvider)
+          .authorizeSeasonDownload(
+            categoryKey: categoryKey,
+            title: title,
+            season: _selectedSeason,
           );
       if (!mounted) return;
       setState(() => _loadingAction = false);
 
-      final url = response['url']?.toString() ??
-          response['deep_link']?.toString() ??
-          response['telegram_url']?.toString();
-
-      if (url != null && url.isNotEmpty) {
+      final url = _downloadLink(response);
+      if (url != null) {
         await DeviceChannel.openUrl(url);
       } else {
-        final botConfig = await ref.read(siteConfigProvider.future);
-        final bot = botConfig.botUsername ?? 'qvatube_bot';
-        await DeviceChannel.openUrl('https://t.me/$bot?start=season_${chatId}_1');
+        await _openTelegram('season_${categoryKey}_$_selectedSeason');
       }
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingAction = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
       if (!mounted) return;
       setState(() => _loadingAction = false);
-      final botConfig = await ref.read(siteConfigProvider.future).catchError((_) => const SiteConfig());
-      final bot = botConfig.botUsername ?? 'qvatube_bot';
-      await DeviceChannel.openUrl('https://t.me/$bot?start=season_${chatId}_1');
+      await _openTelegram('season_${categoryKey}_$_selectedSeason');
     }
   }
 
@@ -184,31 +263,48 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
     if (chatId == null || msgId == null) return;
 
     try {
-      final response = await ref.read(catalogApiProvider).authorizeDownload(
-            chatId: chatId,
-            msgId: msgId,
-          );
-      final url = response['url']?.toString() ??
-          response['deep_link']?.toString() ??
-          response['telegram_url']?.toString();
+      final response = await ref
+          .read(catalogApiProvider)
+          .authorizeDownload(chatId: chatId, msgId: msgId);
+      final url = _downloadLink(response);
 
-      if (url != null && url.isNotEmpty) {
+      if (url != null) {
         await DeviceChannel.openUrl(url);
       } else {
-        final botConfig = await ref.read(siteConfigProvider.future);
-        final bot = botConfig.botUsername ?? 'qvatube_bot';
-        await DeviceChannel.openUrl('https://t.me/$bot?start=dl_${chatId}_$msgId');
+        await _openTelegram('dl_${chatId}_$msgId');
       }
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
-      final botConfig = await ref.read(siteConfigProvider.future).catchError((_) => const SiteConfig());
-      final bot = botConfig.botUsername ?? 'qvatube_bot';
-      await DeviceChannel.openUrl('https://t.me/$bot?start=dl_${chatId}_$msgId');
+      await _openTelegram('dl_${chatId}_$msgId');
     }
+  }
+
+  void _openTrailer() {
+    final key = _info?.trailerKey;
+    if (key == null || key.isEmpty) return;
+    DeviceChannel.openUrl('https://www.youtube.com/watch?v=$key');
   }
 
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
+    final info = _info;
+
+    final title = info?.title ?? item.title ?? 'Sin título';
+    final year = info?.hasYear == true ? info!.year : null;
+    final rating = info?.hasRating == true ? info!.rating : null;
+    final overview = info?.hasOverview == true
+        ? info!.overview!
+        : (item.genres != null && item.genres!.isNotEmpty
+              ? 'Sin sinopsis disponible.'
+              : 'Película y serie disponible para reproducir en streaming o '
+                    'descargar directamente a tu dispositivo a través de Telegram '
+                    'sin consumo extra de datos.');
+    final cast = info?.cast ?? const <CastMember>[];
+    final trailerKey = info?.trailerKey;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.9,
@@ -220,7 +316,6 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
           controller: scrollController,
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
-            // Asa de arrastre superior
             Center(
               child: Container(
                 width: 38,
@@ -232,8 +327,6 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
               ),
             ),
             const SizedBox(height: 14),
-
-            // Encabezado: Título en mayúsculas estilo Bebas Neue + Botones Compartir / Reportar
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -242,50 +335,45 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        (item.title ?? 'SIN TÍTULO').toUpperCase(),
+                        title.toUpperCase(),
                         style: AppTextStyles.display(
                           fontSize: 22,
                           letterSpacing: 0.5,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Text(
-                            '2024',
-                            style: AppTextStyles.mono(
-                              fontSize: 12,
-                              color: const Color(0xFFFF3D1A),
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Text('•', style: TextStyle(color: Colors.white38)),
-                          const SizedBox(width: 8),
-                          Text(
-                            item.popularity != null && item.popularity! > 0
-                                ? '${item.popularity}'
-                                : '8.4',
-                            style: AppTextStyles.mono(
-                              fontSize: 12,
-                              color: const Color(0xFFFF3D1A),
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          if (item.bottomBadge.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            const Text('•', style: TextStyle(color: Colors.white38)),
-                            const SizedBox(width: 8),
-                            Text(
-                              item.bottomBadge,
-                              style: AppTextStyles.mono(
-                                fontSize: 11.5,
-                                color: AppColors.textSecondary,
+                      if (year != null || rating != null) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            if (year != null)
+                              Text(
+                                year,
+                                style: AppTextStyles.mono(
+                                  fontSize: 12,
+                                  color: const Color(0xFFFF3D1A),
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
-                            ),
+                            if (year != null && rating != null)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8),
+                                child: Text(
+                                  '·',
+                                  style: TextStyle(color: Colors.white38),
+                                ),
+                              ),
+                            if (rating != null)
+                              Text(
+                                rating,
+                                style: AppTextStyles.mono(
+                                  fontSize: 12,
+                                  color: const Color(0xFFFF3D1A),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                           ],
-                        ],
-                      ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -294,7 +382,9 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                   label: 'Compartir',
                   onTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Enlace copiado al portapapeles.')),
+                      const SnackBar(
+                        content: Text('Enlace copiado al portapapeles.'),
+                      ),
                     );
                   },
                 ),
@@ -304,62 +394,68 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                   label: 'Reportar',
                   onTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Reporte enviado a los administradores.')),
+                      const SnackBar(
+                        content: Text('Reporte enviado a los administradores.'),
+                      ),
                     );
                   },
                 ),
               ],
             ),
             const SizedBox(height: 12),
-
-            // Sinopsis o descripción
-            Text(
-              item.genres != null && item.genres!.isNotEmpty
-                  ? 'Con toda clase de aventuras y misterio. ${item.title ?? 'Este contenido'} cuenta con una producción de alta calidad para disfrutar sin límites.'
-                  : 'Película y serie disponible para reproducir en streaming o descargar directamente a tu dispositivo a través de Telegram sin consumo extra de datos.',
-              style: AppTextStyles.body(
-                fontSize: 12.5,
-                color: const Color(0xFF9CA3AF),
-                height: 1.4,
+            if (_loadingInfo && info == null)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: LinearProgressIndicator(minHeight: 2),
+              )
+            else
+              Text(
+                overview,
+                style: AppTextStyles.body(
+                  fontSize: 12.5,
+                  color: const Color(0xFF9CA3AF),
+                  height: 1.4,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-
-            // Reparto principal (Cast)
-            Text(
-              'REPARTO PRINCIPAL',
-              style: AppTextStyles.display(
-                fontSize: 13,
-                letterSpacing: 0.5,
-                color: const Color(0xFF9CA3AF),
+            if (cast.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(
+                'REPARTO PRINCIPAL',
+                style: AppTextStyles.display(
+                  fontSize: 13,
+                  letterSpacing: 0.5,
+                  color: const Color(0xFF9CA3AF),
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            _CastRow(),
-            const SizedBox(height: 16),
-
-            // Botón "Ver tráiler"
-            Container(
-              height: 40,
-              decoration: BoxDecoration(
-                color: const Color(0xFF16181D),
+              const SizedBox(height: 10),
+              _CastRow(cast: cast),
+            ],
+            if (trailerKey != null && trailerKey.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              InkWell(
+                onTap: _openTrailer,
                 borderRadius: BorderRadius.circular(AppRadii.md),
-                border: Border.all(color: Colors.white12),
-              ),
-              child: const Center(
-                child: Text(
-                  'Ver tráiler',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                child: Container(
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF16181D),
+                    borderRadius: BorderRadius.circular(AppRadii.md),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'Ver tráiler',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
             const SizedBox(height: 16),
-
-            // SI ES PELÍCULA: Botones gigantes "Reproducir" y "Descargar"
             if (!_isSeries) ...[
               Row(
                 children: [
@@ -426,62 +522,7 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                 ),
               ),
             ],
-
-            // SI ES SERIE / ANIME / NOVELA: Botón "Descargar Temporada 1" + Lista de episodios
             if (_isSeries) ...[
-              InkWell(
-                onTap: _loadingAction ? null : _handleDownloadSeason,
-                borderRadius: BorderRadius.circular(AppRadii.md),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF16181D),
-                    borderRadius: BorderRadius.circular(AppRadii.md),
-                    border: Border.all(color: const Color(0xFFFF3D1A)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.arrow_downward,
-                        size: 15,
-                        color: Color(0xFFFF3D1A),
-                      ),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'Descargar Temporada 1',
-                          style: TextStyle(
-                            color: Color(0xFFFF3D1A),
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFF3D1A),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          '${widget.item.episodeCount > 0 ? widget.item.episodeCount : _episodes.length} EP',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Lista de Episodios con check, título, tamaño, botón play y botón download
               if (_loadingEpisodes)
                 const Column(
                   children: [
@@ -490,29 +531,127 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                     SizedBox(height: 16),
                   ],
                 )
-              else if (_episodes.isEmpty && _episodesError != null)
+              else if (_episodesError != null)
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Text(
                       _episodesError!,
-                      style: const TextStyle(color: Colors.white54, fontSize: 12),
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 )
-              else
+              else if (_episodes.isEmpty)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text(
+                      'No hay episodios disponibles.',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                  ),
+                )
+              else ...[
+                if (_seasons.length > 1)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final season in _seasons)
+                        ChoiceChip(
+                          label: Text(_seasonLabel(season)),
+                          selected: season == _selectedSeason,
+                          onSelected: (_) =>
+                              setState(() => _selectedSeason = season),
+                          selectedColor: const Color(0xFFFF3D1A),
+                          backgroundColor: const Color(0xFF16181D),
+                          labelStyle: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: season == _selectedSeason
+                                ? Colors.white
+                                : Colors.white70,
+                          ),
+                          side: BorderSide(
+                            color: season == _selectedSeason
+                                ? const Color(0xFFFF3D1A)
+                                : Colors.white12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                    ],
+                  ),
+                if (_seasons.length > 1) const SizedBox(height: 12),
+                if (_isUnlimitedPlan && _seasonEpisodes.length > 1) ...[
+                  InkWell(
+                    onTap: _loadingAction ? null : _handleDownloadSeason,
+                    borderRadius: BorderRadius.circular(AppRadii.md),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF16181D),
+                        borderRadius: BorderRadius.circular(AppRadii.md),
+                        border: Border.all(color: const Color(0xFFFF3D1A)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.arrow_downward,
+                            size: 15,
+                            color: Color(0xFFFF3D1A),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Descargar ${_seasonLabel(_selectedSeason)}',
+                              style: const TextStyle(
+                                color: Color(0xFFFF3D1A),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF3D1A),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '${_seasonEpisodes.length} EP',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 ListView.separated(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _episodes.length,
+                  itemCount: _seasonEpisodes.length,
                   separatorBuilder: (context, index) =>
                       const Divider(color: Colors.white10, height: 1),
                   itemBuilder: (context, index) {
-                    final ep = _episodes[index];
-                    final title = ep['title']?.toString() ??
-                        'T1 · E${(index + 1).toString().padLeft(2, '0')}';
-                    final sizeBytes = (ep['size'] as num?)?.toInt() ?? 126 * 1024 * 1024;
-                    final sizeMb = (sizeBytes / (1024 * 1024)).toStringAsFixed(0);
+                    final ep = _seasonEpisodes[index];
+                    final size = formatFileSize((ep['size'] as num?)?.toInt());
 
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -529,25 +668,26 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  title,
+                                  _episodeLabel(ep, index),
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '$sizeMb MB',
-                                  style: const TextStyle(
-                                    color: Colors.white38,
-                                    fontSize: 11,
+                                if (size.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    size,
+                                    style: const TextStyle(
+                                      color: Colors.white38,
+                                      fontSize: 11,
+                                    ),
                                   ),
-                                ),
+                                ],
                               ],
                             ),
                           ),
-                          // Botón Reproducir episodio
                           Container(
                             width: 32,
                             height: 32,
@@ -562,7 +702,6 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          // Botón Descargar episodio
                           InkWell(
                             onTap: () => _handleDownloadEpisode(ep),
                             borderRadius: BorderRadius.circular(16),
@@ -585,6 +724,7 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                     );
                   },
                 ),
+              ],
             ],
           ],
         );
@@ -633,46 +773,54 @@ class _HeaderActionChip extends StatelessWidget {
 }
 
 class _CastRow extends StatelessWidget {
+  const _CastRow({required this.cast});
+
+  final List<CastMember> cast;
+
   @override
   Widget build(BuildContext context) {
-    final actors = [
-      ('Frank Wel...', 'Scooby-Doo...'),
-      ('Grey DeLisle', 'Daphne Blake...'),
-      ('Matthew L...', 'Shaggy Rog...'),
-      ('Kate Micu...', 'Velma Dinkle...'),
-      ('Cassandra...', 'Elvira, Mistre...'),
-      ('Bill Nye', 'Bill Nye (voice)'),
-    ];
-
     return SizedBox(
       height: 78,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: actors.length,
+        itemCount: cast.length,
         separatorBuilder: (context, index) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
-          final actor = actors[index];
+          final actor = cast[index];
           return SizedBox(
             width: 58,
             child: Column(
               children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white10,
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: const Icon(
-                    Icons.person,
-                    color: Colors.white54,
-                    size: 22,
+                ClipOval(
+                  child: SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: actor.photoUrl.isEmpty
+                        ? Container(
+                            color: Colors.white10,
+                            child: const Icon(
+                              Icons.person,
+                              color: Colors.white54,
+                              size: 22,
+                            ),
+                          )
+                        : AppCachedImage(
+                            imageUrl: actor.photoUrl,
+                            fit: BoxFit.cover,
+                            errorWidget: Container(
+                              color: Colors.white10,
+                              child: const Icon(
+                                Icons.person,
+                                color: Colors.white54,
+                                size: 22,
+                              ),
+                            ),
+                          ),
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  actor.$1,
+                  actor.name ?? '',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -682,13 +830,10 @@ class _CastRow extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  actor.$2,
+                  actor.character ?? '',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 9,
-                    color: Colors.white38,
-                  ),
+                  style: const TextStyle(fontSize: 9, color: Colors.white38),
                 ),
               ],
             ),
@@ -698,4 +843,3 @@ class _CastRow extends StatelessWidget {
     );
   }
 }
-

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/storage/app_preferences.dart';
 import '../../../core/theme/app_assets.dart';
+import '../../../core/update/app_update_service.dart';
 import '../../update/presentation/update_checker.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text.dart';
@@ -84,6 +85,82 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Muestra la versión instalada del APK y el diálogo informativo.
+class _InstalledVersionTile extends StatefulWidget {
+  const _InstalledVersionTile();
+
+  @override
+  State<_InstalledVersionTile> createState() => _InstalledVersionTileState();
+}
+
+class _InstalledVersionTileState extends State<_InstalledVersionTile> {
+  late final Future<({int versionCode, String versionName})> _version;
+
+  @override
+  void initState() {
+    super.initState();
+    _version = AppUpdateService().installedVersion();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<({int versionCode, String versionName})>(
+      future: _version,
+      builder: (context, snapshot) {
+        final version = snapshot.data;
+        final label = version == null
+            ? 'Comprobando…'
+            : version.versionName.isEmpty
+            ? 'Versión ${version.versionCode}'
+            : 'Versión ${version.versionName} '
+                  '(${version.versionCode})';
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadii.md),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: ListTile(
+            onTap: version == null
+                ? null
+                : () =>
+                      showAppVersionDialog(context, installedVersion: version),
+            leading: const Icon(
+              Icons.info_outline,
+              size: 20,
+              color: AppColors.accent,
+            ),
+            title: Text(
+              'Versión instalada',
+              style: AppTextStyles.body(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: Text(
+              label,
+              style: AppTextStyles.body(
+                fontSize: 11.5,
+                color: AppColors.textMuted,
+              ),
+            ),
+            trailing: const Icon(
+              Icons.chevron_right,
+              size: 20,
+              color: AppColors.textMuted,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadii.md),
+            ),
+          ),
+        );
+      },
     );
   }
 }

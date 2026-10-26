@@ -114,6 +114,76 @@ class CatalogItem {
   }
 }
 
+/// Integrante del reparto (`GET /api/info`).
+class CastMember {
+  const CastMember({this.name, this.character, this.photo});
+
+  factory CastMember.fromJson(Map<String, dynamic> json) {
+    return CastMember(
+      name: json['name'] as String?,
+      character: json['character'] as String?,
+      photo: json['photo'] as String?,
+    );
+  }
+
+  final String? name;
+  final String? character;
+  final String? photo;
+
+  String get photoUrl => absoluteMediaUrl(photo);
+}
+
+/// Ficha de un título (`GET /api/info?title=...&type=...`).
+class ContentInfo {
+  const ContentInfo({
+    this.title,
+    this.posterUrl,
+    this.overview,
+    this.rating,
+    this.genres,
+    this.year,
+    this.cast = const [],
+    this.trailerKey,
+  });
+
+  factory ContentInfo.fromJson(Map<String, dynamic> json) {
+    final rawCast = json['cast'];
+    return ContentInfo(
+      title: json['title'] as String?,
+      posterUrl: json['poster_url'] as String?,
+      overview: json['overview'] as String?,
+      rating: json['rating']?.toString(),
+      genres: json['genres'] as String?,
+      year: json['year']?.toString(),
+      cast: rawCast is List
+          ? rawCast
+                .whereType<Map>()
+                .map((e) => CastMember.fromJson(Map<String, dynamic>.from(e)))
+                .toList()
+          : const [],
+      trailerKey: json['trailer_key']?.toString(),
+    );
+  }
+
+  final String? title;
+  final String? posterUrl;
+  final String? overview;
+  final String? rating;
+  final String? genres;
+  final String? year;
+  final List<CastMember> cast;
+  final String? trailerKey;
+
+  bool get hasYear => year != null && year!.isNotEmpty && year != 'N/A';
+
+  bool get hasRating => rating != null && rating!.isNotEmpty && rating != 'N/A';
+
+  bool get hasOverview =>
+      overview != null &&
+      overview!.isNotEmpty &&
+      overview != 'Sinopsis no disponible.';
+}
+
 /// Fila de género del home (`GET /api/home-genres`).
 class GenreRow {
   const GenreRow({

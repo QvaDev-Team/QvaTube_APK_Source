@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -68,25 +69,23 @@ enum UpdateCheckResult {
 /// Servicio que comprueba, descarga e instala las actualizaciones.
 class AppUpdateService {
   AppUpdateService({Dio? dio})
-      : _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: const Duration(seconds: 15),
-                receiveTimeout: const Duration(minutes: 10),
-                followRedirects: true,
-                headers: const {'Accept': 'application/json'},
-              ),
-            );
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
+              connectTimeout: const Duration(seconds: 15),
+              receiveTimeout: const Duration(minutes: 10),
+              followRedirects: true,
+              headers: const {'Accept': 'application/json'},
+            ),
+          );
 
   final Dio _dio;
 
   /// Versión instalada en el dispositivo.
   Future<({int versionCode, String versionName})> installedVersion() async {
     final result = await DeviceChannel.getInstalledVersion();
-    return (
-      versionCode: result.versionCode,
-      versionName: result.versionName,
-    );
+    return (versionCode: result.versionCode, versionName: result.versionName);
   }
 
   /// Comprueba si hay una versión nueva.
@@ -101,8 +100,15 @@ class AppUpdateService {
     try {
       final installed = await installedVersion();
 
-      // 1) Manifiesto lightweight.
-      final manifest = await _fetchManifest();
+      // 1) Manifiesto lightweight. Si el manifiesto no se puede leer (por
+      // ejemplo, GitHub lo sirve como `application/octet-stream`) se intenta
+      // el plan B en vez de dar la comprobación por fallida.
+      AppUpdateInfo? manifest;
+      try {
+        manifest = await _fetchManifest();
+      } catch (_) {
+        manifest = null;
+      }
       if (manifest != null) {
         if (manifest.versionCode > installed.versionCode) {
           return (result: UpdateCheckResult.updateAvailable, info: manifest);
@@ -169,9 +175,22 @@ class AppUpdateService {
   Future<AppUpdateInfo?> _fetchManifest() async {
     final url = AppConfig.updateManifestUrl;
     if (url.isEmpty) return null;
-    final response = await _dio.get<Map<String, dynamic>>(url);
-    final data = response.data;
-    if (data == null) return null;
+
+    // GitHub sirve los assets con `application/octet-stream`, así que Dio no
+    // los decodifica como JSON aunque se pida `ResponseType.json`. Se recibe
+    // el texto y se parsea a mano para no depender del Content-Type.
+    final response = await _dio.get<String>(
+      url,
+      options: Options(responseType: ResponseType.plain),
+    );
+    final raw = response.data;
+    if (raw == null || raw.trim().isEmpty) return null;
+
+    final decoded = jsonDecode(raw);
+    final data = decoded is Map
+        ? Map<String, dynamic>.from(decoded)
+        : <String, dynamic>{};
+    if (data.isEmpty) return null;
     // Se acepta tanto el objeto plano como envuelto en {"update": {...}}.
     final payload = data['update'] is Map
         ? Map<String, dynamic>.from(data['update'] as Map)
