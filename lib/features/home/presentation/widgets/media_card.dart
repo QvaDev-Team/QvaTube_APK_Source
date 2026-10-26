@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
+import '../../../../core/widgets/app_cached_image.dart';
 import '../../../catalog/domain/catalog_models.dart';
 
 /// Tarjeta de contenido multimedia (spec §6.3).
@@ -56,15 +57,11 @@ class MediaCard extends StatelessWidget {
                         ? _PosterPlaceholder(icon: item.categoryIcon)
                         : ClipRRect(
                             borderRadius: BorderRadius.circular(AppRadii.md),
-                            child: Image.network(
-                              posterUrl,
+                            child: AppCachedImage(
+                              imageUrl: posterUrl,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  _PosterPlaceholder(icon: item.categoryIcon),
-                              loadingBuilder: (context, child, progress) {
-                                if (progress == null) return child;
-                                return const _PosterPlaceholder();
-                              },
+                              placeholder: const _PosterPlaceholder(),
+                              errorWidget: _PosterPlaceholder(icon: item.categoryIcon),
                             ),
                           ),
                   ),

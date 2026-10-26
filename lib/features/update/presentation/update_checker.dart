@@ -123,7 +123,8 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
       if (!installed) {
         setState(() {
           _downloading = false;
-          _error = 'Permite las instalaciones desde Ajustes → Apps → QvaTube → '
+          _error =
+              'Permite las instalaciones desde Ajustes → Apps → QvaTube → '
               '"Instalar apps desconocidas" y vuelve a intentarlo.';
         });
         return;
@@ -220,8 +221,8 @@ class _UpdateBannerState extends ConsumerState<_UpdateBanner> {
                 ),
                 TextButton(
                   onPressed: () {
-                    final state =
-                        context.findAncestorStateOfType<_UpdateCheckerState>();
+                    final state = context
+                        .findAncestorStateOfType<_UpdateCheckerState>();
                     state?._dismiss();
                   },
                   style: TextButton.styleFrom(
@@ -241,8 +242,10 @@ class _UpdateBannerState extends ConsumerState<_UpdateBanner> {
                 ElevatedButton(
                   onPressed: () => _startDownload(context),
                   style: ElevatedButton.styleFrom(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
                     textStyle: AppTextStyles.body(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w800,
@@ -399,7 +402,11 @@ class _UpdateMenuEntryState extends ConsumerState<UpdateMenuEntry> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.system_update_alt, size: 20, color: AppColors.accent),
+          const Icon(
+            Icons.system_update_alt,
+            size: 20,
+            color: AppColors.accent,
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -438,10 +445,28 @@ class _UpdateMenuEntryState extends ConsumerState<UpdateMenuEntry> {
 }
 
 /// Diálogo informativo con la versión instalada.
-Future<void> showAppVersionDialog(BuildContext context) async {
-  final service = AppUpdateService();
-  final version = await service.installedVersion();
+Future<void> showAppVersionDialog(
+  BuildContext context, {
+  ({int versionCode, String versionName})? installedVersion,
+  bool justUpdated = false,
+}) async {
+  final version =
+      installedVersion ?? await AppUpdateService().installedVersion();
   if (!context.mounted) return;
+
+  final versionLabel = version.versionName.isEmpty
+      ? 'la versión ${version.versionCode}'
+      : 'la versión ${version.versionName}';
+  final installedLabel = version.versionName.isEmpty
+      ? 'Versión instalada: ${version.versionCode}'
+      : 'Versión instalada: ${version.versionName} '
+            '(${version.versionCode})';
+  final title = justUpdated
+      ? 'QvaTube actualizado'
+      : version.versionName.isEmpty
+      ? 'QvaTube'
+      : 'QvaTube ${version.versionName}';
+
   await showDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
@@ -449,13 +474,38 @@ Future<void> showAppVersionDialog(BuildContext context) async {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadii.lg),
       ),
-      title: Text(
-        'QvaTube ${version.versionName}',
-        style: Theme.of(context).textTheme.displaySmall,
-      ),
-      content: Text(
-        'Versión instalada: ${version.versionCode}',
-        style: AppTextStyles.body(fontSize: 13),
+      title: Text(title, style: Theme.of(context).textTheme.displaySmall),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (justUpdated) ...[
+            Row(
+              children: [
+                const Icon(
+                  Icons.check_circle,
+                  color: AppColors.success,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'La app se actualizó a $versionLabel.',
+                    style: AppTextStyles.body(fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+          ],
+          Text(
+            installedLabel,
+            style: AppTextStyles.body(
+              fontSize: 12.5,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
       ),
       actions: [
         TextButton(
@@ -469,7 +519,7 @@ Future<void> showAppVersionDialog(BuildContext context) async {
               'https://github.com/R0ger0l1va/qvatube_apk/releases/latest',
             );
           },
-          child: const Text('Ver releases'),
+          child: Text(justUpdated ? 'Ver novedades' : 'Ver releases'),
         ),
       ],
     ),

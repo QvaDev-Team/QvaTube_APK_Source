@@ -10,6 +10,7 @@ import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/account/presentation/avatar_screen.dart';
 import '../../features/account/presentation/community_screen.dart';
+import '../../features/account/presentation/downloads_screen.dart';
 import '../../features/account/presentation/edit_name_screen.dart';
 import '../../features/account/presentation/favorites_screen.dart';
 import '../../features/account/presentation/notifications_screen.dart';
@@ -329,14 +330,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/cuenta/descargas',
-        builder: (context, state) => const PendingScreen(
-          title: 'Mis descargas',
-          description:
-              'Las descargas se autorizan con POST '
-              '/api/download/authorize. Esta pantalla se conectará cuando se '
-              'defina la lista local de descargas.',
-          icon: Icons.download,
-        ),
+        builder: (context, state) => const DownloadsScreen(),
       ),
     ],
   );

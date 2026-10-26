@@ -15,7 +15,14 @@ final categoriesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) asyn
 });
 
 /// Estadísticas públicas del sitio (`GET /api/stats`).
+/// Se refresca automáticamente cada 30 segundos para reflejar datos en tiempo real.
 final siteStatsProvider = FutureProvider<SiteStats>((ref) async {
+  // Timer para recargar periódicamente en tiempo real
+  final timer = Stream.periodic(const Duration(seconds: 30)).listen((_) {
+    ref.invalidateSelf();
+  });
+  ref.onDispose(timer.cancel);
+
   return ref.watch(catalogApiProvider).stats();
 });
 

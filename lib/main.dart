@@ -6,6 +6,7 @@ import 'core/router/router.dart';
 import 'core/config/app_config.dart';
 import 'core/storage/app_preferences.dart';
 import 'core/theme/app_assets.dart';
+import 'core/update/update_providers.dart';
 import 'features/auth/presentation/providers/auth_controller.dart';
 import 'features/update/presentation/update_checker.dart';
 import 'core/theme/app_colors.dart';
@@ -38,11 +39,35 @@ class _QvaTubeAppState extends ConsumerState<QvaTubeApp> {
   @override
   void initState() {
     super.initState();
-    // Restaura la sesión guardada (`GET /api/auth/me`) antes de decidir a
-    // qué pantalla ir.
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Restaura la sesión guardada (`GET /api/auth/me`) antes de decidir a
+      // qué pantalla ir.
       ref.read(authControllerProvider.notifier).restoreSession();
+      _showUpdateWelcome();
     });
+  }
+
+  Future<void> _showUpdateWelcome() async {
+    final version = await ref.read(appUpdateServiceProvider).installedVersion();
+    if (version.versionCode <= 0) return;
+
+    final prefs = ref.read(sharedPreferencesProvider);
+    final previous = prefs.getInt(AppConfig.lastVersionCodeKey);
+    final hasOpenedBefore = prefs.getBool(AppConfig.introSeenKey) ?? false;
+    final justUpdated = previous == null
+        ? hasOpenedBefore
+        : version.versionCode > previous;
+
+    await prefs.setInt(AppConfig.lastVersionCodeKey, version.versionCode);
+    if (!justUpdated) return;
+
+    final context = rootNavigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+    await showAppVersionDialog(
+      context,
+      installedVersion: version,
+      justUpdated: true,
+    );
   }
 
   @override

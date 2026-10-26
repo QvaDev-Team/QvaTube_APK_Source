@@ -7,11 +7,13 @@ import 'package:qvatube_apk/features/home/presentation/widgets/badge_count.dart'
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
+import '../../../../core/widgets/app_cached_image.dart';
 import '../../../../core/widgets/app_logo.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../catalog/application/catalog_providers.dart';
 import '../../../catalog/domain/catalog_models.dart';
 import 'account_menu_sheet.dart';
+import 'live_stats_bar.dart';
 
 /// Barra superior de la app (spec §6.1).
 ///
@@ -50,7 +52,13 @@ class QvaTopBar extends ConsumerWidget {
               child: Row(
                 children: [
                   const AppLogo(height: 26),
-                  const Spacer(),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Center(
+                      child: LiveStatsBar(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   if (showSearch)
                     IconButton(
                       onPressed: () => context.push('/buscar'),
@@ -109,11 +117,11 @@ class _UserAvatar extends StatelessWidget {
               gradient: AppColors.accentGradient,
             ),
             child: (url != null && url.isNotEmpty)
-                ? Image.network(
-                    url,
+                ? AppCachedImage(
+                    imageUrl: url,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) =>
-                        _initials(label),
+                    placeholder: _initials(label),
+                    errorWidget: _initials(label),
                   )
                 : _initials(label),
           ),

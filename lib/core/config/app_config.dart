@@ -34,8 +34,7 @@ abstract final class AppConfig {
   /// `--dart-define=UPDATE_MANIFEST_URL=https://tu-servidor/latest.json`.
   static const String updateManifestUrl = String.fromEnvironment(
     'UPDATE_MANIFEST_URL',
-    defaultValue:
-        'https://github.com/R0ger0l1va/qvatube_apk/releases/download/latest/latest.json',
+    defaultValue: 'https://github.com/R0ger0l1va/qvatube_apk/releases/download/latest/latest.json',
   );
 
   /// URL directa del APK de la última versión.
@@ -44,8 +43,7 @@ abstract final class AppConfig {
   /// su `versionCode` para saber si hay algo nuevo.
   static const String updateApkUrl = String.fromEnvironment(
     'UPDATE_APK_URL',
-    defaultValue:
-        'https://github.com/R0ger0l1va/qvatube_apk/releases/download/latest/qvatube.apk',
+    defaultValue: 'https://github.com/R0ger0l1va/qvatube_apk/releases/download/latest/qvatube.apk',
   );
 
   /// Clave de la preferencia con el tema (temporada) activo.
@@ -55,4 +53,7 @@ abstract final class AppConfig {
   static const String showNewBadgesKey = 'qvatube.show_new_badges';
   static const String showContinueWatchingKey =
       'qvatube.show_continue_watching';
+
+  /// Última versión instalada registrada en el dispositivo.
+  static const String lastVersionCodeKey = 'qvatube.last_version_code';
 }

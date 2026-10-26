@@ -20,23 +20,6 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  late bool _newBadges = true;
-  late bool _continueWatching = true;
-
-  @override
-  void initState() {
-    super.initState();
-    final prefs = ref.read(sharedPreferencesProvider);
-    _newBadges = prefs.getBool(AppConfig.showNewBadgesKey) ?? true;
-    _continueWatching =
-        prefs.getBool(AppConfig.showContinueWatchingKey) ?? true;
-  }
-
-  Future<void> _set(String key, bool value) async {
-    final prefs = ref.read(sharedPreferencesProvider);
-    await prefs.setBool(key, value);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -58,27 +41,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Text('Aplicación', style: Theme.of(context).textTheme.displaySmall),
           const SizedBox(height: 10),
           const UpdateMenuEntry(),
-          _VersionEntry(),
-          Text('Contenido', style: Theme.of(context).textTheme.displaySmall),
-          const SizedBox(height: 10),
-          _SwitchRow(
-            title: 'Cinta "NUEVO"',
-            subtitle: 'Muestra la cinta roja en los estrenos del catálogo.',
-            value: _newBadges,
-            onChanged: (value) async {
-              setState(() => _newBadges = value);
-              await _set(AppConfig.showNewBadgesKey, value);
-            },
-          ),
-          _SwitchRow(
-            title: 'Seguir donde quedaste',
-            subtitle: 'Muestra la fila con lo que estabas viendo.',
-            value: _continueWatching,
-            onChanged: (value) async {
-              setState(() => _continueWatching = value);
-              await _set(AppConfig.showContinueWatchingKey, value);
-            },
-          ),
+
           const SizedBox(height: 20),
           Text('Acerca de', style: Theme.of(context).textTheme.displaySmall),
           const SizedBox(height: 10),
@@ -119,60 +82,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SwitchRow extends StatelessWidget {
-  const _SwitchRow({
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadii.md),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppTextStyles.body(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: AppTextStyles.body(
-                    fontSize: 11.5,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Switch(value: value, onChanged: onChanged),
         ],
       ),
     );
@@ -300,45 +209,6 @@ class _ThemeSelectorState extends ConsumerState<_ThemeSelector> {
           ),
         );
       },
-    );
-  }
-}
-
-/// Muestra la versión instalada y enlaza con las releases de GitHub.
-class _VersionEntry extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadii.md),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.info_outline,
-            size: 20,
-            color: AppColors.textSecondary,
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              'Versión de la app',
-              style: AppTextStyles.body(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () => showAppVersionDialog(context),
-            child: const Text('Ver'),
-          ),
-        ],
-      ),
     );
   }
 }

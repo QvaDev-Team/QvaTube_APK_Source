@@ -8,7 +8,10 @@ import '../../../../core/platform/device_channel.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
 import '../../../../core/widgets/app_logo.dart';
+import '../../../../core/widgets/app_skeleton.dart';
 import '../../../catalog/application/catalog_providers.dart';
+import '../../../catalog/domain/catalog_models.dart';
+import '../widgets/content_detail_sheet.dart';
 import '../widgets/media_card.dart';
 import '../widgets/section_header.dart';
 import '../widgets/suggest_content_sheet.dart';
@@ -62,7 +65,14 @@ class HomeTab extends ConsumerWidget {
               },
             ),
           recommendations.when(
-            loading: () => const SizedBox.shrink(),
+            loading: () => const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SectionTitle(title: 'Recomendaciones'),
+                SkeletonMediaCarousel(itemCount: 4),
+                SizedBox(height: 26),
+              ],
+            ),
             error: (error, stack) => const SizedBox.shrink(),
             data: (data) {
               if (data.items.isEmpty) return const SizedBox.shrink();
@@ -84,14 +94,27 @@ class HomeTab extends ConsumerWidget {
                       ), // Convierte "spark" a Icons.auto_awesome
                     ),
                   ),
-                  MediaCarousel(items: data.items, showNewBadge: showNewBadges),
+                  MediaCarousel(
+                    items: data.items,
+                    showNewBadge: showNewBadges,
+                    onTap: (item) => showContentDetailSheet(context, item),
+                  ),
                   const SizedBox(height: 26),
                 ],
               );
             },
           ),
           genreRows.when(
-            loading: () => const SizedBox.shrink(),
+            loading: () => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < 2; i++) ...[
+                  const SectionTitle(title: 'Cargando contenido...'),
+                  const SkeletonMediaCarousel(itemCount: 4),
+                  const SizedBox(height: 26),
+                ],
+              ],
+            ),
             error: (error, stack) => const SizedBox.shrink(),
             data: (rows) {
               if (rows.isEmpty) return const SizedBox.shrink();
@@ -111,6 +134,7 @@ class HomeTab extends ConsumerWidget {
                     MediaCarousel(
                       items: row.items,
                       showNewBadge: showNewBadges,
+                      onTap: (item) => showContentDetailSheet(context, item),
                     ),
                     const SizedBox(height: 26),
                   ],

@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
+import '../../../../core/widgets/app_skeleton.dart';
 import '../../../catalog/application/catalog_providers.dart';
 import '../../../catalog/domain/catalog_models.dart';
+import '../widgets/content_detail_sheet.dart';
 import '../widgets/media_card.dart';
 
 /// Pestaña de catálogo conectada a `GET /api/movies`, `GET /api/genres` y
@@ -179,10 +181,10 @@ class _CatalogTabState extends ConsumerState<CatalogTab> {
             ),
           ),
           if (_loading)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 48),
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            SliverToBoxAdapter(
+              child: SkeletonCatalogGrid(
+                itemCount: 9,
+                gridAspectRatio: widget.gridAspectRatio,
               ),
             )
           else if (_error != null && _items.isEmpty)
@@ -234,7 +236,7 @@ class _CatalogTabState extends ConsumerState<CatalogTab> {
                   final item = _items[index];
                   return MediaCard(
                     item: item,
-                    onTap: () => showItemSheet(context, item),
+                    onTap: () => showContentDetailSheet(context, item),
                   );
                 }, childCount: _items.length),
               ),

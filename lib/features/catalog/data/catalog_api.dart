@@ -294,4 +294,69 @@ class CatalogApi {
           : const <ReviewItem>[],
     );
   }
+
+  /// POST /api/download/authorize
+  /// Autoriza la descarga de un archivo o episodio y devuelve el deep link de Telegram o URL directa.
+  Future<Map<String, dynamic>> authorizeDownload({
+    required int chatId,
+    required int msgId,
+  }) async {
+    final response = await _client.post(
+      Endpoints.downloads.authorize,
+      body: <String, dynamic>{
+        'chat_id': chatId,
+        'msg_id': msgId,
+      },
+      operation: 'la autorización de descarga',
+    );
+    return _map(response.data);
+  }
+
+  /// POST /api/download/authorize-season
+  /// Autoriza la descarga de una temporada completa y devuelve el deep link.
+  Future<Map<String, dynamic>> authorizeSeasonDownload({
+    required int chatId,
+    required String seasonId,
+  }) async {
+    final response = await _client.post(
+      Endpoints.downloads.authorizeSeason,
+      body: <String, dynamic>{
+        'chat_id': chatId,
+        'season_id': seasonId,
+      },
+      operation: 'la autorización de descarga de temporada',
+    );
+    return _map(response.data);
+  }
+
+  /// GET /api/episodes
+  /// Obtiene los episodios de una serie o temporada.
+  Future<List<Map<String, dynamic>>> episodes({
+    int? chatId,
+    int? msgId,
+    String? itemKey,
+  }) async {
+    final query = <String, dynamic>{};
+    if (chatId != null) query['chat_id'] = chatId;
+    if (msgId != null) query['msg_id'] = msgId;
+    if (itemKey != null && itemKey.isNotEmpty) query['item_key'] = itemKey;
+
+    final response = await _client.get(
+      Endpoints.catalog.episodes,
+      query: query,
+      operation: 'los episodios',
+    );
+    final data = response.data;
+    if (data is List) {
+      return data.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    }
+    if (data is Map) {
+      final items = data['items'] ?? data['episodes'];
+      if (items is List) {
+        return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+    }
+    return const [];
+  }
 }
+
