@@ -53,6 +53,28 @@ class AppUpdateInfo {
 
   bool get isDownloaded => localPath != null;
 
+  AppUpdateInfo copyWith({
+    int? versionCode,
+    String? url,
+    String? versionName,
+    String? notes,
+    List<String>? changes,
+    double? sizeMb,
+    String? publishedAt,
+    String? localPath,
+  }) {
+    return AppUpdateInfo(
+      versionCode: versionCode ?? this.versionCode,
+      url: url ?? this.url,
+      versionName: versionName ?? this.versionName,
+      notes: notes ?? this.notes,
+      changes: changes ?? this.changes,
+      sizeMb: sizeMb ?? this.sizeMb,
+      publishedAt: publishedAt ?? this.publishedAt,
+      localPath: localPath ?? this.localPath,
+    );
+  }
+
   /// Devuelve la lista de novedades explicadas en lenguaje claro y no técnico
   /// para cualquier usuario.
   List<String> get userFriendlyChanges {

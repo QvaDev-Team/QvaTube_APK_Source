@@ -9,6 +9,7 @@ import 'package:video_player/video_player.dart';
 import '../../../../core/network/api_providers.dart';
 import '../../../../core/network/endpoints/playback_endpoints.dart';
 import '../../../../core/platform/device_channel.dart';
+import '../../../../core/router/router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
 import '../../../../core/widgets/app_cached_image.dart';
@@ -43,6 +44,360 @@ class PlayableMediaItem {
   String get readUrl => absoluteMediaUrl(PlaybackEndpoints.read(chatId, msgId));
 }
 
+/// Controlador global de reproducción que permite mantener la música o película
+/// activa en segundo plano (al salir de la pantalla del reproductor o minimizar
+/// la app) y sincroniza las acciones con la barra de notificaciones del sistema.
+class ActiveMediaSession extends ChangeNotifier {
+  ActiveMediaSession._() {
+    DeviceChannel.setMediaActionListener(_handleSystemMediaAction);
+  }
+
+  static final ActiveMediaSession instance = ActiveMediaSession._();
+
+  VideoPlayerController? _controller;
+  WidgetRef? _ref;
+  List<PlayableMediaItem> _playlist = const [];
+  int _currentIndex = 0;
+  bool _loading = false;
+  String? _error;
+  bool _isMuted = false;
+  double _playbackSpeed = 1.0;
+  bool _markedWatched = false;
+  bool _useWebViewFallback = false;
+  bool _screenOpen = false;
+  Timer? _progressSaveTimer;
+  bool? _lastNotifiedPlaying;
+  int? _lastNotifiedIndex;
+
+  VideoPlayerController? get controller => _controller;
+  List<PlayableMediaItem> get playlist => _playlist;
+  int get currentIndex => _currentIndex;
+  bool get loading => _loading;
+  String? get error => _error;
+  bool get isMuted => _isMuted;
+  double get playbackSpeed => _playbackSpeed;
+  bool get useWebViewFallback => _useWebViewFallback;
+  bool get isScreenOpen => _screenOpen;
+
+  bool get hasActiveMedia =>
+      _playlist.isNotEmpty && (_controller != null || _loading);
+
+  PlayableMediaItem? get currentItem =>
+      (_playlist.isNotEmpty &&
+          _currentIndex >= 0 &&
+          _currentIndex < _playlist.length)
+      ? _playlist[_currentIndex]
+      : null;
+
+  bool get hasPrevious => _currentIndex > 0;
+  bool get hasNext => _currentIndex < _playlist.length - 1;
+
+  bool get isPlaying =>
+      _controller != null &&
+      _controller!.value.isInitialized &&
+      _controller!.value.isPlaying;
+
+  void attachRef(WidgetRef ref) {
+    _ref = ref;
+  }
+
+  void setScreenOpen(bool open) {
+    if (_screenOpen == open) return;
+    _screenOpen = open;
+    WidgetsBinding.instance.addPostFrameCallback((_) => notifyListeners());
+  }
+
+  void setUseWebViewFallback(bool value) {
+    _useWebViewFallback = value;
+    notifyListeners();
+  }
+
+  Future<void> startPlaylist(
+    List<PlayableMediaItem> items, {
+    int initialIndex = 0,
+  }) async {
+    if (items.isEmpty) return;
+    final targetIdx = initialIndex.clamp(0, items.length - 1);
+
+    // Si ya se está reproduciendo exactamente el mismo ítem, reutilizar la sesión.
+    final current = currentItem;
+    final requested = items[targetIdx];
+    if (current != null &&
+        _controller != null &&
+        _controller!.value.isInitialized &&
+        current.chatId == requested.chatId &&
+        current.msgId == requested.msgId) {
+      _playlist = items;
+      _currentIndex = targetIdx;
+      notifyListeners();
+      _syncNotification(force: true);
+      return;
+    }
+
+    _saveCurrentProgress();
+    _playlist = items;
+    _currentIndex = targetIdx;
+    await initCurrentItem();
+  }
+
+  Map<String, String> _buildAuthHeaders() {
+    final ref = _ref;
+    if (ref == null) return const <String, String>{};
+    final cookie = ref.read(apiClientProvider).sessionCookie;
+    if (cookie != null && cookie.isNotEmpty) {
+      return <String, String>{'Cookie': 'qva_session=$cookie'};
+    }
+    return const <String, String>{};
+  }
+
+  Future<void> initCurrentItem() async {
+    _progressSaveTimer?.cancel();
+    _markedWatched = false;
+    _useWebViewFallback = false;
+
+    final prev = _controller;
+    _controller = null;
+    prev?.removeListener(_onControllerUpdate);
+    await prev?.dispose();
+
+    final item = currentItem;
+    if (item == null) return;
+
+    if (item.isBook) {
+      _loading = false;
+      _error = null;
+      _useWebViewFallback = true;
+      await DeviceChannel.clearMediaNotification();
+      notifyListeners();
+      return;
+    }
+
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      var startSeconds = item.initialPositionSeconds ?? 0;
+      final ref = _ref;
+      if (startSeconds <= 0 && ref != null) {
+        startSeconds = await ref.read(catalogApiProvider).getProgress(
+              chatId: item.chatId,
+              msgId: item.msgId,
+            );
+      }
+
+      final controller = VideoPlayerController.networkUrl(
+        Uri.parse(item.streamUrl),
+        httpHeaders: _buildAuthHeaders(),
+        videoPlayerOptions: VideoPlayerOptions(
+          allowBackgroundPlayback: true,
+        ),
+      );
+      _controller = controller;
+      await controller.initialize();
+      await controller.setPlaybackSpeed(_playbackSpeed);
+      await controller.setVolume(_isMuted ? 0 : 1);
+
+      final durationSeconds = controller.value.duration.inSeconds.toDouble();
+      if (startSeconds > 5 &&
+          (durationSeconds <= 0 || startSeconds < durationSeconds - 15)) {
+        await controller.seekTo(Duration(seconds: startSeconds.round()));
+      }
+
+      controller.addListener(_onControllerUpdate);
+      await controller.play();
+
+      _loading = false;
+      notifyListeners();
+      _syncNotification(force: true);
+
+      _progressSaveTimer = Timer.periodic(
+        const Duration(seconds: 15),
+        (_) {
+          _saveCurrentProgress();
+          _syncNotification(force: true);
+        },
+      );
+    } catch (_) {
+      _loading = false;
+      _error = 'No se pudo iniciar la reproducción directa de este formato.';
+      notifyListeners();
+    }
+  }
+
+  void _onControllerUpdate() {
+    final ctrl = _controller;
+    final item = currentItem;
+    if (ctrl == null || !ctrl.value.isInitialized || item == null) return;
+
+    final pos = ctrl.value.position.inSeconds;
+    final dur = ctrl.value.duration.inSeconds;
+
+    if (!_markedWatched && dur > 30 && pos >= dur * 0.9) {
+      _markedWatched = true;
+      _ref?.read(catalogApiProvider).markWatched(
+            chatId: item.chatId,
+            msgId: item.msgId,
+          );
+    }
+
+    // Pasar automáticamente al siguiente episodio/pista al terminar.
+    if (dur > 0 &&
+        ctrl.value.position >= ctrl.value.duration &&
+        !ctrl.value.isPlaying &&
+        hasNext) {
+      changeItem(_currentIndex + 1);
+      return;
+    }
+
+    _syncNotification();
+    notifyListeners();
+  }
+
+  void _syncNotification({bool force = false}) {
+    final ctrl = _controller;
+    final item = currentItem;
+    if (ctrl == null || !ctrl.value.isInitialized || item == null || item.isBook) {
+      return;
+    }
+
+    final playing = ctrl.value.isPlaying;
+    if (!force &&
+        _lastNotifiedPlaying == playing &&
+        _lastNotifiedIndex == _currentIndex) {
+      return;
+    }
+
+    _lastNotifiedPlaying = playing;
+    _lastNotifiedIndex = _currentIndex;
+
+    DeviceChannel.updateMediaNotification(
+      title: item.title,
+      subtitle: item.subtitle,
+      isPlaying: playing,
+      hasNext: hasNext,
+      hasPrevious: hasPrevious,
+      positionMs: ctrl.value.position.inMilliseconds,
+      durationMs: ctrl.value.duration.inMilliseconds,
+    );
+  }
+
+  void _handleSystemMediaAction(String action, int? positionMs) {
+    switch (action) {
+      case 'playPause':
+        playPause();
+      case 'next':
+        if (hasNext) changeItem(_currentIndex + 1);
+      case 'previous':
+        if (hasPrevious) changeItem(_currentIndex - 1);
+      case 'stop':
+        stopAndClose();
+      case 'seek':
+        if (positionMs != null) {
+          seekTo(Duration(milliseconds: positionMs));
+        }
+    }
+  }
+
+  void playPause() {
+    final ctrl = _controller;
+    if (ctrl == null || !ctrl.value.isInitialized) return;
+    if (ctrl.value.isPlaying) {
+      ctrl.pause();
+      _saveCurrentProgress();
+    } else {
+      ctrl.play();
+    }
+    _syncNotification(force: true);
+    notifyListeners();
+  }
+
+  void seekRelative(int deltaSeconds) {
+    final ctrl = _controller;
+    if (ctrl == null || !ctrl.value.isInitialized) return;
+    final currentSec = ctrl.value.position.inSeconds;
+    final maxSec = ctrl.value.duration.inSeconds;
+    final target = (currentSec + deltaSeconds).clamp(
+      0,
+      maxSec > 0 ? maxSec : 86400,
+    );
+    ctrl.seekTo(Duration(seconds: target));
+    _syncNotification(force: true);
+    notifyListeners();
+  }
+
+  void seekTo(Duration position) {
+    final ctrl = _controller;
+    if (ctrl == null || !ctrl.value.isInitialized) return;
+    ctrl.seekTo(position);
+    _syncNotification(force: true);
+    notifyListeners();
+  }
+
+  Future<void> setPlaybackSpeed(double speed) async {
+    _playbackSpeed = speed;
+    await _controller?.setPlaybackSpeed(speed);
+    notifyListeners();
+  }
+
+  Future<void> toggleMute() async {
+    _isMuted = !_isMuted;
+    await _controller?.setVolume(_isMuted ? 0 : 1);
+    notifyListeners();
+  }
+
+  void changeItem(int newIndex) {
+    if (newIndex < 0 || newIndex >= _playlist.length) return;
+    _saveCurrentProgress();
+    _currentIndex = newIndex;
+    initCurrentItem();
+  }
+
+  void _saveCurrentProgress() {
+    final ctrl = _controller;
+    final item = currentItem;
+    final ref = _ref;
+    if (ctrl == null || !ctrl.value.isInitialized || item == null || ref == null) {
+      return;
+    }
+    final pos = ctrl.value.position.inMilliseconds / 1000.0;
+    final dur = ctrl.value.duration.inMilliseconds / 1000.0;
+    if (pos <= 3) return;
+
+    ref.read(catalogApiProvider).saveProgress(
+          chatId: item.chatId,
+          msgId: item.msgId,
+          positionSeconds: pos,
+          durationSeconds: dur > 0 ? dur : null,
+          kind: item.isAudio ? 'audio' : 'video',
+        );
+  }
+
+  Future<void> stopAndClose() async {
+    _progressSaveTimer?.cancel();
+    _saveCurrentProgress();
+    final ref = _ref;
+    if (ref != null) {
+      ref.invalidate(continueWatchingProvider);
+      ref.invalidate(planUsageProvider);
+    }
+
+    final prev = _controller;
+    _controller = null;
+    _playlist = const [];
+    _currentIndex = 0;
+    _loading = false;
+    _error = null;
+    _lastNotifiedPlaying = null;
+    _lastNotifiedIndex = null;
+
+    prev?.removeListener(_onControllerUpdate);
+    await prev?.dispose();
+    await DeviceChannel.clearMediaNotification();
+    notifyListeners();
+  }
+}
+
 /// Abre el reproductor multimedia de QvaTube en pantalla completa.
 Future<void> openMediaPlayer(
   BuildContext context, {
@@ -50,7 +405,9 @@ Future<void> openMediaPlayer(
   int initialIndex = 0,
 }) async {
   if (playlist.isEmpty) return;
-  await Navigator.of(context, rootNavigator: true).push<void>(
+  final nav = rootNavigatorKey.currentState ??
+      Navigator.of(context, rootNavigator: true);
+  await nav.push<void>(
     MaterialPageRoute(
       builder: (context) => MediaPlayerScreen(
         playlist: playlist,
@@ -58,6 +415,166 @@ Future<void> openMediaPlayer(
       ),
     ),
   );
+}
+
+/// Barra flotante en la parte inferior de la app cuando el usuario sale de la
+/// pantalla del reproductor sin detener la reproducción.
+class MiniMediaPlayerBar extends ConsumerWidget {
+  const MiniMediaPlayerBar({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ListenableBuilder(
+      listenable: ActiveMediaSession.instance,
+      builder: (context, _) {
+        final session = ActiveMediaSession.instance;
+        session.attachRef(ref);
+        final item = session.currentItem;
+        if (!session.hasActiveMedia ||
+            session.isScreenOpen ||
+            item == null ||
+            item.isBook) {
+          return const SizedBox.shrink();
+        }
+
+        final ctrl = session.controller;
+        final initialized = ctrl != null && ctrl.value.isInitialized;
+        final pos = initialized ? ctrl.value.position.inMilliseconds : 0;
+        final dur = initialized ? ctrl.value.duration.inMilliseconds : 0;
+        final progress = dur > 0 ? (pos / dur).clamp(0.0, 1.0) : 0.0;
+
+        return Material(
+          color: AppColors.surfaceSecondary,
+          child: InkWell(
+            onTap: () => openMediaPlayer(
+              context,
+              playlist: session.playlist,
+              initialIndex: session.currentIndex,
+            ),
+            child: Container(
+              decoration: const BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: AppColors.border, width: 1),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (initialized && dur > 0)
+                    LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 2,
+                      backgroundColor: Colors.white12,
+                      color: AppColors.accent,
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: (item.posterUrl != null &&
+                                    item.posterUrl!.isNotEmpty)
+                                ? AppCachedImage(
+                                    imageUrl: item.posterUrl!,
+                                    fit: BoxFit.cover,
+                                  )
+                                : ColoredBox(
+                                    color: AppColors.surface,
+                                    child: Icon(
+                                      item.isAudio
+                                          ? Icons.music_note
+                                          : Icons.movie_outlined,
+                                      size: 20,
+                                      color: AppColors.accent,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                item.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.body(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              if (item.subtitle != null &&
+                                  item.subtitle!.isNotEmpty)
+                                Text(
+                                  item.subtitle!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyles.body(
+                                    fontSize: 11,
+                                    color: AppColors.textMuted,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        if (session.hasPrevious)
+                          IconButton(
+                            onPressed: () =>
+                                session.changeItem(session.currentIndex - 1),
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(
+                              Icons.skip_previous,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                        IconButton(
+                          onPressed: session.playPause,
+                          visualDensity: VisualDensity.compact,
+                          icon: Icon(
+                            session.isPlaying ? Icons.pause : Icons.play_arrow,
+                            color: AppColors.accent,
+                            size: 26,
+                          ),
+                        ),
+                        if (session.hasNext)
+                          IconButton(
+                            onPressed: () =>
+                                session.changeItem(session.currentIndex + 1),
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(
+                              Icons.skip_next,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                        IconButton(
+                          onPressed: session.stopAndClose,
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Detener reproducción',
+                          icon: const Icon(
+                            Icons.close,
+                            color: AppColors.textMuted,
+                            size: 20,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class MediaPlayerScreen extends ConsumerStatefulWidget {
@@ -75,41 +592,39 @@ class MediaPlayerScreen extends ConsumerStatefulWidget {
 }
 
 class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
-  VideoPlayerController? _controller;
+  final ActiveMediaSession _session = ActiveMediaSession.instance;
   Timer? _hideControlsTimer;
-  Timer? _progressSaveTimer;
 
-  late int _currentIndex;
-  bool _loading = true;
-  String? _error;
   bool _showControls = true;
   bool _isLandscape = false;
-  bool _isMuted = false;
-  double _playbackSpeed = 1.0;
-  bool _markedWatched = false;
-  bool _useWebViewFallback = false;
   double? _draggingSeconds;
-
-  PlayableMediaItem get _current => widget.playlist[_currentIndex];
-  bool get _hasPrevious => _currentIndex > 0;
-  bool get _hasNext => _currentIndex < widget.playlist.length - 1;
 
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.initialIndex;
-    _initCurrentItem();
+    _session.attachRef(ref);
+    _session.setScreenOpen(true);
+    _session.addListener(_onSessionChanged);
+    _session.startPlaylist(widget.playlist, initialIndex: widget.initialIndex);
+    _scheduleHideControls();
   }
 
   @override
   void dispose() {
     _hideControlsTimer?.cancel();
-    _progressSaveTimer?.cancel();
-    _saveCurrentProgress();
-    _controller?.removeListener(_onControllerUpdate);
-    _controller?.dispose();
+    _session.removeListener(_onSessionChanged);
+    _session.setScreenOpen(false);
     _restoreSystemUi();
     super.dispose();
+  }
+
+  void _onSessionChanged() {
+    if (!mounted) return;
+    if (!_session.hasActiveMedia && !_session.useWebViewFallback) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    setState(() {});
   }
 
   Future<void> _restoreSystemUi() async {
@@ -137,132 +652,12 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
     }
   }
 
-  Map<String, String> _buildAuthHeaders() {
-    final cookie = ref.read(apiClientProvider).sessionCookie;
-    if (cookie != null && cookie.isNotEmpty) {
-      return <String, String>{'Cookie': 'qva_session=$cookie'};
-    }
-    return const <String, String>{};
-  }
-
-  Future<void> _initCurrentItem() async {
-    _hideControlsTimer?.cancel();
-    _progressSaveTimer?.cancel();
-    _markedWatched = false;
-    _useWebViewFallback = false;
-    _draggingSeconds = null;
-
-    final previousController = _controller;
-    _controller = null;
-    previousController?.removeListener(_onControllerUpdate);
-    await previousController?.dispose();
-
-    final item = _current;
-    if (item.isBook) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = null;
-          _useWebViewFallback = true;
-        });
-      }
-      return;
-    }
-
-    setState(() {
-      _loading = true;
-      _error = null;
-      _showControls = true;
-    });
-
-    try {
-      // Consultar progreso guardado si no viene predefinido.
-      var startSeconds = item.initialPositionSeconds ?? 0;
-      if (startSeconds <= 0) {
-        startSeconds = await ref.read(catalogApiProvider).getProgress(
-              chatId: item.chatId,
-              msgId: item.msgId,
-            );
-      }
-
-      final controller = VideoPlayerController.networkUrl(
-        Uri.parse(item.streamUrl),
-        httpHeaders: _buildAuthHeaders(),
-      );
-      _controller = controller;
-      await controller.initialize();
-      await controller.setPlaybackSpeed(_playbackSpeed);
-      await controller.setVolume(_isMuted ? 0 : 1);
-
-      final durationSeconds = controller.value.duration.inSeconds.toDouble();
-      if (startSeconds > 5 &&
-          (durationSeconds <= 0 || startSeconds < durationSeconds - 15)) {
-        await controller.seekTo(Duration(seconds: startSeconds.round()));
-      }
-
-      controller.addListener(_onControllerUpdate);
-      await controller.play();
-
-      if (!mounted) return;
-      setState(() => _loading = false);
-      _scheduleHideControls();
-
-      _progressSaveTimer = Timer.periodic(
-        const Duration(seconds: 15),
-        (_) => _saveCurrentProgress(),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error =
-            'No se pudo iniciar la reproducción directa de este formato.';
-      });
-    }
-  }
-
-  void _onControllerUpdate() {
-    if (!mounted) return;
-    final ctrl = _controller;
-    if (ctrl == null || !ctrl.value.isInitialized) return;
-
-    final pos = ctrl.value.position.inSeconds;
-    final dur = ctrl.value.duration.inSeconds;
-
-    if (!_markedWatched && dur > 30 && pos >= dur * 0.9) {
-      _markedWatched = true;
-      ref.read(catalogApiProvider).markWatched(
-            chatId: _current.chatId,
-            msgId: _current.msgId,
-          );
-    }
-
-    setState(() {});
-  }
-
-  void _saveCurrentProgress() {
-    final ctrl = _controller;
-    if (ctrl == null || !ctrl.value.isInitialized) return;
-    final pos = ctrl.value.position.inMilliseconds / 1000.0;
-    final dur = ctrl.value.duration.inMilliseconds / 1000.0;
-    if (pos <= 3) return;
-
-    final item = _current;
-    ref.read(catalogApiProvider).saveProgress(
-          chatId: item.chatId,
-          msgId: item.msgId,
-          positionSeconds: pos,
-          durationSeconds: dur > 0 ? dur : null,
-          kind: item.isAudio ? 'audio' : 'video',
-        );
-  }
-
   void _scheduleHideControls() {
     _hideControlsTimer?.cancel();
-    if (_current.isAudio) return;
+    final item = _session.currentItem;
+    if (item == null || item.isAudio) return;
     _hideControlsTimer = Timer(const Duration(seconds: 4), () {
-      final ctrl = _controller;
-      if (mounted && ctrl != null && ctrl.value.isPlaying) {
+      if (mounted && _session.isPlaying) {
         setState(() => _showControls = false);
       }
     });
@@ -276,41 +671,17 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
   }
 
   void _playPause() {
-    final ctrl = _controller;
-    if (ctrl == null || !ctrl.value.isInitialized) return;
-    if (ctrl.value.isPlaying) {
-      ctrl.pause();
-      _saveCurrentProgress();
-      _hideControlsTimer?.cancel();
-    } else {
-      ctrl.play();
+    _session.playPause();
+    if (_session.isPlaying) {
       _scheduleHideControls();
+    } else {
+      _hideControlsTimer?.cancel();
     }
-    setState(() {});
-  }
-
-  void _seekRelative(int deltaSeconds) {
-    final ctrl = _controller;
-    if (ctrl == null || !ctrl.value.isInitialized) return;
-    final currentSec = ctrl.value.position.inSeconds;
-    final maxSec = ctrl.value.duration.inSeconds;
-    final target = (currentSec + deltaSeconds).clamp(
-      0,
-      maxSec > 0 ? maxSec : 86400,
-    );
-    ctrl.seekTo(Duration(seconds: target));
-    _scheduleHideControls();
-  }
-
-  void _changeItem(int newIndex) {
-    if (newIndex < 0 || newIndex >= widget.playlist.length) return;
-    _saveCurrentProgress();
-    setState(() => _currentIndex = newIndex);
-    _initCurrentItem();
   }
 
   Future<void> _pickSpeed() async {
     const speeds = [0.75, 1.0, 1.25, 1.5, 2.0];
+    final currentSpeed = _session.playbackSpeed;
     final chosen = await showModalBottomSheet<double>(
       context: context,
       backgroundColor: AppColors.surface,
@@ -333,10 +704,10 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
               for (final s in speeds)
                 ListTile(
                   leading: Icon(
-                    s == _playbackSpeed
+                    s == currentSpeed
                         ? Icons.radio_button_checked
                         : Icons.radio_button_off,
-                    color: s == _playbackSpeed
+                    color: s == currentSpeed
                         ? AppColors.accent
                         : AppColors.textMuted,
                     size: 20,
@@ -345,9 +716,8 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                     s == 1.0 ? 'Normal (1.0x)' : '${s}x',
                     style: AppTextStyles.body(
                       fontSize: 13.5,
-                      fontWeight: s == _playbackSpeed
-                          ? FontWeight.w700
-                          : FontWeight.w500,
+                      fontWeight:
+                          s == currentSpeed ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
                   onTap: () => Navigator.of(context).pop(s),
@@ -358,8 +728,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
       ),
     );
     if (chosen != null && mounted) {
-      setState(() => _playbackSpeed = chosen);
-      await _controller?.setPlaybackSpeed(chosen);
+      await _session.setPlaybackSpeed(chosen);
       _scheduleHideControls();
     }
   }
@@ -380,12 +749,13 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final item = _current;
+    final item =
+        _session.currentItem ??
+        widget.playlist[widget.initialIndex.clamp(0, widget.playlist.length - 1)];
 
     return PopScope(
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) {
-          _saveCurrentProgress();
           ref.invalidate(continueWatchingProvider);
           ref.invalidate(planUsageProvider);
         }
@@ -395,7 +765,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
         body: SafeArea(
           top: !_isLandscape,
           bottom: !_isLandscape,
-          child: _useWebViewFallback
+          child: _session.useWebViewFallback
               ? _buildWebViewFallback(item)
               : GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -403,11 +773,10 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      // Superficie de vídeo o carátula de audio
                       Center(child: _buildMediaSurface(item)),
-
-                      // Controles superpuestos
-                      if (_showControls || _loading || _error != null)
+                      if (_showControls ||
+                          _session.loading ||
+                          _session.error != null)
                         _buildControlsOverlay(item),
                     ],
                   ),
@@ -418,7 +787,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
   }
 
   Widget _buildMediaSurface(PlayableMediaItem item) {
-    if (_loading) {
+    if (_session.loading) {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -449,7 +818,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
       );
     }
 
-    if (_error != null) {
+    if (_session.error != null) {
       return Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -462,7 +831,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              _error!,
+              _session.error!,
               textAlign: TextAlign.center,
               style: AppTextStyles.body(fontSize: 13.5, color: Colors.white),
             ),
@@ -473,13 +842,12 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
               alignment: WrapAlignment.center,
               children: [
                 OutlinedButton.icon(
-                  onPressed: _initCurrentItem,
+                  onPressed: _session.initCurrentItem,
                   icon: const Icon(Icons.refresh, size: 18),
                   label: const Text('Reintentar'),
                 ),
                 ElevatedButton.icon(
-                  onPressed: () =>
-                      setState(() => _useWebViewFallback = true),
+                  onPressed: () => _session.setUseWebViewFallback(true),
                   icon: const Icon(Icons.play_circle_outline, size: 18),
                   label: const Text('Reproductor alternativo'),
                 ),
@@ -495,7 +863,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
       );
     }
 
-    final ctrl = _controller;
+    final ctrl = _session.controller;
     if (ctrl == null || !ctrl.value.isInitialized) {
       return const SizedBox.shrink();
     }
@@ -574,7 +942,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
   }
 
   Widget _buildControlsOverlay(PlayableMediaItem item) {
-    final ctrl = _controller;
+    final ctrl = _session.controller;
     final initialized = ctrl != null && ctrl.value.isInitialized;
     final duration = initialized ? ctrl.value.duration : Duration.zero;
     final position = initialized ? ctrl.value.position : Duration.zero;
@@ -609,7 +977,8 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
               children: [
                 IconButton(
                   onPressed: () => Navigator.of(context).maybePop(),
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  tooltip: 'Seguir en segundo plano',
+                  icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 28),
                 ),
                 const SizedBox(width: 4),
                 Expanded(
@@ -647,7 +1016,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                       minimumSize: const Size(44, 36),
                     ),
                     child: Text(
-                      '${_playbackSpeed}x',
+                      '${_session.playbackSpeed}x',
                       style: AppTextStyles.mono(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -656,12 +1025,9 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                     ),
                   ),
                   IconButton(
-                    onPressed: () {
-                      setState(() => _isMuted = !_isMuted);
-                      _controller?.setVolume(_isMuted ? 0 : 1);
-                    },
+                    onPressed: _session.toggleMute,
                     icon: Icon(
-                      _isMuted ? Icons.volume_off : Icons.volume_up,
+                      _session.isMuted ? Icons.volume_off : Icons.volume_up,
                       color: Colors.white,
                       size: 20,
                     ),
@@ -670,7 +1036,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                 if (!item.isAudio)
                   IconButton(
                     onPressed: _toggleLandscape,
-                    tooltip: ' Rotar pantalla',
+                    tooltip: 'Rotar pantalla',
                     icon: Icon(
                       _isLandscape
                           ? Icons.fullscreen_exit
@@ -678,6 +1044,15 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                       color: Colors.white,
                     ),
                   ),
+                IconButton(
+                  onPressed: () async {
+                    final nav = Navigator.of(context);
+                    await _session.stopAndClose();
+                    if (mounted) nav.maybePop();
+                  },
+                  tooltip: 'Detener y cerrar',
+                  icon: const Icon(Icons.close, color: Colors.white, size: 22),
+                ),
               ],
             ),
           ),
@@ -685,20 +1060,24 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
           const Spacer(),
 
           // Controles centrales
-          if (initialized && _error == null)
+          if (initialized && _session.error == null)
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (_hasPrevious)
+                if (_session.hasPrevious)
                   IconButton(
-                    onPressed: () => _changeItem(_currentIndex - 1),
+                    onPressed: () =>
+                        _session.changeItem(_session.currentIndex - 1),
                     iconSize: 32,
                     color: Colors.white,
                     icon: const Icon(Icons.skip_previous),
                   ),
                 const SizedBox(width: 8),
                 IconButton(
-                  onPressed: () => _seekRelative(-10),
+                  onPressed: () {
+                    _session.seekRelative(-10);
+                    _scheduleHideControls();
+                  },
                   iconSize: 34,
                   color: Colors.white,
                   icon: const Icon(Icons.replay_10),
@@ -733,15 +1112,19 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                 ),
                 const SizedBox(width: 18),
                 IconButton(
-                  onPressed: () => _seekRelative(10),
+                  onPressed: () {
+                    _session.seekRelative(10);
+                    _scheduleHideControls();
+                  },
                   iconSize: 34,
                   color: Colors.white,
                   icon: const Icon(Icons.forward_10),
                 ),
                 const SizedBox(width: 8),
-                if (_hasNext)
+                if (_session.hasNext)
                   IconButton(
-                    onPressed: () => _changeItem(_currentIndex + 1),
+                    onPressed: () =>
+                        _session.changeItem(_session.currentIndex + 1),
                     iconSize: 32,
                     color: Colors.white,
                     icon: const Icon(Icons.skip_next),
@@ -792,7 +1175,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                             },
                             onChangeEnd: (value) {
                               setState(() => _draggingSeconds = null);
-                              ctrl.seekTo(
+                              _session.seekTo(
                                 Duration(milliseconds: (value * 1000).round()),
                               );
                               _scheduleHideControls();
@@ -809,18 +1192,19 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                       ),
                     ],
                   ),
-                  if (_hasNext)
+                  if (_session.hasNext)
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton.icon(
-                        onPressed: () => _changeItem(_currentIndex + 1),
+                        onPressed: () =>
+                            _session.changeItem(_session.currentIndex + 1),
                         icon: const Icon(
                           Icons.skip_next,
                           size: 18,
                           color: AppColors.accent,
                         ),
                         label: Text(
-                          'Siguiente: ${widget.playlist[_currentIndex + 1].subtitle ?? widget.playlist[_currentIndex + 1].title}',
+                          'Siguiente: ${_session.playlist[_session.currentIndex + 1].subtitle ?? _session.playlist[_session.currentIndex + 1].title}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.body(
@@ -849,7 +1233,11 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
           child: Row(
             children: [
               IconButton(
-                onPressed: () => Navigator.of(context).maybePop(),
+                onPressed: () async {
+                  final nav = Navigator.of(context);
+                  await _session.stopAndClose();
+                  if (mounted) nav.maybePop();
+                },
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
               ),
               Expanded(
@@ -890,4 +1278,3 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
     );
   }
 }
-

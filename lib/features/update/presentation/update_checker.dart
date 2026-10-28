@@ -117,17 +117,28 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
 
     try {
       final service = ref.read(appUpdateServiceProvider);
-      final file = (info.isDownloaded && info.localPath != null)
-          ? File(info.localPath!)
-          : await service.download(
-              info,
-              onProgress: (received, total) {
-                if (!mounted) return;
-                setState(() {
-                  _progress = total > 0 ? received / total : 0;
-                });
-              },
-            );
+      File? existingFile;
+      if (info.isDownloaded && info.localPath != null) {
+        final candidate = File(info.localPath!);
+        if (candidate.existsSync() && candidate.lengthSync() > 1024 * 100) {
+          existingFile = candidate;
+        }
+      }
+
+      final file = existingFile ??
+          await service.download(
+            info,
+            onProgress: (received, total) {
+              if (!mounted) return;
+              setState(() {
+                _progress = total > 0 ? received / total : 0;
+              });
+            },
+          );
+
+      // Guardar la ruta local del APK descargado en el estado para no volver
+      // a descargarlo si el usuario tuvo que autorizar permisos del sistema.
+      _info = info.copyWith(localPath: file.path);
 
       final installed = await service.install(file);
       if (!mounted) return;
@@ -135,8 +146,8 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
         setState(() {
           _downloading = false;
           _error =
-              'Permite las instalaciones desde Ajustes → Apps → QvaTube → '
-              '"Instalar apps desconocidas" y vuelve a intentarlo.';
+              'Activa el permiso "Instalar apps desconocidas" para QvaTube '
+              'y toca en "Instalar ahora" (el archivo ya está guardado).';
         });
         return;
       }
@@ -168,6 +179,11 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
           _DownloadOverlay(
             progress: _progress,
             error: _error,
+            canRetryInstall: info?.isDownloaded ?? false,
+            onRetryInstall: () {
+              setState(() => _error = null);
+              _downloadAndInstall();
+            },
             onCloseError: () => setState(() => _error = null),
           ),
       ],
@@ -419,17 +435,21 @@ class _DownloadOverlay extends StatelessWidget {
   const _DownloadOverlay({
     this.progress,
     this.error,
+    this.canRetryInstall = false,
+    this.onRetryInstall,
     this.onCloseError,
   });
 
   final double? progress;
   final String? error;
+  final bool canRetryInstall;
+  final VoidCallback? onRetryInstall;
   final VoidCallback? onCloseError;
 
   @override
   Widget build(BuildContext context) {
     return Positioned.fill(
-      child: ColoredBox(
+      child: Material(
         color: Colors.black.withValues(alpha: 0.72),
         child: Center(
           child: Container(
@@ -495,12 +515,22 @@ class _DownloadOverlay extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: onCloseError,
-                      child: const Text('Cerrar'),
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: onCloseError,
+                        child: const Text('Cerrar'),
+                      ),
+                      if (canRetryInstall && onRetryInstall != null) ...[
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: onRetryInstall,
+                          icon: const Icon(Icons.install_mobile, size: 16),
+                          label: const Text('Instalar ahora'),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ],

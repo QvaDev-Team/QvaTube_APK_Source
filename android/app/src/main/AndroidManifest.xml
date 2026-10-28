@@ -3,6 +3,11 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Necesario para instalar las actualizaciones descargadas. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- Necesario para mostrar controles multimedia en la barra de notificaciones. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <application
         android:label="QvaTube"
         android:name="${applicationName}"

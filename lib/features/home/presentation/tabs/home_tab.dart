@@ -171,18 +171,19 @@ class _Hero extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 20),
+        SizedBox(
+          width: double.infinity,
+          child: _ActionButton(
+            label: 'Sugerir contenido',
+            icon: Icons.auto_awesome,
+            color: AppColors.accent,
+            foreground: AppColors.accentInk,
+            onTap: () => showSuggestContentSheet(context, ref),
+          ),
+        ),
+        const SizedBox(height: 10),
         Row(
           children: [
-            Expanded(
-              child: _ActionButton(
-                label: 'Sugerir contenido',
-                icon: Icons.auto_awesome,
-                color: AppColors.accent,
-                foreground: AppColors.accentInk,
-                onTap: () => showSuggestContentSheet(context, ref),
-              ),
-            ),
-            const SizedBox(width: 10),
             Expanded(
               child: _ActionButton(
                 label: 'Súbelo tú mismo',
@@ -192,11 +193,7 @@ class _Hero extends ConsumerWidget {
                 onTap: () => _openTelegram(context, ref),
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
+            const SizedBox(width: 10),
             Expanded(
               child: _ActionButton(
                 label: 'Comunidad',
@@ -204,16 +201,6 @@ class _Hero extends ConsumerWidget {
                 color: AppColors.whatsapp,
                 foreground: Colors.white,
                 onTap: () => _openCommunity(context, ref),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _ActionButton(
-                label: 'Descargar APK',
-                icon: Icons.download,
-                color: AppColors.textPrimary,
-                foreground: Colors.black,
-                onTap: () => _downloadApk(context, ref),
               ),
             ),
           ],
@@ -241,25 +228,6 @@ class _Hero extends ConsumerWidget {
       return;
     }
     await DeviceChannel.openUrl(url);
-  }
-
-  Future<void> _downloadApk(BuildContext context, WidgetRef ref) async {
-    final info = await ref.read(catalogApiProvider).apkInfo();
-    final size = info['size_mb'];
-    final base = AppConfig.apiBaseUrl.endsWith('/')
-        ? AppConfig.apiBaseUrl.substring(0, AppConfig.apiBaseUrl.length - 1)
-        : AppConfig.apiBaseUrl;
-    await DeviceChannel.openUrl('$base/download/qvatube.apk');
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          size != null
-              ? 'Descargando la APK ($size MB)…'
-              : 'Descargando la APK…',
-        ),
-      ),
-    );
   }
 }
 

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../catalog/application/catalog_providers.dart';
+import 'widgets/media_player_screen.dart';
 import 'widgets/qvatube_bottom_nav.dart';
 import 'widgets/qvatube_top_bar.dart';
 
@@ -80,6 +81,7 @@ class HomeShell extends ConsumerWidget {
         children: [
           const QvaTopBar(),
           Expanded(child: navigationShell),
+          const MiniMediaPlayerBar(),
         ],
       ),
       bottomNavigationBar: QvaBottomNav(

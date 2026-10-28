@@ -1,14 +1,17 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/api_client.dart';
+import '../../../../core/platform/device_channel.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
 import '../../../catalog/application/catalog_providers.dart';
 
 /// Hoja para sugerir contenido (`POST /api/suggest-content`).
 ///
-/// Body: `{ category_key, title, note, search_query }`.
+/// Soporta envío de texto y adjuntar una foto opcional (`multipart/form-data`).
 Future<void> showSuggestContentSheet(BuildContext context, WidgetRef ref) {
   return showModalBottomSheet<void>(
     context: context,
@@ -34,6 +37,7 @@ class _SuggestContentSheetState extends ConsumerState<_SuggestContentSheet> {
   final _titleController = TextEditingController();
   final _noteController = TextEditingController();
   String _categoryKey = 'movie';
+  String? _photoPath;
   bool _working = false;
   String? _error;
   bool _done = false;
@@ -43,6 +47,12 @@ class _SuggestContentSheetState extends ConsumerState<_SuggestContentSheet> {
     _titleController.dispose();
     _noteController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickPhoto() async {
+    final path = await DeviceChannel.pickImage();
+    if (!mounted || path == null || path.isEmpty) return;
+    setState(() => _photoPath = path);
   }
 
   Future<void> _send() async {
@@ -61,6 +71,7 @@ class _SuggestContentSheetState extends ConsumerState<_SuggestContentSheet> {
             categoryKey: _categoryKey,
             title: title,
             note: _noteController.text.trim(),
+            photoPath: _photoPath,
           );
       if (!mounted) return;
       setState(() {
@@ -219,6 +230,111 @@ class _SuggestContentSheetState extends ConsumerState<_SuggestContentSheet> {
                     prefixIcon: Icon(Icons.notes, size: 18),
                   ),
                 ),
+                const SizedBox(height: 12),
+                if (_photoPath != null)
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceSecondary,
+                      borderRadius: BorderRadius.circular(AppRadii.md),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(AppRadii.sm),
+                          child: SizedBox(
+                            width: 52,
+                            height: 52,
+                            child: Image.file(
+                              File(_photoPath!),
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Foto adjunta',
+                                style: AppTextStyles.body(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _photoPath!.split('/').last,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.body(
+                                  fontSize: 11,
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: _working ? null : _pickPhoto,
+                          tooltip: 'Cambiar foto',
+                          icon: const Icon(
+                            Icons.edit_outlined,
+                            size: 18,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: _working
+                              ? null
+                              : () => setState(() => _photoPath = null),
+                          tooltip: 'Quitar foto',
+                          icon: const Icon(
+                            Icons.close,
+                            size: 18,
+                            color: AppColors.danger,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  InkWell(
+                    onTap: _working ? null : _pickPhoto,
+                    borderRadius: BorderRadius.circular(AppRadii.md),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceSecondary,
+                        borderRadius: BorderRadius.circular(AppRadii.md),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.add_photo_alternate_outlined,
+                            size: 20,
+                            color: AppColors.accent,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Adjuntar foto o portada (opcional)',
+                            style: AppTextStyles.body(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 18),
                 SizedBox(
                   height: 48,

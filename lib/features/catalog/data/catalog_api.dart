@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import '../../../core/network/api_client.dart';
 import '../../../core/network/endpoints/endpoints.dart';
 import '../domain/catalog_models.dart';
@@ -257,19 +259,41 @@ class CatalogApi {
   }
 
   /// POST /api/suggest-content
-  /// body: { category_key, title, note, search_query }
+  /// Soporta envío JSON o `multipart/form-data` cuando se adjunta una foto.
   Future<void> suggestContent({
     required String categoryKey,
     required String title,
     String note = '',
     String searchQuery = '',
+    String? photoPath,
   }) async {
+    if (photoPath != null && photoPath.isNotEmpty) {
+      final fileName = photoPath.split('/').last;
+      final formData = FormData.fromMap(<String, dynamic>{
+        'category_key': categoryKey,
+        'type': categoryKey,
+        'title': title,
+        'note': note,
+        'details': note,
+        'search_query': searchQuery,
+        'photo': await MultipartFile.fromFile(photoPath, filename: fileName),
+      });
+      await _client.postForm(
+        Endpoints.reportsSuggestions.suggestContent,
+        formData: formData,
+        operation: 'el envío de la sugerencia',
+      );
+      return;
+    }
+
     await _client.post(
       Endpoints.reportsSuggestions.suggestContent,
       body: <String, dynamic>{
         'category_key': categoryKey,
+        'type': categoryKey,
         'title': title,
         'note': note,
+        'details': note,
         'search_query': searchQuery,
       },
       operation: 'el envío de la sugerencia',

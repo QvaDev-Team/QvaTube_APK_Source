@@ -11,6 +11,68 @@ abstract final class DeviceChannel {
   const DeviceChannel._();
 
   static const MethodChannel _channel = MethodChannel('qvatube/device');
+  static bool _handlerInitialized = false;
+  static void Function(String action, int? positionMs)? _mediaActionListener;
+
+  /// Registra el listener que recibe acciones desde la barra de notificaciones
+  /// multimedia (`playPause`, `next`, `previous`, `stop`, `seek`).
+  static void setMediaActionListener(
+    void Function(String action, int? positionMs)? listener,
+  ) {
+    _mediaActionListener = listener;
+    if (!_handlerInitialized) {
+      _handlerInitialized = true;
+      _channel.setMethodCallHandler((call) async {
+        if (call.method == 'onMediaAction') {
+          final args = call.arguments;
+          if (args is Map) {
+            final action = args['action']?.toString() ?? '';
+            final pos = (args['positionMs'] as num?)?.toInt();
+            _mediaActionListener?.call(action, pos);
+          }
+        }
+      });
+    }
+  }
+
+  /// Actualiza o muestra los controles del reproductor en la barra de
+  /// notificaciones del sistema y en la pantalla de bloqueo.
+  static Future<void> updateMediaNotification({
+    required String title,
+    String? subtitle,
+    required bool isPlaying,
+    bool hasNext = false,
+    bool hasPrevious = false,
+    int positionMs = 0,
+    int durationMs = 0,
+  }) async {
+    try {
+      await _channel.invokeMethod<bool>('updateMediaNotification', {
+        'title': title,
+        'subtitle': subtitle ?? '',
+        'isPlaying': isPlaying,
+        'hasNext': hasNext,
+        'hasPrevious': hasPrevious,
+        'positionMs': positionMs,
+        'durationMs': durationMs,
+      });
+    } on PlatformException {
+      // ignorar en plataformas no compatibles
+    } on MissingPluginException {
+      // ignorar en plataformas no compatibles
+    }
+  }
+
+  /// Oculta la notificación de reproducción multimedia.
+  static Future<void> clearMediaNotification() async {
+    try {
+      await _channel.invokeMethod<bool>('clearMediaNotification');
+    } on PlatformException {
+      // ignorar
+    } on MissingPluginException {
+      // ignorar
+    }
+  }
 
   /// Devuelve la ruta local de la imagen elegida, o `null` si el usuario
   /// cancela la selección.
