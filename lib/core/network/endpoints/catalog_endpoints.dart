@@ -39,5 +39,8 @@ final class CatalogEndpoints {
 
   /// POST: Mark new content items as seen
   final String newContentSeen = '/api/new-content/seen';
+
+  /// GET: Global search across all categories and live TV/Radio channels
+  final String search = '/api/search';
 }
 

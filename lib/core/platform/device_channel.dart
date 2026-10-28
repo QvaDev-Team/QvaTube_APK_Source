@@ -24,8 +24,8 @@ abstract final class DeviceChannel {
     }
   }
 
-  /// Versión instalada de la app (`versionCode` / `versionName`).
-  static Future<({int versionCode, String versionName})>
+  /// Versión instalada de la app (`versionCode` / `versionName` / `lastUpdateTime`).
+  static Future<({int versionCode, String versionName, int lastUpdateTime})>
       getInstalledVersion() async {
     try {
       final result = await _channel.invokeMapMethod<String, dynamic>(
@@ -33,11 +33,12 @@ abstract final class DeviceChannel {
       );
       final code = (result?['versionCode'] as num?)?.toInt() ?? 0;
       final name = result?['versionName']?.toString() ?? '';
-      return (versionCode: code, versionName: name);
+      final updated = (result?['lastUpdateTime'] as num?)?.toInt() ?? 0;
+      return (versionCode: code, versionName: name, lastUpdateTime: updated);
     } on PlatformException {
-      return (versionCode: 0, versionName: '');
+      return (versionCode: 0, versionName: '', lastUpdateTime: 0);
     } on MissingPluginException {
-      return (versionCode: 0, versionName: '');
+      return (versionCode: 0, versionName: '', lastUpdateTime: 0);
     }
   }
 

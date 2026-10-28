@@ -42,6 +42,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Text('Aplicación', style: Theme.of(context).textTheme.displaySmall),
           const SizedBox(height: 10),
           const UpdateMenuEntry(),
+          //const _InstalledVersionTile(),
 
           const SizedBox(height: 20),
           Text('Acerca de', style: Theme.of(context).textTheme.displaySmall),
@@ -98,7 +99,8 @@ class _InstalledVersionTile extends StatefulWidget {
 }
 
 class _InstalledVersionTileState extends State<_InstalledVersionTile> {
-  late final Future<({int versionCode, String versionName})> _version;
+  late final Future<({int versionCode, String versionName, int lastUpdateTime})>
+  _version;
 
   @override
   void initState() {
@@ -108,16 +110,20 @@ class _InstalledVersionTileState extends State<_InstalledVersionTile> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<({int versionCode, String versionName})>(
+    return FutureBuilder<
+      ({int versionCode, String versionName, int lastUpdateTime})
+    >(
       future: _version,
       builder: (context, snapshot) {
         final version = snapshot.data;
+        final normalized = version == null
+            ? 0
+            : AppUpdateService.normalizeVersionCode(version.versionCode);
         final label = version == null
             ? 'Comprobando…'
             : version.versionName.isEmpty
-            ? 'Versión ${version.versionCode}'
-            : 'Versión ${version.versionName} '
-                  '(${version.versionCode})';
+            ? 'Versión $normalized'
+            : 'Versión ${version.versionName} (build $normalized)';
 
         return Container(
           margin: const EdgeInsets.only(bottom: 10),

@@ -124,3 +124,23 @@ final categoryGenresProvider =
     FutureProvider.family<List<String>, String>((ref, categoryKey) async {
   return ref.watch(catalogApiProvider).genres(categoryKey);
 });
+
+/// Lista de canales de TV y radio en vivo (`GET /api/tv/channels`).
+final tvChannelsProvider = FutureProvider<TvChannelList>((ref) async {
+  return ref.watch(catalogApiProvider).tvChannels();
+});
+
+/// Espectadores en vivo por canal de TV (`GET /api/tv/viewers`), actualizado cada 25 s.
+final tvViewersProvider = FutureProvider<Map<String, int>>((ref) async {
+  final timer = Stream.periodic(const Duration(seconds: 25)).listen((_) {
+    ref.invalidateSelf();
+  });
+  ref.onDispose(timer.cancel);
+  return ref.watch(catalogApiProvider).tvViewers();
+});
+
+/// Búsqueda global (`GET /api/search?q=...`).
+final globalSearchProvider =
+    FutureProvider.family<SearchResponse, String>((ref, query) async {
+  return ref.watch(catalogApiProvider).search(query: query, perCategory: 12);
+});

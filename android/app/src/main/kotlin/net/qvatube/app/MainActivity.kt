@@ -1,15 +1,26 @@
 package net.qvatube.app
 
+import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.view.View
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.StandardMessageCodec
+import io.flutter.plugin.platform.PlatformView
+import io.flutter.plugin.platform.PlatformViewFactory
 import java.io.File
 
 /**
@@ -18,7 +29,8 @@ import java.io.File
  *    (se usa en POST /api/auth/avatar);
  *  - abrir enlaces externos (bot de Telegram, comunidad de WhatsApp);
  *  - consultar la versión instalada y la de un APK descargado;
- *  - instalar una actualización (autoactualización desde la app).
+ *  - instalar una actualización (autoactualización desde la app);
+ *  - reproducir señales embebidas (TV y Radio en vivo) mediante WebView nativo.
  */
 class MainActivity : FlutterActivity() {
     private val channelName = "qvatube/device"
@@ -27,6 +39,12 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        flutterEngine
+            .platformViewsController
+            .registry
+            .registerViewFactory("qvatube/webview", EmbeddedWebViewFactory())
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -56,7 +74,8 @@ class MainActivity : FlutterActivity() {
                             result.success(
                                 mapOf(
                                     "versionCode" to code,
-                                    "versionName" to (info.versionName ?: "")
+                                    "versionName" to (info.versionName ?: ""),
+                                    "lastUpdateTime" to info.lastUpdateTime
                                 )
                             )
                         } catch (e: Exception) {
@@ -204,5 +223,50 @@ class MainActivity : FlutterActivity() {
             target.outputStream().use { output -> input.copyTo(output) }
         }
         return target.absolutePath
+    }
+}
+
+private class EmbeddedWebViewFactory : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
+    override fun create(context: Context, viewId: Int, args: Any?): PlatformView {
+        val params = args as? Map<*, *>
+        val url = params?.get("url")?.toString() ?: ""
+        return EmbeddedWebViewPlatformView(context, url)
+    }
+}
+
+@SuppressLint("SetJavaScriptEnabled")
+private class EmbeddedWebViewPlatformView(
+    context: Context,
+    url: String
+) : PlatformView {
+    private val webView: WebView = WebView(context).apply {
+        setBackgroundColor(Color.parseColor("#0A0A0B"))
+        settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            mediaPlaybackRequiresUserGesture = false
+            loadsImagesAutomatically = true
+            mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+            useWideViewPort = true
+            loadWithOverviewMode = true
+        }
+        webChromeClient = WebChromeClient()
+        webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(
+                view: WebView?,
+                request: WebResourceRequest?
+            ): Boolean = false
+        }
+        if (url.isNotBlank()) {
+            loadUrl(url)
+        }
+    }
+
+    override fun getView(): View = webView
+
+    override fun dispose() {
+        webView.stopLoading()
+        webView.loadUrl("about:blank")
+        webView.destroy()
     }
 }

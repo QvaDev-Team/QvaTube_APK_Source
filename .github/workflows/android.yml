@@ -118,9 +118,22 @@ jobs:
       # ---------------------------------------------------------------------
       - name: APK de release ARM64 (minificado y ofuscado)
         run: |
+          set -euo pipefail
+          VERSION_LINE=$(grep -E "^version:" pubspec.yaml | head -1)
+          VERSION_NAME=$(echo "$VERSION_LINE" | sed -E 's/^version:[[:space:]]*([^+ ]+).*/\1/')
+          PUBSPEC_CODE=$(echo "$VERSION_LINE" | sed -E 's/.*\+([0-9]+).*/\1/')
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          if [ "$COMMIT_COUNT" -gt "$PUBSPEC_CODE" ]; then
+            BUILD_NUMBER="$COMMIT_COUNT"
+          else
+            BUILD_NUMBER="$PUBSPEC_CODE"
+          fi
+          echo "Compilando v$VERSION_NAME+$BUILD_NUMBER"
           flutter build apk --release \
             --split-per-abi \
             --target-platform android-arm64 \
+            --build-name="$VERSION_NAME" \
+            --build-number="$BUILD_NUMBER" \
             --obfuscate \
             --split-debug-info=build/symbols
 
@@ -140,19 +153,46 @@ jobs:
           set -euo pipefail
           VERSION_LINE=$(grep -E "^version:" pubspec.yaml | head -1)
           VERSION_NAME=$(echo "$VERSION_LINE" | sed -E 's/^version:[[:space:]]*([^+ ]+).*/\1/')
-          VERSION_CODE=$(echo "$VERSION_LINE" | sed -E 's/.*\+([0-9]+).*/\1/')
+          PUBSPEC_CODE=$(echo "$VERSION_LINE" | sed -E 's/.*\+([0-9]+).*/\1/')
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          if [ "$COMMIT_COUNT" -gt "$PUBSPEC_CODE" ]; then
+            VERSION_CODE="$COMMIT_COUNT"
+          else
+            VERSION_CODE="$PUBSPEC_CODE"
+          fi
           SIZE_MB=$(awk "BEGIN {printf \"%.1f\", $(stat -c%s dist/qvatube.apk) / 1048576}")
-          NOTES=$(git log -1 --pretty=%B | tr '\n' ' ' | tr -s ' ')
+
+          # Extraer novedades en lenguaje amigable (primero desde CHANGELOG.md
+          # si existe, y complementando con los últimos cambios legibles).
+          CHANGES_FILE=$(mktemp)
+          if [ -f CHANGELOG.md ]; then
+            awk '/^## /{if(found) exit; found=1; next} found && /^- /{sub(/^- /, ""); print}' CHANGELOG.md > "$CHANGES_FILE"
+          fi
+          if [ ! -s "$CHANGES_FILE" ]; then
+            git log -n 8 --pretty=%s \
+              | grep -viE '^(ci:|chore:|test:|build:|merge )' \
+              | grep -viE '(analisis estatico|análisis estático|compilado|compilacion|codigo comentado|^actualizar .+\.dart$)' \
+              | sed -E 's/^feat(\([^)]+\))?:[[:space:]]*/Novedad: /I; s/^fix(\([^)]+\))?:[[:space:]]*/Corrección: /I; s/^(refactor|style|ui)(\([^)]+\))?:[[:space:]]*/Mejora visual: /I' \
+              > "$CHANGES_FILE" || true
+          fi
+          if [ ! -s "$CHANGES_FILE" ]; then
+            echo "Mejoras en la interfaz y corrección de errores." > "$CHANGES_FILE"
+          fi
+
+          NOTES=$(awk '{printf "• %s\n", $0}' "$CHANGES_FILE")
+          CHANGES_JSON=$(jq -R -s 'split("\n") | map(select(length > 0))' < "$CHANGES_FILE")
           URL="https://github.com/$DIST_REPO/releases/download/latest/qvatube.apk"
+
           jq -n \
             --argjson version_code "$VERSION_CODE" \
             --arg version_name "$VERSION_NAME" \
             --arg url "$URL" \
             --arg notes "$NOTES" \
+            --argjson changes "$CHANGES_JSON" \
             --argjson size_mb "$SIZE_MB" \
             --arg published_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '{version_code: $version_code, version_name: $version_name, url: $url,
-              notes: $notes, size_mb: $size_mb, published_at: $published_at}' \
+              notes: $notes, changes: $changes, size_mb: $size_mb, published_at: $published_at}' \
             > dist/latest.json
           cat dist/latest.json
 
@@ -171,11 +211,6 @@ jobs:
       # Release rodante: en cada push a main se actualiza la release
       # "latest" del repositorio. Así el APK más reciente se descarga
       # siempre desde el mismo enlace y aparece en la portada del repo.
-      #
-      # Se usa la CLI `gh` (ya viene en el runner) en vez de una action de
-      # terceros porque hay que poder BORRAR los borradores ("Draft") que
-      # queden de pruebas manuales: si existe un draft con el mismo tag,
-      # GitHub responde 422 "already_exists" y la release no se publica.
       # ---------------------------------------------------------------------
       - name: Publicar la release "latest" en el repo público
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -185,6 +220,9 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
+
+          VERSION_NAME=$(jq -r '.version_name' latest.json)
+          FRIENDLY_NOTES=$(jq -r '.notes' latest.json)
 
           # 1) Borra la release y el tag anteriores del repo público.
           for id in $(gh api "repos/$DIST_REPO/releases?per_page=100" \
@@ -200,23 +238,14 @@ jobs:
             latest.json \
             --repo "$DIST_REPO" \
             --target main \
-            --title "QvaTube (última versión)" \
+            --title "QvaTube v$VERSION_NAME (última versión)" \
             --notes "$(cat <<EOF
-          ## QvaTube — build automático
+          ## Novedades de esta versión
 
-          | | |
-          |---|---|
-          | Commit | $GITHUB_SHA |
-          | Rama | $GITHUB_REF_NAME |
-          | Fecha | ${{ github.event.repository.updated_at }} |
+          $FRIENDLY_NOTES
 
           **Descarga directa (siempre la última):**
           https://github.com/$DIST_REPO/releases/download/latest/qvatube.apk
-
-          \`qvatube.apk\` = APK de release para **arm64** (Android 7+),
-          minificado con R8 y con el código de Dart ofuscado (~26 MB).
-          Los símbolos de depuración se suben como artefacto del workflow,
-          no en esta release pública.
           EOF
           )"
 

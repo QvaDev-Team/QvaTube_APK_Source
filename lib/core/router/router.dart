@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:qvatube_apk/features/auth/presentation/screens/telegram_verification_screen.dart';
 
 import '../storage/app_preferences.dart';
+import '../widgets/splash_screen.dart';
 import '../../features/auth/presentation/providers/auth_controller.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
@@ -18,9 +19,10 @@ import '../../features/account/presentation/plan_screen.dart';
 import '../../features/account/presentation/profile_screen.dart';
 import '../../features/account/presentation/settings_screen.dart';
 import '../../features/home/presentation/home_shell.dart';
-import '../../features/home/presentation/pending_screen.dart';
+import '../../features/home/presentation/search_screen.dart';
 import '../../features/home/presentation/tabs/catalog_tab.dart';
 import '../../features/home/presentation/tabs/home_tab.dart';
+import '../../features/home/presentation/tabs/tv_tab.dart';
 import '../../features/onboarding/presentation/intro_screen.dart';
 
 /// Navigator raíz (se usa también para mostrar diálogos globales, como el
@@ -118,7 +120,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: Routes.root,
-        builder: (context, state) => const SizedBox.shrink(),
+        builder: (context, state) => const SplashScreen(),
       ),
       GoRoute(
         path: Routes.intro,
@@ -147,13 +149,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: Routes.search,
-        builder: (context, state) => const PendingScreen(
-          title: 'Buscar',
-          description:
-              'El buscador se alimentará del catálogo de QvaTube '
-              'cuando se definan los endpoints de búsqueda.',
-          icon: Icons.search,
-        ),
+        builder: (context, state) => const SearchScreen(),
       ),
       StatefulShellRoute.indexedStack(
         parentNavigatorKey: rootNavigatorKey,
@@ -191,15 +187,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: Routes.television,
-                builder: (context, state) => const PendingScreen(
-                  title: 'Televisión',
-                  description:
-                      'La lista de canales en vivo no está expuesta '
-                      'por la API (la web la tiene embebida). Se conectará '
-                      'cuando el backend exponga GET /api/tv/channels.',
-                  icon: Icons.live_tv,
-                  showBackButton: false,
-                ),
+                builder: (context, state) => const TvTab(),
               ),
             ],
           ),

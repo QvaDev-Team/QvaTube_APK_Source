@@ -556,35 +556,38 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                 )
               else ...[
                 if (_seasons.length > 1)
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final season in _seasons)
-                        ChoiceChip(
-                          label: Text(_seasonLabel(season)),
-                          selected: season == _selectedSeason,
-                          onSelected: (_) =>
-                              setState(() => _selectedSeason = season),
-                          selectedColor: const Color(0xFFFF3D1A),
-                          backgroundColor: const Color(0xFF16181D),
-                          labelStyle: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: season == _selectedSeason
-                                ? Colors.white
-                                : Colors.white70,
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (var i = 0; i < _seasons.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 8),
+                          ChoiceChip(
+                            label: Text(_seasonLabel(_seasons[i])),
+                            selected: _seasons[i] == _selectedSeason,
+                            onSelected: (_) =>
+                                setState(() => _selectedSeason = _seasons[i]),
+                            selectedColor: const Color(0xFFFF3D1A),
+                            backgroundColor: const Color(0xFF16181D),
+                            labelStyle: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: _seasons[i] == _selectedSeason
+                                  ? Colors.white
+                                  : Colors.white70,
+                            ),
+                            side: BorderSide(
+                              color: _seasons[i] == _selectedSeason
+                                  ? const Color(0xFFFF3D1A)
+                                  : Colors.white12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
                           ),
-                          side: BorderSide(
-                            color: season == _selectedSeason
-                                ? const Color(0xFFFF3D1A)
-                                : Colors.white12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                    ],
+                        ],
+                      ],
+                    ),
                   ),
                 if (_seasons.length > 1) const SizedBox(height: 12),
                 if (_isUnlimitedPlan && _seasonEpisodes.length > 1) ...[

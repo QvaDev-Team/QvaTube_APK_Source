@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/platform/device_channel.dart';
+import '../../../core/router/router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text.dart';
 import '../../../core/update/app_update_service.dart';
@@ -14,10 +15,6 @@ import '../../../core/update/update_providers.dart';
 /// Se monta por encima del Navigator (en el `builder` de `MaterialApp.router`),
 /// por eso el aviso **no** se pierde cuando go_router refresca las páginas
 /// (por ejemplo, al restaurar la sesión).
-///
-/// - Al abrir la app comprueba el manifiesto de versión (≈1 KB).
-/// - Si hay una versión nueva muestra una banda superior con el aviso.
-/// - Al pulsar "Actualizar" descarga el APK y abre el instalador del sistema.
 class UpdateChecker extends ConsumerStatefulWidget {
   const UpdateChecker({
     super.key,
@@ -40,6 +37,8 @@ class UpdateChecker extends ConsumerStatefulWidget {
 }
 
 class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
+  static _UpdateCheckerState? _instance;
+
   AppUpdateInfo? _info;
   bool _checking = false;
   bool _downloading = false;
@@ -49,9 +48,18 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
   @override
   void initState() {
     super.initState();
+    _instance = this;
     if (widget.checkOnStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _check(silent: true));
     }
+  }
+
+  @override
+  void dispose() {
+    if (_instance == this) {
+      _instance = null;
+    }
+    super.dispose();
   }
 
   Future<void> _check({bool silent = false}) async {
@@ -77,20 +85,23 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
     }
   }
 
-  /// Muestra el aviso de una versión concreta (usado por "Buscar
-  /// actualizaciones" en Configuración).
+  /// Muestra el aviso de una versión concreta.
   void _showInfo(AppUpdateInfo info) => setState(() => _info = info);
 
   /// Oculta el aviso.
   void _dismiss() => setState(() => _info = null);
 
   void _toast(String message) {
-    final messenger = ScaffoldMessenger.maybeOf(context);
+    final navContext = rootNavigatorKey.currentContext ?? context;
+    final messenger = ScaffoldMessenger.maybeOf(navContext);
     messenger?.showSnackBar(SnackBar(content: Text(message)));
   }
 
   /// Lanza la descarga de la actualización.
-  void _startDownload() {
+  void _startDownload([AppUpdateInfo? customInfo]) {
+    if (customInfo != null) {
+      _info = customInfo;
+    }
     if (_info != null) _downloadAndInstall();
   }
 
@@ -146,27 +157,38 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
     return Stack(
       children: [
         widget.child ?? const SizedBox.shrink(),
-        if (info != null) _UpdateBanner(info: info),
-        if (_downloading) _DownloadOverlay(progress: _progress, error: _error),
+        if (info != null && !_downloading)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _UpdateBanner(info: info),
+          ),
+        if (_downloading || _error != null)
+          _DownloadOverlay(
+            progress: _progress,
+            error: _error,
+            onCloseError: () => setState(() => _error = null),
+          ),
       ],
     );
   }
 }
 
-/// Banda superior con el aviso de versión nueva.
-class _UpdateBanner extends ConsumerStatefulWidget {
+/// Banner superior automático con todas las novedades explicadas de forma
+/// sencilla y no técnica para el usuario.
+class _UpdateBanner extends ConsumerWidget {
   const _UpdateBanner({required this.info});
 
   final AppUpdateInfo info;
 
   @override
-  ConsumerState<_UpdateBanner> createState() => _UpdateBannerState();
-}
-
-class _UpdateBannerState extends ConsumerState<_UpdateBanner> {
-  @override
-  Widget build(BuildContext context) {
-    final info = widget.info;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final changes = info.userFriendlyChanges;
+    final versionTag =
+        (info.versionName != null && info.versionName!.isNotEmpty)
+        ? 'v${info.versionName}'
+        : null;
 
     return SafeArea(
       bottom: false,
@@ -174,84 +196,200 @@ class _UpdateBannerState extends ConsumerState<_UpdateBanner> {
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
         child: Material(
           color: AppColors.surfaceSecondary,
-          borderRadius: BorderRadius.circular(AppRadii.md),
-          elevation: 8,
-          shadowColor: Colors.black54,
+          borderRadius: BorderRadius.circular(AppRadii.lg),
+          elevation: 12,
+          shadowColor: Colors.black87,
           child: Container(
-            padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+            padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadii.md),
-              border: Border.all(color: AppColors.accent),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.system_update,
-                  color: AppColors.accent,
-                  size: 20,
+              borderRadius: BorderRadius.circular(AppRadii.lg),
+              border: Border.all(color: AppColors.accent, width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.accent.withValues(alpha: 0.18),
+                  blurRadius: 20,
+                  spreadRadius: 1,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Nueva versión disponible'
-                        '${info.versionName != null ? ' (${info.versionName})' : ''}',
-                        style: AppTextStyles.body(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.accentSoft,
                       ),
-                      if (info.notes != null && info.notes!.isNotEmpty) ...[
-                        const SizedBox(height: 2),
+                      child: const Icon(
+                        Icons.system_update,
+                        color: AppColors.accent,
+                        size: 19,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  '¡Nueva actualización disponible!',
+                                  style: AppTextStyles.body(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              if (versionTag != null) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.accent,
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadii.pill,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    versionTag,
+                                    style: AppTextStyles.mono(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          if (info.sizeMb != null && info.sizeMb! > 0)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                'Tamaño de descarga: ${info.sizeMb!.toStringAsFixed(1)} MB',
+                                style: AppTextStyles.body(
+                                  fontSize: 11,
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => _dismiss(context),
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(
+                        Icons.close,
+                        size: 18,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  constraints: const BoxConstraints(maxHeight: 150),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(AppRadii.md),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                         Text(
-                          info.notes!,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                          'Novedades de esta versión:',
                           style: AppTextStyles.body(
                             fontSize: 11.5,
-                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.accent,
                           ),
                         ),
+                        const SizedBox(height: 6),
+                        for (final item in changes)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 5, right: 7),
+                                  child: Icon(
+                                    Icons.check_circle,
+                                    size: 12,
+                                    color: AppColors.accent,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    item,
+                                    style: AppTextStyles.body(
+                                      fontSize: 12,
+                                      color: AppColors.textPrimary,
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
-                    ],
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    final state = context
-                        .findAncestorStateOfType<_UpdateCheckerState>();
-                    state?._dismiss();
-                  },
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: const Size(0, 32),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: Text(
-                    'Ahora no',
-                    style: AppTextStyles.body(
-                      fontSize: 12,
-                      color: AppColors.textMuted,
                     ),
                   ),
                 ),
-                const SizedBox(width: 4),
-                ElevatedButton(
-                  onPressed: () => _startDownload(context),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => _dismiss(context),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        minimumSize: const Size(0, 34),
+                      ),
+                      child: Text(
+                        'Ahora no',
+                        style: AppTextStyles.body(
+                          fontSize: 12,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
                     ),
-                    textStyle: AppTextStyles.body(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w800,
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _startDownload(context),
+                      icon: const Icon(Icons.download, size: 16),
+                      label: const Text('Actualizar ahora'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        textStyle: AppTextStyles.body(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ),
-                  ),
-                  child: const Text('Actualizar'),
+                  ],
                 ),
               ],
             ),
@@ -261,18 +399,32 @@ class _UpdateBannerState extends ConsumerState<_UpdateBanner> {
     );
   }
 
+  void _dismiss(BuildContext context) {
+    final state =
+        context.findAncestorStateOfType<_UpdateCheckerState>() ??
+        _UpdateCheckerState._instance;
+    state?._dismiss();
+  }
+
   void _startDownload(BuildContext context) {
-    final state = context.findAncestorStateOfType<_UpdateCheckerState>();
-    state?._startDownload();
+    final state =
+        context.findAncestorStateOfType<_UpdateCheckerState>() ??
+        _UpdateCheckerState._instance;
+    state?._startDownload(info);
   }
 }
 
 /// Overlay de descarga (con el progreso) mientras se instala la actualización.
 class _DownloadOverlay extends StatelessWidget {
-  const _DownloadOverlay({this.progress, this.error});
+  const _DownloadOverlay({
+    this.progress,
+    this.error,
+    this.onCloseError,
+  });
 
   final double? progress;
   final String? error;
+  final VoidCallback? onCloseError;
 
   @override
   Widget build(BuildContext context) {
@@ -281,7 +433,7 @@ class _DownloadOverlay extends StatelessWidget {
         color: Colors.black.withValues(alpha: 0.72),
         child: Center(
           child: Container(
-            width: 300,
+            width: 310,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: AppColors.surface,
@@ -294,15 +446,17 @@ class _DownloadOverlay extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(
-                      Icons.downloading,
-                      color: AppColors.accent,
+                    Icon(
+                      error != null ? Icons.error_outline : Icons.downloading,
+                      color: error != null ? AppColors.danger : AppColors.accent,
                       size: 20,
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Descargando la actualización',
+                        error != null
+                            ? 'No se completó la actualización'
+                            : 'Descargando la actualización',
                         style: AppTextStyles.body(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w700,
@@ -311,32 +465,41 @@ class _DownloadOverlay extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(AppRadii.pill),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    minHeight: 6,
-                    backgroundColor: AppColors.surfaceSecondary,
+                if (error == null) ...[
+                  const SizedBox(height: 16),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadii.pill),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 6,
+                      backgroundColor: AppColors.surfaceSecondary,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  progress == null
-                      ? 'Preparando…'
-                      : '${(progress! * 100).toStringAsFixed(0)} %',
-                  style: AppTextStyles.body(
-                    fontSize: 11.5,
-                    color: AppColors.textMuted,
+                  const SizedBox(height: 8),
+                  Text(
+                    progress == null
+                        ? 'Preparando…'
+                        : '${(progress! * 100).toStringAsFixed(0)} %',
+                    style: AppTextStyles.body(
+                      fontSize: 11.5,
+                      color: AppColors.textMuted,
+                    ),
                   ),
-                ),
-                if (error != null) ...[
+                ] else ...[
                   const SizedBox(height: 12),
                   Text(
                     error!,
                     style: AppTextStyles.body(
                       fontSize: 12,
                       color: AppColors.danger,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: onCloseError,
+                      child: const Text('Cerrar'),
                     ),
                   ),
                 ],
@@ -363,6 +526,7 @@ class _UpdateMenuEntryState extends ConsumerState<UpdateMenuEntry> {
   bool _checking = false;
 
   Future<void> _check() async {
+    if (_checking) return;
     setState(() => _checking = true);
     final service = ref.read(appUpdateServiceProvider);
     final result = await service.check(deep: widget.deep);
@@ -374,7 +538,9 @@ class _UpdateMenuEntryState extends ConsumerState<UpdateMenuEntry> {
       case UpdateCheckResult.updateAvailable:
         final info = result.info;
         if (info != null) {
-          final state = context.findAncestorStateOfType<_UpdateCheckerState>();
+          final state =
+              context.findAncestorStateOfType<_UpdateCheckerState>() ??
+              _UpdateCheckerState._instance;
           state?._showInfo(info);
         }
       case UpdateCheckResult.upToDate:
@@ -394,51 +560,69 @@ class _UpdateMenuEntryState extends ConsumerState<UpdateMenuEntry> {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadii.md),
         border: Border.all(color: AppColors.border),
       ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.system_update_alt,
-            size: 20,
-            color: AppColors.accent,
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _checking ? null : _check,
+          borderRadius: BorderRadius.circular(AppRadii.md),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
               children: [
-                Text(
-                  'Buscar actualizaciones',
-                  style: AppTextStyles.body(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
+                const Icon(
+                  Icons.system_update_alt,
+                  size: 20,
+                  color: AppColors.accent,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Buscar actualizaciones',
+                        style: AppTextStyles.body(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _checking
+                            ? 'Comprobando en el repositorio…'
+                            : 'Ver si hay una versión más reciente disponible',
+                        style: AppTextStyles.body(
+                          fontSize: 11.5,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  _checking
-                      ? 'Comprobando…'
-                      : 'Ver si hay una versión más reciente',
-                  style: AppTextStyles.body(
-                    fontSize: 11.5,
+                if (_checking)
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.accent,
+                    ),
+                  )
+                else
+                  const Icon(
+                    Icons.chevron_right,
+                    size: 20,
                     color: AppColors.textMuted,
                   ),
-                ),
               ],
             ),
           ),
-          IconButton(
-            onPressed: _checking ? null : _check,
-            icon: const Icon(Icons.chevron_right),
-            iconSize: 20,
-            color: AppColors.textMuted,
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -447,20 +631,22 @@ class _UpdateMenuEntryState extends ConsumerState<UpdateMenuEntry> {
 /// Diálogo informativo con la versión instalada.
 Future<void> showAppVersionDialog(
   BuildContext context, {
-  ({int versionCode, String versionName})? installedVersion,
+  ({int versionCode, String versionName, int lastUpdateTime})? installedVersion,
   bool justUpdated = false,
 }) async {
   final version =
       installedVersion ?? await AppUpdateService().installedVersion();
   if (!context.mounted) return;
 
+  final normalizedCode = AppUpdateService.normalizeVersionCode(
+    version.versionCode,
+  );
   final versionLabel = version.versionName.isEmpty
-      ? 'la versión ${version.versionCode}'
+      ? 'la versión $normalizedCode'
       : 'la versión ${version.versionName}';
   final installedLabel = version.versionName.isEmpty
-      ? 'Versión instalada: ${version.versionCode}'
-      : 'Versión instalada: ${version.versionName} '
-            '(${version.versionCode})';
+      ? 'Versión instalada: $normalizedCode'
+      : 'Versión instalada: ${version.versionName} (build $normalizedCode)';
   final title = justUpdated
       ? 'QvaTube actualizado'
       : version.versionName.isEmpty
@@ -490,7 +676,7 @@ Future<void> showAppVersionDialog(
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'La app se actualizó a $versionLabel.',
+                    'La app se actualizó correctamente a $versionLabel.',
                     style: AppTextStyles.body(fontSize: 13),
                   ),
                 ),

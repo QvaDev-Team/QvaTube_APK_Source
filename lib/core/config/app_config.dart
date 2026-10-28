@@ -46,6 +46,12 @@ abstract final class AppConfig {
     defaultValue: 'https://github.com/R0ger0l1va/qvatube_apk/releases/download/latest/qvatube.apk',
   );
 
+  /// API de GitHub Releases del repositorio de distribución.
+  static const String updateReleasesApiUrl = String.fromEnvironment(
+    'UPDATE_RELEASES_API_URL',
+    defaultValue: 'https://api.github.com/repos/R0ger0l1va/qvatube_apk/releases',
+  );
+
   /// Clave de la preferencia con el tema (temporada) activo.
   static const String themeIdKey = 'qvatube.theme_id';
 

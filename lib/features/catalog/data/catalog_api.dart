@@ -388,4 +388,119 @@ class CatalogApi {
     }
     return const [];
   }
+
+  /// GET /api/search
+  /// Búsqueda global en todas las categorías y canales de TV/Radio en vivo.
+  Future<SearchResponse> search({
+    required String query,
+    int perCategory = 12,
+    String? categories,
+    bool includeTv = true,
+  }) async {
+    final trimmed = query.trim();
+    if (trimmed.length < 2) {
+      return SearchResponse(query: trimmed);
+    }
+    final params = <String, dynamic>{
+      'q': trimmed,
+      'per_category': perCategory,
+      'tv': includeTv,
+    };
+    if (categories != null && categories.isNotEmpty) {
+      params['categories'] = categories;
+    }
+    final response = await _client.get(
+      Endpoints.catalog.search,
+      query: params,
+      operation: 'la búsqueda global',
+    );
+    return SearchResponse.fromJson(_map(response.data));
+  }
+
+  /// GET /api/tv/channels
+  /// Lista los canales de televisión y emisoras de radio en vivo.
+  Future<TvChannelList> tvChannels({
+    String? kind,
+    String? group,
+    String? query,
+  }) async {
+    final params = <String, dynamic>{};
+    if (kind != null && kind.isNotEmpty) params['kind'] = kind;
+    if (group != null && group.isNotEmpty) params['group'] = group;
+    if (query != null && query.trim().isNotEmpty) params['q'] = query.trim();
+
+    final response = await _client.get(
+      Endpoints.tv.channels,
+      query: params.isEmpty ? null : params,
+      operation: 'los canales de TV y radio',
+    );
+    return TvChannelList.fromJson(_map(response.data));
+  }
+
+  /// GET /api/tv/channels/{channel_id}
+  Future<TvChannel> tvChannel(String channelId) async {
+    final response = await _client.get(
+      Endpoints.tv.channel(channelId),
+      operation: 'el canal de TV',
+    );
+    return TvChannel.fromJson(_map(response.data));
+  }
+
+  /// GET /api/tv/viewers
+  /// Devuelve los espectadores actuales por canal (`{"counts": {"cubavision": 7}}`).
+  Future<Map<String, int>> tvViewers() async {
+    final response = await _client.get(
+      Endpoints.tv.viewers,
+      operation: 'los espectadores de TV',
+    );
+    final data = _map(response.data);
+    final counts = data['counts'];
+    if (counts is Map) {
+      return counts.map(
+        (key, value) => MapEntry(key.toString(), (value as num?)?.toInt() ?? 0),
+      );
+    }
+    return const {};
+  }
+
+  /// POST /api/tv/heartbeat
+  Future<void> tvHeartbeat({
+    required String sessionId,
+    required String contentId,
+  }) async {
+    try {
+      await _client.post(
+        Endpoints.tv.heartbeat,
+        body: <String, dynamic>{
+          'session_id': sessionId,
+          'content_id': contentId,
+          'channel': contentId,
+          'channel_id': contentId,
+        },
+        operation: 'la presencia en TV',
+      );
+    } catch (_) {
+      // Silencioso si no hay sesión o falla el heartbeat.
+    }
+  }
+
+  /// POST /api/tv/leave
+  Future<void> tvLeave({
+    required String sessionId,
+    String? contentId,
+  }) async {
+    try {
+      await _client.post(
+        Endpoints.tv.leave,
+        body: <String, dynamic>{
+          'session_id': sessionId,
+          'content_id': ?contentId,
+          'channel': ?contentId,
+        },
+        operation: 'la salida de TV',
+      );
+    } catch (_) {
+      // Silencioso al cerrar el reproductor.
+    }
+  }
 }

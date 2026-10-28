@@ -520,3 +520,213 @@ class ReviewItem {
   final String? createdAt;
   final String? avatarUrl;
 }
+
+/// Información de reproducción de un canal (`stream` en `TvChannel`).
+class TvStreamInfo {
+  const TvStreamInfo({
+    required this.type,
+    required this.url,
+  });
+
+  factory TvStreamInfo.fromJson(Map<String, dynamic> json) {
+    return TvStreamInfo(
+      type: json['type']?.toString() ?? 'hls',
+      url: json['url']?.toString() ?? '',
+    );
+  }
+
+  /// `hls` (.m3u8) o `embed` (iframe de terceros como teveo.cu).
+  final String type;
+  final String url;
+
+  bool get isHls => type == 'hls';
+  bool get isEmbed => type == 'embed';
+}
+
+/// Canal de televisión o emisora de radio en vivo (`GET /api/tv/channels`).
+class TvChannel {
+  const TvChannel({
+    required this.id,
+    required this.kind,
+    required this.group,
+    required this.groupTitle,
+    required this.name,
+    required this.logo,
+    required this.stream,
+    this.tag,
+    this.viewers,
+  });
+
+  factory TvChannel.fromJson(Map<String, dynamic> json) {
+    final rawStream = json['stream'];
+    return TvChannel(
+      id: json['id']?.toString() ?? '',
+      kind: json['kind']?.toString() ?? 'tv',
+      group: json['group']?.toString() ?? 'cu',
+      groupTitle: json['group_title']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      tag: json['tag']?.toString(),
+      logo: json['logo']?.toString() ?? '',
+      stream: rawStream is Map
+          ? TvStreamInfo.fromJson(Map<String, dynamic>.from(rawStream))
+          : const TvStreamInfo(type: 'hls', url: ''),
+      viewers: (json['viewers'] as num?)?.toInt(),
+    );
+  }
+
+  final String id;
+  final String kind;
+  final String group;
+  final String groupTitle;
+  final String name;
+  final String? tag;
+  final String logo;
+  final TvStreamInfo stream;
+  final int? viewers;
+
+  String get logoUrl => absoluteMediaUrl(logo);
+  bool get isRadio => kind == 'radio' || group == 'radio';
+
+  TvChannel copyWith({int? viewers}) {
+    return TvChannel(
+      id: id,
+      kind: kind,
+      group: group,
+      groupTitle: groupTitle,
+      name: name,
+      tag: tag,
+      logo: logo,
+      stream: stream,
+      viewers: viewers ?? this.viewers,
+    );
+  }
+}
+
+/// Grupo de canales en `TvChannelList` (`cu`, `intl`, `radio`).
+class TvChannelGroup {
+  const TvChannelGroup({
+    required this.key,
+    required this.title,
+    required this.count,
+  });
+
+  factory TvChannelGroup.fromJson(Map<String, dynamic> json) {
+    return TvChannelGroup(
+      key: json['key']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      count: (json['count'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final String key;
+  final String title;
+  final int count;
+}
+
+/// Respuesta de `GET /api/tv/channels`.
+class TvChannelList {
+  const TvChannelList({
+    this.total = 0,
+    this.groups = const [],
+    this.channels = const [],
+  });
+
+  factory TvChannelList.fromJson(Map<String, dynamic> json) {
+    final rawGroups = json['groups'];
+    final rawChannels = json['channels'];
+    return TvChannelList(
+      total: (json['total'] as num?)?.toInt() ?? 0,
+      groups: rawGroups is List
+          ? rawGroups
+              .whereType<Map>()
+              .map((e) => TvChannelGroup.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+      channels: rawChannels is List
+          ? rawChannels
+              .whereType<Map>()
+              .map((e) => TvChannel.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+    );
+  }
+
+  final int total;
+  final List<TvChannelGroup> groups;
+  final List<TvChannel> channels;
+}
+
+/// Resultados de búsqueda en una categoría (`SearchCategoryResult`).
+class SearchCategoryResult {
+  const SearchCategoryResult({
+    required this.key,
+    required this.name,
+    this.icon,
+    this.grouping,
+    this.total = 0,
+    this.items = const [],
+  });
+
+  factory SearchCategoryResult.fromJson(Map<String, dynamic> json) {
+    final rawItems = json['items'];
+    return SearchCategoryResult(
+      key: json['key']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      icon: json['icon']?.toString(),
+      grouping: json['grouping']?.toString(),
+      total: (json['total'] as num?)?.toInt() ?? 0,
+      items: rawItems is List
+          ? rawItems
+              .whereType<Map>()
+              .map((e) => CatalogItem.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+    );
+  }
+
+  final String key;
+  final String name;
+  final String? icon;
+  final String? grouping;
+  final int total;
+  final List<CatalogItem> items;
+}
+
+/// Respuesta de búsqueda global (`GET /api/search`).
+class SearchResponse {
+  const SearchResponse({
+    this.query = '',
+    this.total = 0,
+    this.categories = const [],
+    this.tv = const [],
+  });
+
+  factory SearchResponse.fromJson(Map<String, dynamic> json) {
+    final rawCategories = json['categories'];
+    final rawTv = json['tv'];
+    return SearchResponse(
+      query: json['query']?.toString() ?? '',
+      total: (json['total'] as num?)?.toInt() ?? 0,
+      categories: rawCategories is List
+          ? rawCategories
+              .whereType<Map>()
+              .map(
+                (e) =>
+                    SearchCategoryResult.fromJson(Map<String, dynamic>.from(e)),
+              )
+              .toList()
+          : const [],
+      tv: rawTv is List
+          ? rawTv
+              .whereType<Map>()
+              .map((e) => TvChannel.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+    );
+  }
+
+  final String query;
+  final int total;
+  final List<SearchCategoryResult> categories;
+  final List<TvChannel> tv;
+}
