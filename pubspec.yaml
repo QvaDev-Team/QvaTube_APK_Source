@@ -87,6 +87,7 @@ flutter:
     - assets/icons/
     # Cada carpeta de tema debe declararse aquí (Flutter no es recursivo).
     - assets/themes/halloween/
+    - assets/themes/halloween/icons/
 
   fonts:
     # Títulos y textos grandes (--f-display)

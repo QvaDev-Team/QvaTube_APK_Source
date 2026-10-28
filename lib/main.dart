@@ -2,15 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'core/router/router.dart';
 import 'core/config/app_config.dart';
+import 'core/router/router.dart';
 import 'core/storage/app_preferences.dart';
 import 'core/theme/app_assets.dart';
-import 'core/update/update_providers.dart';
-import 'features/auth/presentation/providers/auth_controller.dart';
-import 'features/update/presentation/update_checker.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
+import 'core/update/update_providers.dart';
+import 'core/widgets/splash_screen.dart';
+import 'features/auth/presentation/providers/auth_controller.dart';
+import 'features/catalog/application/catalog_providers.dart';
+import 'features/update/presentation/update_checker.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +38,8 @@ class QvaTubeApp extends ConsumerStatefulWidget {
 }
 
 class _QvaTubeAppState extends ConsumerState<QvaTubeApp> {
+  bool _homeInitialLoadDone = false;
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +77,20 @@ class _QvaTubeAppState extends ConsumerState<QvaTubeApp> {
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
+    final authState = ref.watch(authControllerProvider);
+
+    // Si el usuario tiene sesión directa, precargamos los datos iniciales de
+    // Inicio y mantenemos la splash hasta que la vista esté lista.
+    var keepSplash = authState.status == AuthStatus.unknown;
+    if (!keepSplash && authState.canBrowse && !_homeInitialLoadDone) {
+      final recs = ref.watch(recommendationsProvider);
+      final genres = ref.watch(homeGenresProvider);
+      if (recs.isLoading && genres.isLoading) {
+        keepSplash = true;
+      } else {
+        _homeInitialLoadDone = true;
+      }
+    }
 
     return MaterialApp.router(
       title: 'QvaTube',
@@ -93,8 +111,13 @@ class _QvaTubeAppState extends ConsumerState<QvaTubeApp> {
           ),
           child: ColoredBox(
             color: AppColors.background,
-            // Aviso de versión nueva al abrir la app.
-            child: UpdateChecker(child: child ?? const SizedBox.shrink()),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                UpdateChecker(child: child ?? const SizedBox.shrink()),
+                if (keepSplash) const SplashScreen(),
+              ],
+            ),
           ),
         );
       },

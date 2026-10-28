@@ -147,7 +147,10 @@ class AppAssetTheme {
         if (key.toString() == 'icons') {
           if (value is Map) {
             value.forEach((size, file) {
-              assets['icon:$size'] = '$path/${file.toString()}';
+              final fileName = file.toString();
+              assets['icon:$size'] = fileName.startsWith('icons/')
+                  ? '$path/$fileName'
+                  : '$path/icons/$fileName';
             });
           }
           return;
