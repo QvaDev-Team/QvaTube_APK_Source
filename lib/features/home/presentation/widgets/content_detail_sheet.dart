@@ -8,6 +8,7 @@ import '../../../../core/theme/app_text.dart';
 import '../../../../core/widgets/app_cached_image.dart';
 import '../../../catalog/application/catalog_providers.dart';
 import '../../../catalog/domain/catalog_models.dart';
+import 'media_player_screen.dart';
 
 /// Modal interactivo de detalle y descarga de contenido (película o serie/anime/novela)
 /// diseñado idéntico a las pantallas de referencia de QvaTube.
@@ -50,6 +51,16 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
       widget.item.categoryKey == 'anime' ||
       widget.item.categoryKey == 'novela';
 
+  bool get _isAlbum =>
+      widget.item.isAlbum ||
+      (widget.item.categoryKey == 'music' && widget.item.episodeCount > 1);
+
+  bool get _isAudio =>
+      widget.item.categoryKey == 'music' || widget.item.kind == 'audio';
+
+  bool get _isBook =>
+      widget.item.categoryKey == 'book' || widget.item.kind == 'book';
+
   String? get _title {
     final title = widget.item.title;
     return title == null || title.isEmpty ? null : title;
@@ -62,6 +73,8 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
     if (_isSeries) {
       _fetchEpisodes();
       _fetchPlan();
+    } else if (_isAlbum) {
+      _fetchAlbumTracks();
     }
   }
 
@@ -116,6 +129,37 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
         _loadingEpisodes = false;
         _episodes = const [];
         _episodesError = 'No se pudieron cargar los episodios.';
+      });
+    }
+  }
+
+  Future<void> _fetchAlbumTracks() async {
+    setState(() {
+      _loadingEpisodes = true;
+      _episodesError = null;
+    });
+
+    try {
+      final list = await ref
+          .read(catalogApiProvider)
+          .albumTracks(
+            categoryKey: widget.item.categoryKey ?? 'music',
+            album: _title,
+            artist: widget.item.artist,
+            title: _title,
+            chatId: widget.item.chatId,
+            msgId: widget.item.msgId,
+          );
+      if (!mounted) return;
+      setState(() {
+        _episodes = list;
+        _loadingEpisodes = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadingEpisodes = false;
+        _episodes = const [];
       });
     }
   }
@@ -178,6 +222,141 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
         .catchError((_) => const SiteConfig());
     final bot = botConfig.botUsername ?? 'qvatube_bot';
     await DeviceChannel.openUrl('https://t.me/$bot?start=$fallbackPayload');
+  }
+
+  Future<void> _handlePlayMovie() async {
+    if (_isAlbum && _episodes.isNotEmpty) {
+      await _handlePlayAlbumTrack(0);
+      return;
+    }
+
+    final chatId = widget.item.chatId;
+    final msgId = widget.item.msgId;
+
+    if (chatId == null || msgId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Este contenido no tiene identificador de reproducción asignado.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final title = _info?.title ?? widget.item.title ?? 'Reproduciendo';
+    final subtitle = widget.item.artist ?? _info?.year;
+    final playable = PlayableMediaItem(
+      chatId: chatId,
+      msgId: msgId,
+      title: title,
+      subtitle: subtitle,
+      posterUrl: widget.item.posterUrl,
+      isAudio: _isAudio,
+      isBook: _isBook,
+      initialPositionSeconds: widget.item.positionSeconds,
+    );
+
+    await openMediaPlayer(context, playlist: [playable]);
+    if (mounted) {
+      ref.invalidate(continueWatchingProvider);
+    }
+  }
+
+  Future<void> _handlePlayEpisode(int index) async {
+    final eps = _seasonEpisodes;
+    if (eps.isEmpty || index < 0 || index >= eps.length) return;
+
+    final seriesTitle = _info?.title ?? widget.item.title ?? 'Serie';
+    final playlist = <PlayableMediaItem>[];
+    var targetIndex = 0;
+
+    for (var i = 0; i < eps.length; i++) {
+      final ep = eps[i];
+      final chatId = (ep['chat_id'] as num?)?.toInt() ?? widget.item.chatId;
+      final msgId = (ep['msg_id'] as num?)?.toInt() ?? widget.item.msgId;
+      if (chatId == null || msgId == null) continue;
+
+      if (i == index) {
+        targetIndex = playlist.length;
+      }
+
+      final epTitle = ep['title']?.toString();
+      final label = _episodeLabel(ep, i);
+      playlist.add(
+        PlayableMediaItem(
+          chatId: chatId,
+          msgId: msgId,
+          title: seriesTitle,
+          subtitle: epTitle != null && epTitle.isNotEmpty
+              ? '$label · $epTitle'
+              : label,
+          posterUrl: widget.item.posterUrl,
+        ),
+      );
+    }
+
+    if (playlist.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo iniciar la reproducción del episodio.'),
+        ),
+      );
+      return;
+    }
+
+    await openMediaPlayer(
+      context,
+      playlist: playlist,
+      initialIndex: targetIndex,
+    );
+    if (mounted) {
+      ref.invalidate(continueWatchingProvider);
+    }
+  }
+
+  Future<void> _handlePlayAlbumTrack(int index) async {
+    if (_episodes.isEmpty || index < 0 || index >= _episodes.length) return;
+
+    final albumTitle = _info?.title ?? widget.item.title ?? 'Álbum';
+    final playlist = <PlayableMediaItem>[];
+    var targetIndex = 0;
+
+    for (var i = 0; i < _episodes.length; i++) {
+      final track = _episodes[i];
+      final chatId = (track['chat_id'] as num?)?.toInt() ?? widget.item.chatId;
+      final msgId = (track['msg_id'] as num?)?.toInt() ?? widget.item.msgId;
+      if (chatId == null || msgId == null) continue;
+
+      if (i == index) {
+        targetIndex = playlist.length;
+      }
+
+      final trackTitle =
+          track['title']?.toString() ?? 'Pista ${(i + 1).toString().padLeft(2, '0')}';
+      final artist = track['artist']?.toString() ?? widget.item.artist ?? albumTitle;
+      playlist.add(
+        PlayableMediaItem(
+          chatId: chatId,
+          msgId: msgId,
+          title: trackTitle,
+          subtitle: artist,
+          posterUrl: widget.item.posterUrl,
+          isAudio: true,
+        ),
+      );
+    }
+
+    if (playlist.isEmpty) return;
+
+    await openMediaPlayer(
+      context,
+      playlist: playlist,
+      initialIndex: targetIndex,
+    );
+    if (mounted) {
+      ref.invalidate(continueWatchingProvider);
+    }
   }
 
   Future<void> _handleDownloadMovie() async {
@@ -460,19 +639,23 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
               Row(
                 children: [
                   Expanded(
-                    child: Container(
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFF3D1A),
-                        borderRadius: BorderRadius.circular(AppRadii.md),
-                      ),
-                      child: const Center(
-                        child: Text(
-                          'Reproducir',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                    child: InkWell(
+                      onTap: _handlePlayMovie,
+                      borderRadius: BorderRadius.circular(AppRadii.md),
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF3D1A),
+                          borderRadius: BorderRadius.circular(AppRadii.md),
+                        ),
+                        child: Center(
+                          child: Text(
+                            _isBook ? 'Leer' : 'Reproducir',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
@@ -521,6 +704,80 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                   style: TextStyle(fontSize: 11, color: Colors.white38),
                 ),
               ),
+              if (_isAlbum && _episodes.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _episodes.length,
+                  separatorBuilder: (context, index) =>
+                      const Divider(color: Colors.white10, height: 1),
+                  itemBuilder: (context, index) {
+                    final track = _episodes[index];
+                    final trackTitle =
+                        track['title']?.toString() ??
+                        'Pista ${(index + 1).toString().padLeft(2, '0')}';
+                    final size = formatFileSize(
+                      (track['size'] as num?)?.toInt(),
+                    );
+
+                    return InkWell(
+                      onTap: () => _handlePlayAlbumTrack(index),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.music_note_rounded,
+                              size: 16,
+                              color: Colors.white38,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    trackTitle,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  if (size.isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      size,
+                                      style: const TextStyle(
+                                        color: Colors.white38,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Color(0xFFFF3D1A),
+                              ),
+                              child: const Icon(
+                                Icons.play_arrow,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ],
             if (_isSeries) ...[
               if (_loadingEpisodes)
@@ -656,73 +913,80 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                     final ep = _seasonEpisodes[index];
                     final size = formatFileSize((ep['size'] as num?)?.toInt());
 
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.check_circle_outline,
-                            size: 16,
-                            color: Colors.white30,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _episodeLabel(ep, index),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                if (size.isNotEmpty) ...[
-                                  const SizedBox(height: 2),
+                    return InkWell(
+                      onTap: () => _handlePlayEpisode(index),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.check_circle_outline,
+                              size: 16,
+                              color: Colors.white30,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
                                   Text(
-                                    size,
+                                    _episodeLabel(ep, index),
                                     style: const TextStyle(
-                                      color: Colors.white38,
-                                      fontSize: 11,
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
+                                  if (size.isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      size,
+                                      style: const TextStyle(
+                                        color: Colors.white38,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
                                 ],
-                              ],
-                            ),
-                          ),
-                          Container(
-                            width: 32,
-                            height: 32,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Color(0xFFFF3D1A),
-                            ),
-                            child: const Icon(
-                              Icons.play_arrow,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          InkWell(
-                            onTap: () => _handleDownloadEpisode(ep),
-                            borderRadius: BorderRadius.circular(16),
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withValues(alpha: 0.08),
-                              ),
-                              child: const Icon(
-                                Icons.download,
-                                color: Colors.white70,
-                                size: 16,
                               ),
                             ),
-                          ),
-                        ],
+                            InkWell(
+                              onTap: () => _handlePlayEpisode(index),
+                              borderRadius: BorderRadius.circular(16),
+                              child: Container(
+                                width: 32,
+                                height: 32,
+                                decoration: const BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Color(0xFFFF3D1A),
+                                ),
+                                child: const Icon(
+                                  Icons.play_arrow,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            InkWell(
+                              onTap: () => _handleDownloadEpisode(ep),
+                              borderRadius: BorderRadius.circular(16),
+                              child: Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                ),
+                                child: const Icon(
+                                  Icons.download,
+                                  color: Colors.white70,
+                                  size: 16,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },

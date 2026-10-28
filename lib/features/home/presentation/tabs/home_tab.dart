@@ -58,7 +58,11 @@ class HomeTab extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SectionTitle(title: 'Seguir donde quedaste'),
-                    MediaCarousel(items: items, showNewBadge: showNewBadges),
+                    MediaCarousel(
+                      items: items,
+                      showNewBadge: showNewBadges,
+                      onTap: (item) => showContentDetailSheet(context, item),
+                    ),
                     const SizedBox(height: 26),
                   ],
                 );

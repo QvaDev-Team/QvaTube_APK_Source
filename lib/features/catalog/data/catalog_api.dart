@@ -503,4 +503,115 @@ class CatalogApi {
       // Silencioso al cerrar el reproductor.
     }
   }
+
+  /// GET /api/progress
+  /// Obtiene la posición de reproducción guardada en segundos.
+  Future<double> getProgress({
+    required int chatId,
+    required int msgId,
+  }) async {
+    try {
+      final response = await _client.get(
+        Endpoints.favoritesProgress.progress,
+        query: <String, dynamic>{'chat_id': chatId, 'msg_id': msgId},
+        operation: 'el progreso de reproducción',
+      );
+      final data = _map(response.data);
+      return (data['position_s'] as num?)?.toDouble() ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// POST /api/progress
+  /// Guarda la posición actual de reproducción.
+  Future<void> saveProgress({
+    required int chatId,
+    required int msgId,
+    required double positionSeconds,
+    double? durationSeconds,
+    String kind = 'video',
+  }) async {
+    try {
+      await _client.post(
+        Endpoints.favoritesProgress.progress,
+        body: <String, dynamic>{
+          'chat_id': chatId,
+          'msg_id': msgId,
+          'position_s': positionSeconds,
+          'duration_s': ?durationSeconds,
+          'kind': kind,
+        },
+        operation: 'el guardado del progreso',
+      );
+    } catch (_) {
+      // Silencioso si no hay sesión o falla el guardado periódico.
+    }
+  }
+
+  /// POST /api/watched
+  /// Marca un archivo o episodio como visto.
+  Future<void> markWatched({
+    required int chatId,
+    required int msgId,
+    bool watched = true,
+  }) async {
+    try {
+      await _client.post(
+        Endpoints.favoritesProgress.watched,
+        body: <String, dynamic>{
+          'chat_id': chatId,
+          'msg_id': msgId,
+          'watched': watched,
+        },
+        operation: 'el marcado como visto',
+      );
+    } catch (_) {
+      // Silencioso si falla.
+    }
+  }
+
+  /// GET /api/album-tracks
+  /// Obtiene las pistas de un álbum musical.
+  Future<List<Map<String, dynamic>>> albumTracks({
+    String? categoryKey,
+    String? album,
+    String? artist,
+    String? title,
+    int? chatId,
+    int? msgId,
+  }) async {
+    final query = <String, dynamic>{};
+    if (categoryKey != null && categoryKey.isNotEmpty) {
+      query['cat'] = categoryKey;
+    }
+    if (album != null && album.isNotEmpty) query['album'] = album;
+    if (artist != null && artist.isNotEmpty) query['artist'] = artist;
+    if (title != null && title.isNotEmpty) query['title'] = title;
+    if (chatId != null) query['chat_id'] = chatId;
+    if (msgId != null) query['msg_id'] = msgId;
+
+    final response = await _client.get(
+      Endpoints.music.albumTracks,
+      query: query,
+      operation: 'las pistas del álbum',
+    );
+    final data = response.data;
+    if (data is List) {
+      return data
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    if (data is Map) {
+      final items = data['items'] ?? data['tracks'];
+      if (items is List) {
+        return items
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+    }
+    return const [];
+  }
 }

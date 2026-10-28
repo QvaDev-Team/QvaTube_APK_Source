@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text.dart';
 import '../../catalog/application/catalog_providers.dart';
+import '../../home/presentation/widgets/content_detail_sheet.dart';
 import '../../home/presentation/widgets/media_card.dart';
 
 /// Favoritos del usuario (`GET /api/favorites`).
@@ -57,7 +58,11 @@ class FavoritesScreen extends ConsumerWidget {
               ),
               itemCount: items.length,
               itemBuilder: (context, index) {
-                return MediaCard(item: items[index]);
+                final item = items[index];
+                return MediaCard(
+                  item: item,
+                  onTap: () => showContentDetailSheet(context, item),
+                );
               },
             ),
           );
