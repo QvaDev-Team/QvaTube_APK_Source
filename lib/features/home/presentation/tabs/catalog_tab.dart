@@ -78,6 +78,10 @@ class _CatalogTabState extends ConsumerState<CatalogTab> {
 
   final _scrollController = ScrollController();
   final _jumpTargetKey = GlobalKey();
+  final _headerKey = GlobalKey();
+
+  /// Alto real de la cabecera (filtros); el índice A-Z empieza debajo.
+  double _headerHeight = 0;
 
   final List<CatalogItem> _items = [];
   List<String> _genres = const [];
@@ -385,7 +389,11 @@ class _CatalogTabState extends ConsumerState<CatalogTab> {
 
   @override
   Widget build(BuildContext context) {
-    final showAzIndex = _isMusic && _sort == 'alpha' && _letters.isNotEmpty;
+    final showAzIndex = _sort == 'alpha' && _letters.isNotEmpty;
+    final allowGenreFilter = widget.allowGenreFilter && !_isMusic;
+    // Popular no tiene orden ni géneros: sin esto quedaba una tarjeta vacía.
+    final showHeader = widget.allowSort || allowGenreFilter || _isMusic;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measureHeader());
 
     return Stack(
       children: [
@@ -398,25 +406,27 @@ class _CatalogTabState extends ConsumerState<CatalogTab> {
             slivers: [
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  key: _headerKey,
+                  padding: EdgeInsets.fromLTRB(16, showHeader ? 16 : 8, 16, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _CatalogHeaderCard(
-                        genre: _genre,
-                        genres: _genres,
-                        sort: _sort,
-                        allowSort: widget.allowSort,
-                        allowGenreFilter: widget.allowGenreFilter && !_isMusic,
-                        isMusic: _isMusic,
-                        musicPlayMode: _musicPlayMode,
-                        loadingMusicPlayAll: _loadingMusicPlayAll,
-                        onGenreTap: () => _showGenrePicker(context),
-                        onSortToggle: () =>
-                            _setSort(_sort == 'date' ? 'alpha' : 'date'),
-                        onPlayAll: _handlePlayAllCatalog,
-                        onMusicPlayModeChanged: _setMusicPlayMode,
-                      ),
+                      if (showHeader)
+                        _CatalogHeaderCard(
+                          genre: _genre,
+                          genres: _genres,
+                          sort: _sort,
+                          allowSort: widget.allowSort,
+                          allowGenreFilter: allowGenreFilter,
+                          isMusic: _isMusic,
+                          musicPlayMode: _musicPlayMode,
+                          loadingMusicPlayAll: _loadingMusicPlayAll,
+                          onGenreTap: () => _showGenrePicker(context),
+                          onSortToggle: () =>
+                              _setSort(_sort == 'date' ? 'alpha' : 'date'),
+                          onPlayAll: _handlePlayAllCatalog,
+                          onMusicPlayModeChanged: _setMusicPlayMode,
+                        ),
                     ],
                   ),
                 ),
@@ -513,7 +523,7 @@ class _CatalogTabState extends ConsumerState<CatalogTab> {
         if (showAzIndex)
           Positioned(
             right: 0,
-            top: 165,
+            top: _headerHeight + 8,
             bottom: 36,
             child: _AzIndex(
               available: {
@@ -524,6 +534,16 @@ class _CatalogTabState extends ConsumerState<CatalogTab> {
           ),
       ],
     );
+  }
+
+  void _measureHeader() {
+    if (!mounted) return;
+    final box = _headerKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final height = box.size.height;
+    if ((height - _headerHeight).abs() > 0.5) {
+      setState(() => _headerHeight = height);
+    }
   }
 
   Future<void> _showGenrePicker(BuildContext context) async {
