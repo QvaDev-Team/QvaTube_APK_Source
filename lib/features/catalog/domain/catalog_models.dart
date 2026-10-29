@@ -35,6 +35,7 @@ class CatalogItem {
     this.tmdbType,
     this.square = false,
     this.artist,
+    this.album,
     this.poster,
     this.genres,
     this.itemKey,
@@ -44,6 +45,7 @@ class CatalogItem {
     this.groupKind,
     this.episodeCount = 0,
     this.popularity,
+    this.letter,
     this.isNew = false,
     this.kind,
     this.episode,
@@ -59,6 +61,7 @@ class CatalogItem {
       tmdbType: json['tmdb_type'] as String?,
       square: json['square'] == true,
       artist: json['artist'] as String?,
+      album: json['album']?.toString(),
       poster: json['poster'] as String?,
       genres: json['genres'] as String?,
       itemKey: json['item_key'] as String?,
@@ -68,6 +71,7 @@ class CatalogItem {
       groupKind: json['group_kind'] as String?,
       episodeCount: (json['episode_count'] as num?)?.toInt() ?? 0,
       popularity: (json['popularity'] as num?)?.toInt(),
+      letter: json['letter']?.toString(),
       isNew: json['is_new'] == true,
       kind: json['kind'] as String?,
       episode: json['episode'] as String?,
@@ -82,6 +86,9 @@ class CatalogItem {
   final String? tmdbType;
   final bool square;
   final String? artist;
+
+  /// Álbum de un grupo de música (puede ser `""` para los sencillos).
+  final String? album;
   final String? poster;
   final String? genres;
   final String? itemKey;
@@ -91,6 +98,9 @@ class CatalogItem {
   final String? groupKind;
   final int episodeCount;
   final int? popularity;
+
+  /// Letra del índice A-Z (`sort=alpha`), calculada por el backend.
+  final String? letter;
   final bool isNew;
   final String? kind;
   final String? episode;
@@ -220,6 +230,25 @@ class GenreRow {
   final List<CatalogItem> items;
 }
 
+/// Punto de salto del índice A-Z (`letters` de `GET /api/movies?sort=alpha`).
+///
+/// `index` es la posición global del primer título que empieza por `letter`
+/// dentro de todo el listado ordenado; el índice lateral la usa para pedir la
+/// página exacta donde cae esa letra.
+class CatalogLetter {
+  const CatalogLetter({required this.letter, required this.index});
+
+  factory CatalogLetter.fromJson(Map<String, dynamic> json) {
+    return CatalogLetter(
+      letter: json['letter']?.toString() ?? '',
+      index: (json['index'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final String letter;
+  final int index;
+}
+
 /// Página de catálogo (`GET /api/movies`).
 class CatalogPage {
   const CatalogPage({
@@ -244,7 +273,12 @@ class CatalogPage {
       pages: (json['pages'] as num?)?.toInt() ?? 1,
       total: (json['total'] as num?)?.toInt() ?? 0,
       letters: rawLetters is List
-          ? rawLetters.map((e) => e.toString()).toList()
+          ? rawLetters
+                .whereType<Map>()
+                .map(
+                  (e) => CatalogLetter.fromJson(Map<String, dynamic>.from(e)),
+                )
+                .toList()
           : const [],
     );
   }
@@ -253,7 +287,7 @@ class CatalogPage {
   final int page;
   final int pages;
   final int total;
-  final List<String> letters;
+  final List<CatalogLetter> letters;
 
   bool get hasMore => page < pages;
 }
@@ -523,10 +557,7 @@ class ReviewItem {
 
 /// Información de reproducción de un canal (`stream` en `TvChannel`).
 class TvStreamInfo {
-  const TvStreamInfo({
-    required this.type,
-    required this.url,
-  });
+  const TvStreamInfo({required this.type, required this.url});
 
   factory TvStreamInfo.fromJson(Map<String, dynamic> json) {
     return TvStreamInfo(
@@ -638,15 +669,17 @@ class TvChannelList {
       total: (json['total'] as num?)?.toInt() ?? 0,
       groups: rawGroups is List
           ? rawGroups
-              .whereType<Map>()
-              .map((e) => TvChannelGroup.fromJson(Map<String, dynamic>.from(e)))
-              .toList()
+                .whereType<Map>()
+                .map(
+                  (e) => TvChannelGroup.fromJson(Map<String, dynamic>.from(e)),
+                )
+                .toList()
           : const [],
       channels: rawChannels is List
           ? rawChannels
-              .whereType<Map>()
-              .map((e) => TvChannel.fromJson(Map<String, dynamic>.from(e)))
-              .toList()
+                .whereType<Map>()
+                .map((e) => TvChannel.fromJson(Map<String, dynamic>.from(e)))
+                .toList()
           : const [],
     );
   }
@@ -677,9 +710,9 @@ class SearchCategoryResult {
       total: (json['total'] as num?)?.toInt() ?? 0,
       items: rawItems is List
           ? rawItems
-              .whereType<Map>()
-              .map((e) => CatalogItem.fromJson(Map<String, dynamic>.from(e)))
-              .toList()
+                .whereType<Map>()
+                .map((e) => CatalogItem.fromJson(Map<String, dynamic>.from(e)))
+                .toList()
           : const [],
     );
   }
@@ -709,18 +742,19 @@ class SearchResponse {
       total: (json['total'] as num?)?.toInt() ?? 0,
       categories: rawCategories is List
           ? rawCategories
-              .whereType<Map>()
-              .map(
-                (e) =>
-                    SearchCategoryResult.fromJson(Map<String, dynamic>.from(e)),
-              )
-              .toList()
+                .whereType<Map>()
+                .map(
+                  (e) => SearchCategoryResult.fromJson(
+                    Map<String, dynamic>.from(e),
+                  ),
+                )
+                .toList()
           : const [],
       tv: rawTv is List
           ? rawTv
-              .whereType<Map>()
-              .map((e) => TvChannel.fromJson(Map<String, dynamic>.from(e)))
-              .toList()
+                .whereType<Map>()
+                .map((e) => TvChannel.fromJson(Map<String, dynamic>.from(e)))
+                .toList()
           : const [],
     );
   }

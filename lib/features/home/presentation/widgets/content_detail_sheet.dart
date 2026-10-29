@@ -144,11 +144,8 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
           .read(catalogApiProvider)
           .albumTracks(
             categoryKey: widget.item.categoryKey ?? 'music',
-            album: _title,
-            artist: widget.item.artist,
-            title: _title,
-            chatId: widget.item.chatId,
-            msgId: widget.item.msgId,
+            artist: widget.item.artist ?? '',
+            album: widget.item.album ?? '',
           );
       if (!mounted) return;
       setState(() {
@@ -333,8 +330,10 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
       }
 
       final trackTitle =
-          track['title']?.toString() ?? 'Pista ${(i + 1).toString().padLeft(2, '0')}';
-      final artist = track['artist']?.toString() ?? widget.item.artist ?? albumTitle;
+          track['title']?.toString() ??
+          'Pista ${(i + 1).toString().padLeft(2, '0')}';
+      final artist =
+          track['artist']?.toString() ?? widget.item.artist ?? albumTitle;
       playlist.add(
         PlayableMediaItem(
           chatId: chatId,
@@ -467,8 +466,236 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
     DeviceChannel.openUrl('https://www.youtube.com/watch?v=$key');
   }
 
+  String _trackDuration(Map<String, dynamic> track) {
+    final raw =
+        track['duration'] ?? track['duration_s'] ?? track['duration_seconds'];
+    final seconds = raw is num
+        ? raw.toDouble()
+        : double.tryParse(raw?.toString() ?? '');
+    if (seconds == null || seconds <= 0) return '';
+    final total = seconds.round();
+    final hours = total ~/ 3600;
+    final minutes = (total % 3600) ~/ 60;
+    final rest = total % 60;
+    if (hours > 0) {
+      return '$hours:${minutes.toString().padLeft(2, '0')}:'
+          '${rest.toString().padLeft(2, '0')}';
+    }
+    return '$minutes:${rest.toString().padLeft(2, '0')}';
+  }
+
+  String _trackSubtitle(Map<String, dynamic> track) {
+    final duration = _trackDuration(track);
+    final size = formatFileSize((track['size'] as num?)?.toInt());
+    return [duration, size].where((value) => value.isNotEmpty).join(' · ');
+  }
+
+  int _trackNumber(Map<String, dynamic> track, int index) {
+    final number = (track['track_number'] as num?)?.toInt();
+    return number == null || number <= 0 ? index + 1 : number;
+  }
+
+  Widget _buildAlbumSheet() {
+    final item = widget.item;
+    final title = (_info?.title ?? item.title ?? 'Álbum')
+        .toString()
+        .toUpperCase();
+    final artist = item.artist ?? '';
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.9,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollController) {
+        return ListView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          children: [
+            Center(
+              child: Container(
+                width: 38,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _AlbumCover(posterUrl: item.posterUrl),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.display(
+                          fontSize: 22,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                      if (artist.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          artist,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.body(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton.icon(
+                onPressed: _loadingEpisodes || _episodes.isEmpty
+                    ? null
+                    : () => _handlePlayAlbumTrack(0),
+                icon: const Icon(Icons.play_arrow_rounded, size: 22),
+                label: const Text('Reproducir álbum'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: AppColors.accent.withValues(
+                    alpha: 0.4,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadii.md),
+                  ),
+                  textStyle: AppTextStyles.body(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (_loadingEpisodes)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              )
+            else if (_episodes.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Text(
+                    'Sin pistas.',
+                    style: TextStyle(color: Colors.white54, fontSize: 12.5),
+                  ),
+                ),
+              )
+            else
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: EdgeInsets.zero,
+                itemCount: _episodes.length,
+                itemBuilder: (context, index) {
+                  final track = _episodes[index];
+                  final trackTitle =
+                      track['title']?.toString() ??
+                      'Pista ${(index + 1).toString().padLeft(2, '0')}';
+                  final subtitle = _trackSubtitle(track);
+                  return InkWell(
+                    onTap: () => _handlePlayAlbumTrack(index),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 9,
+                      ),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            child: Text(
+                              '${_trackNumber(track, index)}',
+                              textAlign: TextAlign.center,
+                              style: AppTextStyles.mono(
+                                fontSize: 11,
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  trackTitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyles.body(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.2,
+                                  ),
+                                ),
+                                if (subtitle.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    subtitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTextStyles.body(
+                                      fontSize: 10.5,
+                                      color: AppColors.textMuted,
+                                      height: 1.2,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          _TrackActionButton(
+                            icon: Icons.play_arrow_rounded,
+                            filled: true,
+                            onTap: () => _handlePlayAlbumTrack(index),
+                          ),
+                          const SizedBox(width: 6),
+                          _TrackActionButton(
+                            icon: Icons.download_rounded,
+                            onTap: () => _handleDownloadEpisode(track),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isAlbum) return _buildAlbumSheet();
+
     final item = widget.item;
     final info = _info;
 
@@ -996,6 +1223,95 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
           ],
         );
       },
+    );
+  }
+}
+
+class _AlbumCover extends StatelessWidget {
+  const _AlbumCover({required this.posterUrl});
+
+  final String posterUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 84,
+      height: 84,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black45,
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: posterUrl.isEmpty
+            ? const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF2A2A2E), Color(0xFF151517)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: Icon(
+                  Icons.music_note_rounded,
+                  color: Colors.white38,
+                  size: 28,
+                ),
+              )
+            : AppCachedImage(
+                imageUrl: posterUrl,
+                fit: BoxFit.cover,
+                errorWidget: const ColoredBox(
+                  color: Color(0xFF1C1C1F),
+                  child: Icon(
+                    Icons.music_note_rounded,
+                    color: Colors.white38,
+                    size: 28,
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class _TrackActionButton extends StatelessWidget {
+  const _TrackActionButton({
+    required this.icon,
+    required this.onTap,
+    this.filled = false,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: filled
+              ? AppColors.accent
+              : Colors.white.withValues(alpha: 0.08),
+        ),
+        child: Icon(
+          icon,
+          size: 18,
+          color: filled ? Colors.white : Colors.white70,
+        ),
+      ),
     );
   }
 }

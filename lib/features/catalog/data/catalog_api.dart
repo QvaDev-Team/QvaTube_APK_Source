@@ -78,11 +78,12 @@ class CatalogApi {
   Future<CatalogPage> catalog({
     String? categoryKey,
     int page = 1,
+    int limit = 30,
     String? genre,
     String sort = 'recent',
     String? search,
   }) async {
-    final query = <String, dynamic>{'page': page, 'sort': sort};
+    final query = <String, dynamic>{'page': page, 'limit': limit, 'sort': sort};
     if (categoryKey != null && categoryKey.isNotEmpty) {
       query['cat'] = categoryKey;
     }
@@ -509,10 +510,7 @@ class CatalogApi {
   }
 
   /// POST /api/tv/leave
-  Future<void> tvLeave({
-    required String sessionId,
-    String? contentId,
-  }) async {
+  Future<void> tvLeave({required String sessionId, String? contentId}) async {
     try {
       await _client.post(
         Endpoints.tv.leave,
@@ -530,10 +528,7 @@ class CatalogApi {
 
   /// GET /api/progress
   /// Obtiene la posición de reproducción guardada en segundos.
-  Future<double> getProgress({
-    required int chatId,
-    required int msgId,
-  }) async {
+  Future<double> getProgress({required int chatId, required int msgId}) async {
     try {
       final response = await _client.get(
         Endpoints.favoritesProgress.progress,
@@ -595,45 +590,58 @@ class CatalogApi {
     }
   }
 
-  /// GET /api/album-tracks
-  /// Obtiene las pistas de un álbum musical.
-  Future<List<Map<String, dynamic>>> albumTracks({
+  /// GET /api/category-tracks
+  /// Obtiene todas las pistas musicales de una categoría (todos los álbumes).
+  Future<List<Map<String, dynamic>>> categoryTracks({
     String? categoryKey,
-    String? album,
-    String? artist,
-    String? title,
-    int? chatId,
-    int? msgId,
   }) async {
     final query = <String, dynamic>{};
     if (categoryKey != null && categoryKey.isNotEmpty) {
       query['cat'] = categoryKey;
     }
-    if (album != null && album.isNotEmpty) query['album'] = album;
-    if (artist != null && artist.isNotEmpty) query['artist'] = artist;
-    if (title != null && title.isNotEmpty) query['title'] = title;
-    if (chatId != null) query['chat_id'] = chatId;
-    if (msgId != null) query['msg_id'] = msgId;
+
+    final response = await _client.get(
+      Endpoints.music.categoryTracks,
+      query: query,
+      operation: 'el catálogo completo de música',
+    );
+    return _tracks(response.data);
+  }
+
+  /// GET /api/album-tracks
+  /// Obtiene las pistas de un álbum musical.
+  ///
+  /// El grupo se identifica por `artist` + `album` tal como vienen en el
+  /// item del catálogo; `album` es `""` en los grupos de sencillos (su título
+  /// "N sencillos" no es un álbum real), así que se envía siempre aunque
+  /// esté vacío, igual que la web.
+  Future<List<Map<String, dynamic>>> albumTracks({
+    required String categoryKey,
+    required String artist,
+    required String album,
+  }) async {
+    final query = <String, dynamic>{
+      'cat': categoryKey,
+      'artist': artist,
+      'album': album,
+    };
 
     final response = await _client.get(
       Endpoints.music.albumTracks,
       query: query,
       operation: 'las pistas del álbum',
     );
-    final data = response.data;
+    return _tracks(response.data);
+  }
+
+  List<Map<String, dynamic>> _tracks(dynamic data) {
     if (data is List) {
-      return data
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
+      return data.whereType<Map>().map(Map<String, dynamic>.from).toList();
     }
     if (data is Map) {
-      final items = data['items'] ?? data['tracks'];
+      final items = data['tracks'] ?? data['items'];
       if (items is List) {
-        return items
-            .whereType<Map>()
-            .map((e) => Map<String, dynamic>.from(e))
-            .toList();
+        return items.whereType<Map>().map(Map<String, dynamic>.from).toList();
       }
     }
     return const [];

@@ -49,7 +49,8 @@ abstract final class AppConfig {
   /// API de GitHub Releases del repositorio de distribución.
   static const String updateReleasesApiUrl = String.fromEnvironment(
     'UPDATE_RELEASES_API_URL',
-    defaultValue: 'https://api.github.com/repos/R0ger0l1va/qvatube_apk/releases',
+    defaultValue:
+        'https://api.github.com/repos/R0ger0l1va/qvatube_apk/releases',
   );
 
   /// Clave de la preferencia con el tema (temporada) activo.
@@ -59,6 +60,9 @@ abstract final class AppConfig {
   static const String showNewBadgesKey = 'qvatube.show_new_badges';
   static const String showContinueWatchingKey =
       'qvatube.show_continue_watching';
+
+  /// Modo de reproducción del catálogo de música (`shuffle` o `linear`).
+  static const String musicPlayModeKey = 'qvatube.music_play_mode';
 
   /// Última versión instalada registrada en el dispositivo.
   static const String lastVersionCodeKey = 'qvatube.last_version_code';
