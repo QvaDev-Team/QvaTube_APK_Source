@@ -43,6 +43,7 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
   bool _checking = false;
   bool _downloading = false;
   double? _progress;
+  String? _status;
   String? _error;
 
   @override
@@ -112,6 +113,7 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
     setState(() {
       _downloading = true;
       _progress = 0;
+      _status = null;
       _error = null;
     });
 
@@ -132,6 +134,17 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
               if (!mounted) return;
               setState(() {
                 _progress = total > 0 ? received / total : 0;
+              });
+            },
+            onStatus: (status) {
+              if (!mounted) return;
+              setState(() {
+                _status = status;
+                // Aplicar/verificar no tiene porcentaje: barra indeterminada.
+                if (status.startsWith('Aplicando') ||
+                    status.startsWith('Verificando')) {
+                  _progress = null;
+                }
               });
             },
           );
@@ -178,6 +191,7 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
         if (_downloading || _error != null)
           _DownloadOverlay(
             progress: _progress,
+            status: _status,
             error: _error,
             canRetryInstall: info?.isDownloaded ?? false,
             onRetryInstall: () {
@@ -288,11 +302,18 @@ class _UpdateBanner extends ConsumerWidget {
                               ],
                             ],
                           ),
-                          if (info.sizeMb != null && info.sizeMb! > 0)
+                          if (info.downloadSizeMb != null &&
+                              info.downloadSizeMb! > 0)
                             Padding(
                               padding: const EdgeInsets.only(top: 2),
                               child: Text(
-                                'Tamaño de descarga: ${info.sizeMb!.toStringAsFixed(1)} MB',
+                                info.applicablePatch != null &&
+                                        info.sizeMb != null
+                                    ? 'Descarga: solo '
+                                          '${info.downloadSizeMb!.toStringAsFixed(1)} MB '
+                                          '(en vez de ${info.sizeMb!.toStringAsFixed(1)} MB)'
+                                    : 'Tamaño de descarga: '
+                                          '${info.downloadSizeMb!.toStringAsFixed(1)} MB',
                                 style: AppTextStyles.body(
                                   fontSize: 11,
                                   color: AppColors.textMuted,
@@ -434,6 +455,7 @@ class _UpdateBanner extends ConsumerWidget {
 class _DownloadOverlay extends StatelessWidget {
   const _DownloadOverlay({
     this.progress,
+    this.status,
     this.error,
     this.canRetryInstall = false,
     this.onRetryInstall,
@@ -441,6 +463,7 @@ class _DownloadOverlay extends StatelessWidget {
   });
 
   final double? progress;
+  final String? status;
   final String? error;
   final bool canRetryInstall;
   final VoidCallback? onRetryInstall;
@@ -476,7 +499,7 @@ class _DownloadOverlay extends StatelessWidget {
                       child: Text(
                         error != null
                             ? 'No se completó la actualización'
-                            : 'Descargando la actualización',
+                            : status ?? 'Descargando la actualización',
                         style: AppTextStyles.body(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w700,
@@ -498,7 +521,9 @@ class _DownloadOverlay extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     progress == null
-                        ? 'Preparando…'
+                        ? (status?.startsWith('Aplicando') == true
+                              ? 'Reconstruyendo la app con los cambios…'
+                              : 'Preparando…')
                         : '${(progress! * 100).toStringAsFixed(0)} %',
                     style: AppTextStyles.body(
                       fontSize: 11.5,

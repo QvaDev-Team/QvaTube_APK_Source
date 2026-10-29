@@ -20,6 +20,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
@@ -152,6 +153,9 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                 }
+                // APK instalado (base.apk): punto de partida de los parches
+                // diferenciales. Se puede leer sin permisos especiales.
+                "getInstalledApkPath" -> result.success(applicationInfo.sourceDir)
                 "cacheDirectory" -> result.success(filesDir.absolutePath)
                 "installApk" -> {
                     val path = call.argument<String>("path")
@@ -644,8 +648,19 @@ private class EmbeddedWebViewPlatformView(
     override fun getView(): View = webView
 
     override fun dispose() {
+        // Corta el audio/video antes de destruir: `destroy()` se ignora si la
+        // vista sigue adjunta a la jerarquía, y el reproductor embebido seguía
+        // sonando en segundo plano tras cerrar el overlay de TV/Radio.
+        webView.evaluateJavascript(
+            "document.querySelectorAll('video,audio').forEach(function(m){" +
+                "try{m.pause();m.removeAttribute('src');m.load();}catch(e){}});",
+            null
+        )
+        webView.onPause()
         webView.stopLoading()
         webView.loadUrl("about:blank")
+        (webView.parent as? ViewGroup)?.removeView(webView)
+        webView.removeAllViews()
         webView.destroy()
     }
 }

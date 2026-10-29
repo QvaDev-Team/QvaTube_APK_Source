@@ -18,6 +18,7 @@ class MediaCard extends StatelessWidget {
     required this.item,
     this.width,
     this.onTap,
+    this.onRemove,
     this.showProgress = true,
     this.showNewBadge = true,
   });
@@ -25,6 +26,9 @@ class MediaCard extends StatelessWidget {
   final CatalogItem item;
   final double? width;
   final VoidCallback? onTap;
+
+  /// Muestra una "×" arriba a la derecha (p. ej. "Seguir donde quedaste").
+  final VoidCallback? onRemove;
   final bool showProgress;
   final bool showNewBadge;
 
@@ -84,6 +88,29 @@ class MediaCard extends StatelessWidget {
                             fontSize: 9,
                             fontWeight: FontWeight.w700,
                             color: AppColors.accentInk,
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (onRemove != null)
+                    Positioned(
+                      right: 4,
+                      top: 4,
+                      child: Material(
+                        color: const Color(0xB30A0A0B),
+                        shape: const CircleBorder(
+                          side: BorderSide(color: Colors.white24),
+                        ),
+                        child: InkWell(
+                          onTap: onRemove,
+                          customBorder: const CircleBorder(),
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(
+                              Icons.close,
+                              size: 12,
+                              color: Colors.white70,
+                            ),
                           ),
                         ),
                       ),
@@ -232,12 +259,14 @@ class MediaCarousel extends StatelessWidget {
     required this.items,
     this.itemWidth = 122,
     this.onTap,
+    this.onRemove,
     this.showNewBadge = true,
   });
 
   final List<CatalogItem> items;
   final double itemWidth;
   final ValueChanged<CatalogItem>? onTap;
+  final ValueChanged<CatalogItem>? onRemove;
   final bool showNewBadge;
 
   @override
@@ -255,6 +284,7 @@ class MediaCarousel extends StatelessWidget {
             item: item,
             showNewBadge: showNewBadge,
             onTap: onTap == null ? null : () => onTap!(item),
+            onRemove: onRemove == null ? null : () => onRemove!(item),
           );
         },
       ),

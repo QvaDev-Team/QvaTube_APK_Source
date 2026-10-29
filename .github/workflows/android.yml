@@ -129,6 +129,7 @@ jobs:
             BUILD_NUMBER="$PUBSPEC_CODE"
           fi
           echo "Compilando v$VERSION_NAME+$BUILD_NUMBER"
+          echo "VERSION_CODE=$BUILD_NUMBER" >> "$GITHUB_ENV"
           flutter build apk --release \
             --split-per-abi \
             --target-platform android-arm64 \
@@ -145,6 +146,29 @@ jobs:
           cp build/symbols/* dist/symbols/ 2>/dev/null || true
           ls -la dist
           df -h / | tail -1
+
+      # ---------------------------------------------------------------------
+      # Parches diferenciales (bsdiff): la app descarga solo los cambios
+      # respecto a la versión que tiene instalada y reconstruye el APK nuevo
+      # localmente (ver doc/ACTUALIZACIONES_DIFERENCIALES.md). Se generan
+      # contra las últimas versiones guardadas en la release "apk-archive"
+      # del repo público. Si algo falla, se publica igual sin parches: la app
+      # cae a la descarga completa.
+      # ---------------------------------------------------------------------
+      - name: Generar parches diferenciales
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.DIST_REPO_TOKEN }}
+          NEW_APK: dist/qvatube.apk
+          NEW_CODE: ${{ env.VERSION_CODE }}
+          OUT_DIR: dist/patches
+          MAX_SOURCES: '3'
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bsdiff
+          bash tool/delta/make_patches.sh
 
       # Manifiesto de versión: la app lo consulta para saber si hay una
       # actualización sin tener que descargar el APK entero.
@@ -181,7 +205,18 @@ jobs:
 
           NOTES=$(awk '{printf "• %s\n", $0}' "$CHANGES_FILE")
           CHANGES_JSON=$(jq -R -s 'split("\n") | map(select(length > 0))' < "$CHANGES_FILE")
-          URL="https://github.com/$DIST_REPO/releases/download/latest/qvatube.apk"
+          BASE_URL="https://github.com/$DIST_REPO/releases/download/latest"
+          URL="$BASE_URL/qvatube.apk"
+          SIZE_BYTES=$(stat -c%s dist/qvatube.apk)
+          APK_SHA256=$(sha256sum dist/qvatube.apk | cut -d' ' -f1)
+
+          # Parches generados en el paso anterior (lista vacía si no hubo).
+          PATCHES_JSON='[]'
+          if [ -s dist/patches/patches.json ]; then
+            PATCHES_JSON=$(jq --arg base "$BASE_URL" \
+              'map({from_version_code, from_sha256, size_bytes, sha256,
+                    url: ($base + "/" + .file)})' dist/patches/patches.json)
+          fi
 
           jq -n \
             --argjson version_code "$VERSION_CODE" \
@@ -190,9 +225,14 @@ jobs:
             --arg notes "$NOTES" \
             --argjson changes "$CHANGES_JSON" \
             --argjson size_mb "$SIZE_MB" \
+            --argjson size_bytes "$SIZE_BYTES" \
+            --arg sha256 "$APK_SHA256" \
+            --argjson patches "$PATCHES_JSON" \
             --arg published_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '{version_code: $version_code, version_name: $version_name, url: $url,
-              notes: $notes, changes: $changes, size_mb: $size_mb, published_at: $published_at}' \
+              notes: $notes, changes: $changes, size_mb: $size_mb,
+              size_bytes: $size_bytes, sha256: $sha256, patches: $patches,
+              published_at: $published_at}' \
             > dist/latest.json
           cat dist/latest.json
 
@@ -205,6 +245,7 @@ jobs:
           path: |
             dist/qvatube.apk
             dist/latest.json
+            dist/patches
             dist/symbols
 
       # ---------------------------------------------------------------------
@@ -232,10 +273,13 @@ jobs:
           done
           gh api -X DELETE "repos/$DIST_REPO/git/refs/tags/$TAG" 2>/dev/null || true
 
-          # 2) Crea la release (y el tag) en el repo público.
+          # 2) Crea la release (y el tag) en el repo público, con los parches.
+          shopt -s nullglob
+          PATCH_FILES=(patches/*.bsdiff)
           gh release create "$TAG" \
             qvatube.apk \
             latest.json \
+            "${PATCH_FILES[@]}" \
             --repo "$DIST_REPO" \
             --target main \
             --title "QvaTube v$VERSION_NAME (última versión)" \
@@ -250,3 +294,35 @@ jobs:
           )"
 
           echo ">> Release publicada: $(gh release view "$TAG" --repo "$DIST_REPO" --json url --jq .url)"
+
+      # Guarda este APK en la release "apk-archive" (qvatube-<versionCode>.apk)
+      # para poder generar parches desde él en los próximos builds. Se
+      # conservan solo los 5 más recientes.
+      - name: Archivar el APK para futuros parches
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.DIST_REPO_TOKEN }}
+          ARCHIVE_TAG: apk-archive
+          KEEP: '5'
+        run: |
+          set -euo pipefail
+          if ! gh release view "$ARCHIVE_TAG" --repo "$DIST_REPO" >/dev/null 2>&1; then
+            gh release create "$ARCHIVE_TAG" --repo "$DIST_REPO" --target main \
+              --title "Archivo de APKs (parches diferenciales)" \
+              --notes "Versiones anteriores usadas por CI para generar los parches de actualización. No descargar desde aquí." \
+              --prerelease
+          fi
+          cp dist/qvatube.apk "dist/qvatube-$VERSION_CODE.apk"
+          gh release upload "$ARCHIVE_TAG" "dist/qvatube-$VERSION_CODE.apk" \
+            --repo "$DIST_REPO" --clobber
+
+          gh release view "$ARCHIVE_TAG" --repo "$DIST_REPO" --json assets \
+              --jq '.assets[].name' \
+            | grep -E '^qvatube-[0-9]+\.apk$' \
+            | sed -E 's/^qvatube-([0-9]+)\.apk$/\1/' \
+            | sort -rn | tail -n +$((KEEP + 1)) \
+            | while read -r code; do
+                echo ">> Borrando del archivo la versión $code"
+                gh release delete-asset "$ARCHIVE_TAG" "qvatube-$code.apk" \
+                  --repo "$DIST_REPO" --yes
+              done

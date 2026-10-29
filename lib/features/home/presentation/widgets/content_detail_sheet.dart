@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_flutter/lucide_flutter.dart';
 
 import '../../../../core/network/api_client.dart';
 import '../../../../core/platform/device_channel.dart';
@@ -9,6 +10,7 @@ import '../../../../core/widgets/app_cached_image.dart';
 import '../../../catalog/application/catalog_providers.dart';
 import '../../../catalog/domain/catalog_models.dart';
 import 'media_player_screen.dart';
+import 'report_content_dialog.dart';
 
 /// Modal interactivo de detalle y descarga de contenido (película o serie/anime/novela)
 /// diseñado idéntico a las pantallas de referencia de QvaTube.
@@ -44,6 +46,8 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
   List<Map<String, dynamic>> _episodes = [];
   String? _episodesError;
   int _selectedSeason = 1;
+  late bool _favorited = widget.item.favorited;
+  bool _togglingFavorite = false;
 
   bool get _isSeries =>
       widget.item.isSeries ||
@@ -75,6 +79,40 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
       _fetchPlan();
     } else if (_isAlbum) {
       _fetchAlbumTracks();
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    if (_togglingFavorite) return;
+    final next = !_favorited;
+    setState(() {
+      _togglingFavorite = true;
+      _favorited = next;
+    });
+    try {
+      final result = await ref
+          .read(catalogApiProvider)
+          .setFavorite(widget.item, favorite: next);
+      if (!mounted) return;
+      setState(() => _favorited = result);
+      ref.invalidate(favoritesProvider);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _favorited = !next);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.statusCode == 401
+                ? 'Inicia sesión para guardar favoritos.'
+                : 'No se pudo actualizar. Intenta de nuevo.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _favorited = !next);
+    } finally {
+      if (mounted) setState(() => _togglingFavorite = false);
     }
   }
 
@@ -555,6 +593,12 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                     ],
                   ),
                 ),
+                const SizedBox(width: 8),
+                _HeaderActionChip(
+                  icon: Icons.flag_outlined,
+                  tooltip: 'Reportar',
+                  onTap: () => showReportContentDialog(context, item),
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -783,6 +827,19 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                     ],
                   ),
                 ),
+                if (item.canFavorite) ...[
+                  _HeaderActionChip(
+                    icon: _favorited
+                        ? LucideIcons.bookmarkCheck
+                        : LucideIcons.bookmark,
+                    active: _favorited,
+                    tooltip: _favorited
+                        ? 'Quitar de favoritos'
+                        : 'Agregar a favoritos',
+                    onTap: _toggleFavorite,
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 _HeaderActionChip(
                   icon: Icons.share_outlined,
                   label: 'Compartir',
@@ -798,13 +855,7 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                 _HeaderActionChip(
                   icon: Icons.flag_outlined,
                   label: 'Reportar',
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Reporte enviado a los administradores.'),
-                      ),
-                    );
-                  },
+                  onTap: () => showReportContentDialog(context, item),
                 ),
               ],
             ),
@@ -1319,39 +1370,46 @@ class _TrackActionButton extends StatelessWidget {
 class _HeaderActionChip extends StatelessWidget {
   const _HeaderActionChip({
     required this.icon,
-    required this.label,
     required this.onTap,
+    this.label,
+    this.tooltip,
+    this.active = false,
   });
 
   final IconData icon;
-  final String label;
   final VoidCallback onTap;
+
+  /// Sin etiqueta se dibuja solo el icono (con [tooltip]).
+  final String? label;
+  final String? tooltip;
+  final bool active;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    final color = active ? AppColors.accent : Colors.white70;
+    final chip = InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: const Color(0xFF16181D),
+          color: active ? AppColors.accentSoft : const Color(0xFF16181D),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white12),
+          border: Border.all(color: active ? AppColors.accent : Colors.white12),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 14, color: Colors.white70),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: const TextStyle(fontSize: 11.5, color: Colors.white70),
-            ),
+            Icon(icon, size: 14, color: color),
+            if (label != null) ...[
+              const SizedBox(width: 4),
+              Text(label!, style: TextStyle(fontSize: 11.5, color: color)),
+            ],
           ],
         ),
       ),
     );
+    return tooltip == null ? chip : Tooltip(message: tooltip!, child: chip);
   }
 }
 

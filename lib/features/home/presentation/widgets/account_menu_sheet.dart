@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_flutter/lucide_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qvatube_apk/features/catalog/application/catalog_providers.dart';
 import 'package:qvatube_apk/features/home/presentation/widgets/badge_count.dart';
@@ -144,7 +145,7 @@ class _AccountMenuSheet extends ConsumerWidget {
                   onTap: () => _go(context, '/cuenta/descargas'),
                 ),
                 _MenuTile(
-                  icon: Icons.favorite_border,
+                  icon: LucideIcons.bookmark,
                   label: 'Favoritos',
                   onTap: () => _go(context, '/cuenta/favoritos'),
                 ),

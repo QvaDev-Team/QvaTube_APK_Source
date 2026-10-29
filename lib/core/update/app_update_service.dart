@@ -1,10 +1,58 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 
 import '../config/app_config.dart';
 import '../platform/device_channel.dart';
+import 'bspatch.dart';
+
+/// Parche diferencial (BSDIFF40) publicado junto a una versión.
+///
+/// Reconstruye el APK nuevo a partir del APK instalado cuyo SHA-256 es
+/// [fromSha256]; así no hace falta volver a bajar el APK completo.
+class UpdatePatch {
+  const UpdatePatch({
+    required this.fromSha256,
+    required this.url,
+    this.fromVersionCode,
+    this.sizeBytes,
+    this.sha256,
+  });
+
+  factory UpdatePatch.fromJson(Map<String, dynamic> json) {
+    return UpdatePatch(
+      fromSha256: json['from_sha256']?.toString().toLowerCase() ?? '',
+      url: json['url']?.toString() ?? '',
+      fromVersionCode: (json['from_version_code'] as num?)?.toInt(),
+      sizeBytes: (json['size_bytes'] as num?)?.toInt(),
+      sha256: json['sha256']?.toString().toLowerCase(),
+    );
+  }
+
+  /// SHA-256 del APK de origen (el que tiene que estar instalado).
+  final String fromSha256;
+  final String url;
+  final int? fromVersionCode;
+  final int? sizeBytes;
+
+  /// SHA-256 del propio archivo de parche.
+  final String? sha256;
+
+  double? get sizeMb => sizeBytes == null
+      ? null
+      : double.parse((sizeBytes! / 1048576).toStringAsFixed(1));
+
+  UpdatePatch withUrl(String newUrl) => UpdatePatch(
+    fromSha256: fromSha256,
+    url: newUrl,
+    fromVersionCode: fromVersionCode,
+    sizeBytes: sizeBytes,
+    sha256: sha256,
+  );
+}
 
 /// Información de una versión disponible para instalar.
 class AppUpdateInfo {
@@ -17,6 +65,9 @@ class AppUpdateInfo {
     this.sizeMb,
     this.publishedAt,
     this.localPath,
+    this.sha256,
+    this.patches = const [],
+    this.applicablePatch,
   });
 
   /// Lee el manifiesto JSON que publica el workflow de GitHub Actions.
@@ -28,6 +79,7 @@ class AppUpdateInfo {
               .where((e) => e.isNotEmpty)
               .toList()
         : const <String>[];
+    final rawPatches = json['patches'];
 
     return AppUpdateInfo(
       versionCode: (json['version_code'] as num?)?.toInt() ?? 0,
@@ -37,6 +89,14 @@ class AppUpdateInfo {
       changes: parsedChanges,
       sizeMb: (json['size_mb'] as num?)?.toDouble(),
       publishedAt: json['published_at']?.toString(),
+      sha256: json['sha256']?.toString().toLowerCase(),
+      patches: rawPatches is List
+          ? rawPatches
+                .whereType<Map>()
+                .map((e) => UpdatePatch.fromJson(Map<String, dynamic>.from(e)))
+                .where((p) => p.fromSha256.isNotEmpty && p.url.isNotEmpty)
+                .toList()
+          : const [],
     );
   }
 
@@ -51,7 +111,19 @@ class AppUpdateInfo {
   /// Ruta local del APK ya descargado (si se comprobó con una descarga).
   final String? localPath;
 
+  /// SHA-256 del APK completo; se verifica antes de instalar.
+  final String? sha256;
+
+  /// Parches diferenciales disponibles (uno por versión de origen).
+  final List<UpdatePatch> patches;
+
+  /// Parche que encaja con el APK instalado en este dispositivo, si hay.
+  final UpdatePatch? applicablePatch;
+
   bool get isDownloaded => localPath != null;
+
+  /// Megas que de verdad se van a descargar (parche o APK completo).
+  double? get downloadSizeMb => applicablePatch?.sizeMb ?? sizeMb;
 
   AppUpdateInfo copyWith({
     int? versionCode,
@@ -62,6 +134,7 @@ class AppUpdateInfo {
     double? sizeMb,
     String? publishedAt,
     String? localPath,
+    UpdatePatch? applicablePatch,
   }) {
     return AppUpdateInfo(
       versionCode: versionCode ?? this.versionCode,
@@ -72,6 +145,9 @@ class AppUpdateInfo {
       sizeMb: sizeMb ?? this.sizeMb,
       publishedAt: publishedAt ?? this.publishedAt,
       localPath: localPath ?? this.localPath,
+      sha256: sha256,
+      patches: patches,
+      applicablePatch: applicablePatch ?? this.applicablePatch,
     );
   }
 
@@ -306,7 +382,10 @@ class AppUpdateService {
       final candidate = _pickBestCandidate(manifest, ghRelease);
       if (candidate != null) {
         if (_isNewer(candidate, installed)) {
-          return (result: UpdateCheckResult.updateAvailable, info: candidate);
+          return (
+            result: UpdateCheckResult.updateAvailable,
+            info: await _withApplicablePatch(candidate),
+          );
         }
         if (!deep) {
           return (result: UpdateCheckResult.upToDate, info: null);
@@ -425,13 +504,56 @@ class AppUpdateService {
       changes: mergedChanges,
       sizeMb: manifest.sizeMb ?? ghRelease.sizeMb,
       publishedAt: manifest.publishedAt ?? ghRelease.publishedAt,
+      sha256: manifest.sha256,
+      patches: manifest.patches,
     );
   }
 
-  /// Descarga el APK de la actualización en la caché de la app.
+  String? _installedSha256;
+
+  /// SHA-256 del APK instalado (se calcula una vez por sesión, fuera del
+  /// hilo de la interfaz).
+  Future<String?> _installedApkSha256() async {
+    final cached = _installedSha256;
+    if (cached != null) return cached;
+    final path = await DeviceChannel.installedApkPath();
+    if (path == null) return null;
+    try {
+      final hash = await Isolate.run(
+        () => sha256.convert(File(path).readAsBytesSync()).toString(),
+      );
+      _installedSha256 = hash;
+      return hash;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Busca, entre los parches publicados, el que parte exactamente del APK
+  /// instalado. Si el APK local no coincide con ninguno (instalado desde otra
+  /// fuente, build local…), se descargará el APK completo.
+  Future<AppUpdateInfo> _withApplicablePatch(AppUpdateInfo info) async {
+    if (info.patches.isEmpty || info.sha256 == null) return info;
+    final installedHash = await _installedApkSha256();
+    if (installedHash == null) return info;
+    for (final patch in info.patches) {
+      if (patch.fromSha256 == installedHash) {
+        return info.copyWith(applicablePatch: patch);
+      }
+    }
+    return info;
+  }
+
+  /// Descarga la actualización en la caché de la app.
+  ///
+  /// Si hay un parche diferencial para el APK instalado, baja solo el parche
+  /// y reconstruye el APK nuevo localmente; si el parche falla por cualquier
+  /// motivo (red, hash distinto, parche corrupto) cae a la descarga completa.
+  /// [onStatus] informa de la fase actual para mostrarla en la interfaz.
   Future<File> download(
     AppUpdateInfo info, {
     void Function(int received, int total)? onProgress,
+    void Function(String status)? onStatus,
   }) async {
     final dir = Directory('${(await _cacheDir()).path}/updates');
     if (!dir.existsSync()) {
@@ -442,17 +564,101 @@ class AppUpdateService {
       target.deleteSync();
     }
 
-    final downloadUrl =
-        '${info.url}${info.url.contains('?') ? '&' : '?'}t=${DateTime.now().millisecondsSinceEpoch}';
+    final patch = info.applicablePatch;
+    final expectedSha = info.sha256;
+    if (patch != null && expectedSha != null) {
+      try {
+        onStatus?.call(
+          'Descargando solo los cambios'
+          '${patch.sizeMb != null ? ' (${patch.sizeMb!.toStringAsFixed(1)} MB)' : ''}',
+        );
+        await _downloadAndApplyPatch(
+          patch,
+          expectedSha: expectedSha,
+          target: target,
+          dir: dir,
+          onProgress: onProgress,
+          onStatus: onStatus,
+        );
+        return target;
+      } catch (_) {
+        if (target.existsSync()) target.deleteSync();
+        onProgress?.call(0, 0);
+      }
+    }
 
+    onStatus?.call('Descargando la actualización completa');
     await _dio.download(
-      downloadUrl,
+      _noCache(info.url),
       target.path,
       onReceiveProgress: onProgress,
       options: Options(responseType: ResponseType.bytes),
     );
+    if (expectedSha != null) {
+      onStatus?.call('Verificando el archivo');
+      final actual = await Isolate.run(
+        () => sha256.convert(File(target.path).readAsBytesSync()).toString(),
+      );
+      if (actual != expectedSha) {
+        target.deleteSync();
+        throw const FileSystemException(
+          'El APK descargado no coincide con la versión publicada',
+        );
+      }
+    }
     return target;
   }
+
+  Future<void> _downloadAndApplyPatch(
+    UpdatePatch patch, {
+    required String expectedSha,
+    required File target,
+    required Directory dir,
+    void Function(int received, int total)? onProgress,
+    void Function(String status)? onStatus,
+  }) async {
+    final oldPath = await DeviceChannel.installedApkPath();
+    if (oldPath == null) {
+      throw const FileSystemException('No se encontró el APK instalado');
+    }
+    final patchFile = File('${dir.path}/qvatube-update.patch');
+    if (patchFile.existsSync()) patchFile.deleteSync();
+
+    try {
+      await _dio.download(
+        _noCache(patch.url),
+        patchFile.path,
+        onReceiveProgress: onProgress,
+        options: Options(responseType: ResponseType.bytes),
+      );
+
+      onStatus?.call('Aplicando los cambios');
+      final patchPath = patchFile.path;
+      final targetPath = target.path;
+      final patchSha = patch.sha256;
+      await Isolate.run(() {
+        final patchBytes = File(patchPath).readAsBytesSync();
+        if (patchSha != null &&
+            sha256.convert(patchBytes).toString() != patchSha) {
+          throw const BsPatchException('El parche llegó incompleto');
+        }
+        final result = bspatch(File(oldPath).readAsBytesSync(), patchBytes);
+        // El APK reconstruido tiene que ser idéntico (y por tanto estar
+        // firmado con la misma clave) al publicado; si no, no se instala.
+        if (sha256.convert(result).toString() != expectedSha) {
+          throw const BsPatchException(
+            'El APK reconstruido no coincide con la versión publicada',
+          );
+        }
+        File(targetPath).writeAsBytesSync(result, flush: true);
+      });
+    } finally {
+      if (patchFile.existsSync()) patchFile.deleteSync();
+    }
+  }
+
+  String _noCache(String url) =>
+      '$url${url.contains('?') ? '&' : '?'}t=${DateTime.now().millisecondsSinceEpoch}';
 
   /// Abre el instalador del sistema para instalar el APK descargado.
   Future<bool> install(File apk) async {
@@ -487,17 +693,18 @@ class AppUpdateService {
         : data;
     final info = AppUpdateInfo.fromJson(payload);
     if (info.versionCode <= 0 || info.url.isEmpty) return null;
-    return info.url.contains(_latestDownload)
-        ? AppUpdateInfo(
-            versionCode: info.versionCode,
-            versionName: info.versionName,
-            url: info.url.replaceFirst(_latestDownload, _tagDownload),
-            notes: info.notes,
-            changes: info.changes,
-            sizeMb: info.sizeMb,
-            publishedAt: info.publishedAt,
-          )
-        : info;
+    String fixUrl(String url) => url.replaceFirst(_latestDownload, _tagDownload);
+    return AppUpdateInfo(
+      versionCode: info.versionCode,
+      versionName: info.versionName,
+      url: fixUrl(info.url),
+      notes: info.notes,
+      changes: info.changes,
+      sizeMb: info.sizeMb,
+      publishedAt: info.publishedAt,
+      sha256: info.sha256,
+      patches: [for (final p in info.patches) p.withUrl(fixUrl(p.url))],
+    );
   }
 
   /// Consulta la API de Releases de GitHub como respaldo y para enriquecer
@@ -526,6 +733,10 @@ class AppUpdateService {
     for (final item in decoded) {
       if (item is! Map) continue;
       if (item['draft'] == true) continue;
+      // `apk-archive` guarda versiones viejas solo para generar parches.
+      if (item['prerelease'] == true || item['tag_name'] == 'apk-archive') {
+        continue;
+      }
       chosen = Map<String, dynamic>.from(item);
       break;
     }

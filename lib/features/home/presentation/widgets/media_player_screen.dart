@@ -925,7 +925,9 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                 ),
               ),
             ],
-            const SizedBox(height: 80),
+            // Deja libre la franja inferior donde van los controles para que
+            // no tapen la carátula.
+            const SizedBox(height: 150),
           ],
         ),
       );
@@ -1132,7 +1134,9 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
               ],
             ),
 
-          const Spacer(),
+          // En audio los controles van pegados a la barra de progreso, debajo
+          // de la carátula, en vez de centrados encima de ella.
+          if (item.isAudio) const SizedBox(height: 12) else const Spacer(),
 
           // Barra inferior con progreso y episodios/pistas
           if (initialized)

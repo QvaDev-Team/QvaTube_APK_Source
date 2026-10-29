@@ -138,6 +138,19 @@ abstract final class DeviceChannel {
     }
   }
 
+  /// Ruta del APK instalado (`applicationInfo.sourceDir`), base de los
+  /// parches de actualización diferencial. `null` si no está disponible.
+  static Future<String?> installedApkPath() async {
+    try {
+      final path = await _channel.invokeMethod<String>('getInstalledApkPath');
+      return path == null || path.isEmpty ? null : path;
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
   /// Carpeta de caché de la app (donde se descargan las actualizaciones).
   static Future<String> cacheDirectory() async {
     try {

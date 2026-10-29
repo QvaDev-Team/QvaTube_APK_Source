@@ -13,6 +13,9 @@ final class PlansEndpoints {
   /// POST: Pay a plan with QvaPay (USD)
   final String subscribeQvapay = '/api/plans/subscribe-qvapay';
 
+  /// POST: Pay QvaTube Ultra with mobile balance (Saldo Móvil)
+  final String subscribeMobileBalance = '/api/plans/subscribe-mobile-balance';
+
   /// POST: Upload payment proof photo (CUP)
   final String uploadProof = '/api/plans/upload-proof';
 

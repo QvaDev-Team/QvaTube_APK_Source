@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_flutter/lucide_flutter.dart';
 import 'package:qvatube_apk/core/utils/icon_mapper.dart';
 
 import '../../../../core/config/app_config.dart';
@@ -11,14 +12,42 @@ import '../../../../core/theme/app_text.dart';
 import '../../../../core/widgets/app_logo.dart';
 import '../../../../core/widgets/app_skeleton.dart';
 import '../../../catalog/application/catalog_providers.dart';
+import '../../../catalog/domain/catalog_models.dart';
 import '../widgets/content_detail_sheet.dart';
 import '../widgets/media_card.dart';
 import '../widgets/section_header.dart';
 import '../widgets/suggest_content_sheet.dart';
 
+/// Máximo de tarjetas de "Mis favoritos" en Inicio (igual que la web); la
+/// lista completa vive en Cuenta → Favoritos.
+const int _homeFavoritesMax = 20;
+
 /// Pestaña de Inicio (spec §6.5) conectada a la API de QvaTube.
 class HomeTab extends ConsumerWidget {
   const HomeTab({super.key});
+
+  /// "×" de una tarjeta de "Seguir donde quedaste": borra el progreso
+  /// guardado de ese ítem (`DELETE /api/progress`).
+  Future<void> _removeContinueItem(
+    BuildContext context,
+    WidgetRef ref,
+    CatalogItem item,
+  ) async {
+    final chatId = item.chatId;
+    final msgId = item.msgId;
+    if (chatId == null || msgId == null) return;
+    try {
+      await ref
+          .read(catalogApiProvider)
+          .removeProgress(chatId: chatId, msgId: msgId);
+      ref.invalidate(continueWatchingProvider);
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo quitar. Intenta de nuevo.')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -28,6 +57,7 @@ class HomeTab extends ConsumerWidget {
     final showNewBadges = prefs.getBool(AppConfig.showNewBadgesKey) ?? true;
 
     final continueWatching = ref.watch(continueWatchingProvider);
+    final favorites = ref.watch(favoritesProvider);
     final recommendations = ref.watch(recommendationsProvider);
     final genreRows = ref.watch(homeGenresProvider);
 
@@ -36,6 +66,7 @@ class HomeTab extends ConsumerWidget {
       backgroundColor: AppColors.surface,
       onRefresh: () async {
         ref.invalidate(continueWatchingProvider);
+        ref.invalidate(favoritesProvider);
         ref.invalidate(recommendationsProvider);
         ref.invalidate(homeGenresProvider);
         ref.invalidate(siteStatsProvider);
@@ -57,17 +88,49 @@ class HomeTab extends ConsumerWidget {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SectionTitle(title: 'Seguir donde quedaste'),
+                    const SectionTitle(
+                      title: 'Seguir donde quedaste',
+                      accent: '#FF3D1A',
+                      icon: Icon(LucideIcons.play),
+                    ),
                     MediaCarousel(
                       items: items,
                       showNewBadge: showNewBadges,
                       onTap: (item) => showContentDetailSheet(context, item),
+                      onRemove: (item) =>
+                          _removeContinueItem(context, ref, item),
                     ),
                     const SizedBox(height: 26),
                   ],
                 );
               },
             ),
+          // "Mis favoritos": entre "Seguir donde quedaste" y "Recomendaciones".
+          // Sin sesión (401), sin favoritos o sin red, la fila no aparece.
+          favorites.when(
+            loading: () => const SizedBox.shrink(),
+            error: (error, stack) => const SizedBox.shrink(),
+            data: (items) {
+              if (items.isEmpty) return const SizedBox.shrink();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // El corazón ya lo usan Novelas y la fila de Romance.
+                  const SectionTitle(
+                    title: 'Mis favoritos',
+                    accent: '#FF4D6D',
+                    icon: Icon(LucideIcons.bookmark),
+                  ),
+                  MediaCarousel(
+                    items: items.take(_homeFavoritesMax).toList(),
+                    showNewBadge: showNewBadges,
+                    onTap: (item) => showContentDetailSheet(context, item),
+                  ),
+                  const SizedBox(height: 26),
+                ],
+              );
+            },
+          ),
           recommendations.when(
             loading: () => const Column(
               crossAxisAlignment: CrossAxisAlignment.start,

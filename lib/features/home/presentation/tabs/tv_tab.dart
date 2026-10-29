@@ -584,15 +584,27 @@ class _TvPlayerSheetState extends ConsumerState<_TvPlayerSheet> {
       return;
     }
 
+    // Al recargar la señal se libera el reproductor anterior; si no, seguía
+    // sonando en segundo plano aunque ya no se mostrara.
+    final previous = _videoController;
+    _videoController = null;
     setState(() {
       _loadingHls = true;
       _hlsError = null;
     });
+    await previous?.pause();
+    await previous?.dispose();
 
     try {
       final controller = VideoPlayerController.networkUrl(Uri.parse(url));
       _videoController = controller;
       await controller.initialize();
+      // El overlay pudo cerrarse mientras se conectaba: no arrancar audio
+      // huérfano.
+      if (!mounted || _videoController != controller) {
+        await controller.dispose();
+        return;
+      }
       await controller.play();
       if (!mounted) return;
       setState(() => _loadingHls = false);
@@ -614,7 +626,10 @@ class _TvPlayerSheetState extends ConsumerState<_TvPlayerSheet> {
             contentId: widget.channel.id,
           );
     }
-    _videoController?.dispose();
+    final controller = _videoController;
+    _videoController = null;
+    controller?.pause();
+    controller?.dispose();
     super.dispose();
   }
 

@@ -47,6 +47,8 @@ class CatalogItem {
     this.popularity,
     this.letter,
     this.isNew = false,
+    this.favorited = false,
+    this.watched = false,
     this.kind,
     this.episode,
     this.progressPct,
@@ -73,6 +75,8 @@ class CatalogItem {
       popularity: (json['popularity'] as num?)?.toInt(),
       letter: json['letter']?.toString(),
       isNew: json['is_new'] == true,
+      favorited: json['favorited'] == true,
+      watched: json['watched'] == true,
       kind: json['kind'] as String?,
       episode: json['episode'] as String?,
       progressPct: (json['progress_pct'] as num?)?.toDouble(),
@@ -102,6 +106,10 @@ class CatalogItem {
   /// Letra del índice A-Z (`sort=alpha`), calculada por el backend.
   final String? letter;
   final bool isNew;
+
+  /// Marcado como favorito por el usuario (`/api/movies`, `/api/favorites`).
+  final bool favorited;
+  final bool watched;
   final String? kind;
   final String? episode;
   final double? progressPct;
@@ -112,6 +120,11 @@ class CatalogItem {
   bool get isSeries => groupKind == 'series';
 
   bool get isAlbum => groupKind == 'album';
+
+  /// Películas, series y libros se pueden marcar como favoritos; la música
+  /// queda fuera a propósito (igual que en el backend).
+  bool get canFavorite =>
+      categoryKey != 'music' && (groupKind == null || isSeries);
 
   /// Texto del badge inferior (tamaño o cantidad de episodios).
   String get bottomBadge {
@@ -491,6 +504,35 @@ class PlanUsage {
   final int? bonusDownloads;
   final int? bonusStreams;
   final int? resetInSeconds;
+}
+
+/// Solicitud de pago pendiente de revisión (`pending_request` de
+/// `GET /api/plans/me`).
+class PendingPlanRequest {
+  const PendingPlanRequest({
+    required this.planKey,
+    this.method,
+    this.weeks,
+    this.totalCup,
+  });
+
+  factory PendingPlanRequest.fromJson(Map<String, dynamic> json) {
+    return PendingPlanRequest(
+      planKey: json['plan_key']?.toString() ?? '',
+      method: json['method']?.toString(),
+      weeks: (json['weeks'] as num?)?.toInt(),
+      totalCup: (json['total_cup'] as num?)?.toInt(),
+    );
+  }
+
+  final String planKey;
+
+  /// `transfermovil` (CUP), `qvapay` o `mobile_balance`.
+  final String? method;
+  final int? weeks;
+  final int? totalCup;
+
+  bool get isQvaPay => method == 'qvapay';
 }
 
 /// Notificación del usuario (`GET /api/notifications`).

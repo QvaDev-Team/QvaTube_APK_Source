@@ -186,6 +186,42 @@ class CatalogApi {
     return const [];
   }
 
+  /// POST /api/favorites (archivo puntual) o POST /api/favorites/series
+  /// (serie, anime o novela completa). Devuelve el estado final.
+  Future<bool> setFavorite(CatalogItem item, {required bool favorite}) async {
+    final response = item.isSeries
+        ? await _client.post(
+            Endpoints.favoritesProgress.seriesFavorites,
+            body: <String, dynamic>{
+              'cat': item.categoryKey,
+              'title': item.title,
+              'favorite': favorite,
+            },
+            operation: 'el cambio de favorito',
+          )
+        : await _client.post(
+            Endpoints.favoritesProgress.favorites,
+            body: <String, dynamic>{
+              'chat_id': item.chatId,
+              'msg_id': item.msgId,
+              'favorite': favorite,
+            },
+            operation: 'el cambio de favorito',
+          );
+    final data = _map(response.data);
+    return data['favorite'] is bool ? data['favorite'] as bool : favorite;
+  }
+
+  /// DELETE /api/progress
+  /// Quita un ítem de "Seguir donde quedaste" borrando su progreso guardado.
+  Future<void> removeProgress({required int chatId, required int msgId}) async {
+    await _client.delete(
+      Endpoints.favoritesProgress.progress,
+      body: <String, dynamic>{'chat_id': chatId, 'msg_id': msgId},
+      operation: 'el borrado del progreso',
+    );
+  }
+
   /// GET /api/notifications
   Future<({List<NotificationItem> items, int unread})> notifications() async {
     final response = await _client.get(
@@ -256,6 +292,164 @@ class CatalogApi {
           ? PlanUsage.fromJson(Map<String, dynamic>.from(usage))
           : null,
       hasPendingRequest: data['pending_request'] != null,
+    );
+  }
+
+  /// GET /api/report-reasons
+  /// Motivos de reporte definidos por el backend (`[{key, label}]`).
+  Future<List<({String key, String label})>> reportReasons() async {
+    final response = await _client.get(
+      Endpoints.reportsSuggestions.reportReasons,
+      operation: 'los motivos de reporte',
+    );
+    return [
+      for (final e in _list(response.data))
+        if (e['key'] != null)
+          (key: e['key'].toString(), label: e['label']?.toString() ?? ''),
+    ];
+  }
+
+  /// POST /api/report
+  /// Los grupos (series, álbumes) se reportan por título, sin archivo puntual.
+  Future<void> submitReport({
+    required CatalogItem item,
+    required String reasonKey,
+    String detail = '',
+  }) async {
+    final isGroup = item.groupKind != null && item.groupKind!.isNotEmpty;
+    await _client.post(
+      Endpoints.reportsSuggestions.report,
+      body: <String, dynamic>{
+        'chat_id': isGroup ? null : item.chatId,
+        'msg_id': isGroup ? null : item.msgId,
+        'category_key': item.categoryKey,
+        'title': item.title,
+        'reason_key': reasonKey,
+        'detail': detail,
+      },
+      operation: 'el envío del reporte',
+    );
+  }
+
+  /// GET /api/plans/me con la solicitud de pago pendiente completa.
+  /// Sin sesión (401) devuelve todo `null`.
+  Future<({PlanUsage? usage, PendingPlanRequest? pending})> planStatus() async {
+    try {
+      final response = await _client.get(
+        Endpoints.plans.me,
+        operation: 'el estado de tu suscripción',
+      );
+      final data = _map(response.data);
+      final usage = data['usage'];
+      final pending = data['pending_request'];
+      return (
+        usage: usage is Map
+            ? PlanUsage.fromJson(Map<String, dynamic>.from(usage))
+            : null,
+        pending: pending is Map
+            ? PendingPlanRequest.fromJson(Map<String, dynamic>.from(pending))
+            : null,
+      );
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) return (usage: null, pending: null);
+      rethrow;
+    }
+  }
+
+  /// POST /api/plans/upload-proof (multipart `photo`)
+  /// Pre-sube la captura del pago y devuelve el `upload_token`.
+  Future<String> uploadPlanProof(String photoPath) async {
+    final response = await _client.postForm(
+      Endpoints.plans.uploadProof,
+      formData: FormData.fromMap(<String, dynamic>{
+        'photo': await MultipartFile.fromFile(
+          photoPath,
+          filename: photoPath.split('/').last,
+        ),
+      }),
+      operation: 'la subida de la captura',
+    );
+    final token = _map(response.data)['upload_token']?.toString();
+    if (token == null || token.isEmpty) {
+      throw const ApiException('No se pudo subir la captura');
+    }
+    return token;
+  }
+
+  /// POST /api/plans/subscribe (Transfermóvil en CUP).
+  ///
+  /// Con `uploadToken` confirma una captura ya subida; si la pre-subida
+  /// falló, manda la foto en el mismo POST (`photoPath`), igual que la web.
+  Future<void> subscribePlan({
+    required String planKey,
+    required int weeks,
+    String? uploadToken,
+    String? photoPath,
+  }) async {
+    if (uploadToken != null) {
+      await _client.post(
+        Endpoints.plans.subscribe,
+        body: <String, dynamic>{
+          'plan_key': planKey,
+          'upload_token': uploadToken,
+          'weeks': weeks,
+        },
+        operation: 'el envío del comprobante',
+      );
+      return;
+    }
+    if (photoPath == null) {
+      throw const ApiException('Adjunta la captura del comprobante primero.');
+    }
+    await _client.postForm(
+      Endpoints.plans.subscribe,
+      formData: FormData.fromMap(<String, dynamic>{
+        'plan_key': planKey,
+        'weeks': '$weeks',
+        'photo': await MultipartFile.fromFile(
+          photoPath,
+          filename: photoPath.split('/').last,
+        ),
+      }),
+      operation: 'el envío del comprobante',
+    );
+  }
+
+  /// POST /api/plans/subscribe-mobile-balance (solo plan Ultra).
+  Future<void> subscribeMobileBalance({
+    required String uploadToken,
+    required String senderPhone,
+  }) async {
+    await _client.post(
+      Endpoints.plans.subscribeMobileBalance,
+      body: <String, dynamic>{
+        'plan_key': 'ultra',
+        'upload_token': uploadToken,
+        'sender_phone': senderPhone,
+      },
+      operation: 'la solicitud de saldo móvil',
+    );
+  }
+
+  /// POST /api/plans/subscribe-qvapay → URL de pago de QvaPay.
+  Future<String> subscribeQvaPay(String planKey) async {
+    final response = await _client.post(
+      Endpoints.plans.subscribeQvapay,
+      body: <String, dynamic>{'plan_key': planKey},
+      operation: 'el pago con QvaPay',
+    );
+    final url = _map(response.data)['payment_url']?.toString();
+    if (url == null || url.isEmpty) {
+      throw const ApiException('No se pudo iniciar el pago con QvaPay');
+    }
+    return url;
+  }
+
+  /// POST /api/plans/cancel-pending
+  Future<void> cancelPendingPlan() async {
+    await _client.post(
+      Endpoints.plans.cancelPending,
+      operation: 'la cancelación de la solicitud',
     );
   }
 

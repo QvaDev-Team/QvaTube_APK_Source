@@ -1,5 +1,15 @@
 # Novedades de QvaTube
 
+## 1.2.0
+- Actualizaciones mucho más ligeras: la app descarga solo los cambios respecto a tu versión (unos pocos MB en lugar de los 26 MB completos) y verifica el archivo antes de instalarlo.
+- Planes y suscripción habilitados: paga por Transfermóvil (CUP, con descuento a partir de 4 semanas), QvaPay (USD) o Saldo Móvil (plan Ultra) y sigue el estado de tu pago en vivo.
+- Nueva fila "Mis favoritos" en Inicio y botón para guardar películas, series y libros en favoritos desde su ficha.
+- "Seguir donde quedaste" renovado: con icono propio y una "×" en cada tarjeta para quitarla de la lista.
+- El botón "Reportar" ahora abre el formulario para elegir el motivo y envía el reporte de verdad a los administradores.
+- Al cerrar un canal de TV o radio en vivo, la señal se detiene por completo y ya no sigue sonando de fondo.
+- Reproductor de música: los controles ya no tapan la carátula del álbum.
+- Música: los álbumes vuelven a mostrar todas sus pistas.
+
 ## 1.1.0
 - Nuevo reproductor multimedia integrado para ver películas, series, novelas y anime, escuchar música y leer libros directamente en la aplicación.
 - Reproducción en segundo plano con controles en la barra de notificaciones del teléfono y barra flotante dentro de la aplicación.
