@@ -49,6 +49,34 @@ abstract final class DeviceChannel {
     }
   }
 
+  /// Abre un PDF con el `PdfRenderer` de Android y devuelve el tamaño
+  /// (ancho, alto en puntos) de cada página.
+  static Future<List<Size>> pdfOpen(String path) async {
+    final pages = await _channel.invokeListMethod<dynamic>('pdfOpen', {
+      'path': path,
+    });
+    return [
+      for (final p in pages ?? const [])
+        Size((p[0] as num).toDouble(), (p[1] as num).toDouble()),
+    ];
+  }
+
+  /// Dibuja una página del PDF abierto con [pdfOpen] (PNG de [width] px).
+  static Future<Uint8List?> pdfRenderPage(int index, int width) {
+    return _channel.invokeMethod<Uint8List>('pdfRenderPage', {
+      'index': index,
+      'width': width,
+    });
+  }
+
+  static Future<void> pdfClose() async {
+    try {
+      await _channel.invokeMethod<bool>('pdfClose');
+    } on PlatformException {
+      // ignorar
+    }
+  }
+
   /// Programa en Android la comprobación periódica de actualizaciones en
   /// segundo plano (WorkManager), que avisa con una notificación.
   static Future<void> scheduleUpdateCheck(String manifestUrl) async {

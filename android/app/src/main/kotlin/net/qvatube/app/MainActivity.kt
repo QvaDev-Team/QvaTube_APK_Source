@@ -53,6 +53,7 @@ class MainActivity : FlutterActivity() {
     private val notificationPermissionRequestCode = 4323
 
     private var methodChannel: MethodChannel? = null
+    private val pdfExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private var pendingResult: MethodChannel.Result? = null
 
     // Estado para reanudar automáticamente la instalación del APK tras conceder permisos.
@@ -100,6 +101,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        pdfExecutor.execute { PdfPages.close() }
         clearMediaNotification()
         unregisterMediaReceiver()
         super.onDestroy()
@@ -166,6 +168,38 @@ class MainActivity : FlutterActivity() {
                 // APK instalado (base.apk): punto de partida de los parches
                 // diferenciales. Se puede leer sin permisos especiales.
                 "getInstalledApkPath" -> result.success(applicationInfo.sourceDir)
+                // Lector de PDF: Android ya trae PdfRenderer, sin librerías extra.
+                "pdfOpen" -> {
+                    val path = call.argument<String>("path")
+                    if (path.isNullOrBlank()) {
+                        result.error("bad_args", "Ruta vacía", null)
+                    } else {
+                        pdfExecutor.execute {
+                            try {
+                                val sizes = PdfPages.open(path)
+                                runOnUiThread { result.success(sizes) }
+                            } catch (e: Exception) {
+                                runOnUiThread { result.error("pdf", e.message, null) }
+                            }
+                        }
+                    }
+                }
+                "pdfRenderPage" -> {
+                    val index = call.argument<Int>("index") ?: 0
+                    val width = call.argument<Int>("width") ?: 1080
+                    pdfExecutor.execute {
+                        try {
+                            val png = PdfPages.render(index, width)
+                            runOnUiThread { result.success(png) }
+                        } catch (e: Exception) {
+                            runOnUiThread { result.error("pdf", e.message, null) }
+                        }
+                    }
+                }
+                "pdfClose" -> {
+                    pdfExecutor.execute { PdfPages.close() }
+                    result.success(true)
+                }
                 "scheduleUpdateCheck" -> {
                     val url = call.argument<String>("manifestUrl")
                     if (url.isNullOrBlank()) {
@@ -702,5 +736,52 @@ private class EmbeddedWebViewPlatformView(
         (webView.parent as? ViewGroup)?.removeView(webView)
         webView.removeAllViews()
         webView.destroy()
+    }
+}
+
+/**
+ * PDF abierto en el lector (uno a la vez). Se usa siempre desde el mismo
+ * hilo (`pdfExecutor`), porque PdfRenderer no admite accesos concurrentes.
+ */
+private object PdfPages {
+    private var fd: android.os.ParcelFileDescriptor? = null
+    private var renderer: android.graphics.pdf.PdfRenderer? = null
+
+    /** Abre el PDF y devuelve el tamaño (en puntos) de cada página. */
+    fun open(path: String): List<List<Int>> {
+        close()
+        val descriptor = android.os.ParcelFileDescriptor.open(
+            File(path),
+            android.os.ParcelFileDescriptor.MODE_READ_ONLY
+        )
+        val pdf = android.graphics.pdf.PdfRenderer(descriptor)
+        fd = descriptor
+        renderer = pdf
+        return (0 until pdf.pageCount).map { i ->
+            pdf.openPage(i).use { listOf(it.width, it.height) }
+        }
+    }
+
+    /** Dibuja la página [index] a [width] píxeles de ancho y la devuelve en PNG. */
+    fun render(index: Int, width: Int): ByteArray {
+        val pdf = renderer ?: throw IllegalStateException("PDF cerrado")
+        pdf.openPage(index).use { page ->
+            val w = width.coerceIn(200, 2400)
+            val h = (w.toFloat() * page.height / page.width).toInt().coerceAtLeast(1)
+            val bitmap = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+            bitmap.eraseColor(Color.WHITE)
+            page.render(bitmap, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            val out = java.io.ByteArrayOutputStream()
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+            bitmap.recycle()
+            return out.toByteArray()
+        }
+    }
+
+    fun close() {
+        try { renderer?.close() } catch (_: Exception) {}
+        try { fd?.close() } catch (_: Exception) {}
+        renderer = null
+        fd = null
     }
 }

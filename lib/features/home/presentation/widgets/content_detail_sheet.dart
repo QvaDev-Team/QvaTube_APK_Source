@@ -9,6 +9,7 @@ import '../../../../core/theme/app_text.dart';
 import '../../../../core/widgets/app_cached_image.dart';
 import '../../../catalog/application/catalog_providers.dart';
 import '../../../catalog/domain/catalog_models.dart';
+import '../../../reader/book_reader_screen.dart';
 import 'media_player_screen.dart';
 import 'report_content_dialog.dart';
 
@@ -312,6 +313,18 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
           ),
         ),
       );
+      return;
+    }
+
+    if (_isBook) {
+      await openBookReader(
+        context,
+        chatId: chatId,
+        msgId: msgId,
+        title: widget.item.title ?? _info?.title ?? 'Libro',
+        initialPositionSeconds: isFront ? widget.item.positionSeconds : null,
+      );
+      if (mounted) ref.invalidate(continueWatchingProvider);
       return;
     }
 
