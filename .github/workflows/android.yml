@@ -5,7 +5,7 @@ name: Android CI
 # Compila el APK de release **solo arm64**, minificado con R8 y ofuscado con
 # --obfuscate para que ocupe lo mínimo (26 MB).
 # Deja el APK en la release rodante "latest" del repositorio público:
-#       https://github.com/R0ger0l1va/qvatube_apk/releases/download/latest/qvatube.apk
+#       https://github.com/QvaDev-Team/QvaTube_APK/releases/download/latest/qvatube.apk
 #
 # El AAB para Google Play se compila aparte, solo al crear un tag (publish-play.yml).
 # Así este workflow no gasta tiempo ni disco compilando dos veces.
@@ -42,7 +42,7 @@ jobs:
       # opcional KEYSTORE_FILE; por defecto qvatube-release.jks).
       KEYSTORE_FILE: ${{ vars.KEYSTORE_FILE || 'qvatube-release.jks' }}
       # Repo público donde se publican las releases descargables.
-      DIST_REPO: R0ger0l1va/qvatube_apk
+      DIST_REPO: QvaDev-Team/QvaTube_APK
 
     steps:
       - name: Clonar el repositorio
@@ -265,9 +265,18 @@ jobs:
           VERSION_NAME=$(jq -r '.version_name' latest.json)
           FRIENDLY_NOTES=$(jq -r '.notes' latest.json)
 
+          # 0) Comprueba antes de borrar nada que el token puede escribir en
+          #    el repo público (si se transfiere o renombra el repo, o el
+          #    token no cubre a su nuevo dueño, la API responde 404).
+          if ! gh api "repos/$DIST_REPO" --jq '.permissions.push' | grep -qx true; then
+            echo "::error::DIST_REPO_TOKEN no tiene permiso de escritura en $DIST_REPO (¿repo transferido o token sin acceso a la organización?)"
+            exit 1
+          fi
+
           # 1) Borra la release y el tag anteriores del repo público.
-          for id in $(gh api "repos/$DIST_REPO/releases?per_page=100" \
-                        --jq ".[] | select(.tag_name == \"$TAG\") | .id"); do
+          RELEASE_IDS=$(gh api "repos/$DIST_REPO/releases?per_page=100" \
+                          --jq ".[] | select(.tag_name == \"$TAG\") | .id")
+          for id in $RELEASE_IDS; do
             echo ">> Eliminando la release anterior (id=$id)"
             gh api -X DELETE "repos/$DIST_REPO/releases/$id"
           done

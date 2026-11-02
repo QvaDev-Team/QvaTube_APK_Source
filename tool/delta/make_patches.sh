@@ -11,7 +11,7 @@
 #   MAX_RATIO      descarta parches que pesen más que este % del APK (por defecto 80)
 #   SOURCES_DIR    carpeta con APKs viejos `qvatube-<code>.apk`. Si no se da,
 #                  se descargan de GitHub (necesita DIST_REPO y GH_TOKEN).
-#   DIST_REPO      repo público de distribución (ej. R0ger0l1va/qvatube_apk)
+#   DIST_REPO      repo público de distribución (ej. QvaDev-Team/QvaTube_APK)
 #   ARCHIVE_TAG    release donde se archivan los APKs viejos (por defecto apk-archive)
 #   BSDIFF         comando bsdiff (por defecto `bsdiff`; uso: bsdiff old new patch)
 #
@@ -40,9 +40,12 @@ if [ -z "${SOURCES_DIR:-}" ]; then
   SOURCES_DIR="$(mktemp -d)"
 
   # APKs archivados en la release $ARCHIVE_TAG (qvatube-<code>.apk).
-  gh release view "$ARCHIVE_TAG" --repo "$DIST_REPO" --json assets \
-      --jq '.assets[].name' 2>/dev/null \
-    | grep -E '^qvatube-[0-9]+\.apk$' \
+  # Si el archivo no existe o no se puede leer, se sigue sin él (con
+  # pipefail, un grep sin resultados abortaría todo el script).
+  archived="$(gh release view "$ARCHIVE_TAG" --repo "$DIST_REPO" --json assets \
+      --jq '.assets[].name' 2>/dev/null || true)"
+  printf '%s\n' "$archived" \
+    | { grep -E '^qvatube-[0-9]+\.apk$' || true; } \
     | sed -E 's/^qvatube-([0-9]+)\.apk$/\1/' \
     | awk -v new="$NEW_CODE" '$1 < new' \
     | sort -rn | head -n "$MAX_SOURCES" \

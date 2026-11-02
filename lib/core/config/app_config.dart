@@ -34,7 +34,7 @@ abstract final class AppConfig {
   /// `--dart-define=UPDATE_MANIFEST_URL=https://tu-servidor/latest.json`.
   static const String updateManifestUrl = String.fromEnvironment(
     'UPDATE_MANIFEST_URL',
-    defaultValue: 'https://github.com/R0ger0l1va/qvatube_apk/releases/download/latest/latest.json',
+    defaultValue: 'https://github.com/QvaDev-Team/QvaTube_APK/releases/download/latest/latest.json',
   );
 
   /// URL directa del APK de la última versión.
@@ -43,14 +43,14 @@ abstract final class AppConfig {
   /// su `versionCode` para saber si hay algo nuevo.
   static const String updateApkUrl = String.fromEnvironment(
     'UPDATE_APK_URL',
-    defaultValue: 'https://github.com/R0ger0l1va/qvatube_apk/releases/download/latest/qvatube.apk',
+    defaultValue: 'https://github.com/QvaDev-Team/QvaTube_APK/releases/download/latest/qvatube.apk',
   );
 
   /// API de GitHub Releases del repositorio de distribución.
   static const String updateReleasesApiUrl = String.fromEnvironment(
     'UPDATE_RELEASES_API_URL',
     defaultValue:
-        'https://api.github.com/repos/R0ger0l1va/qvatube_apk/releases',
+        'https://api.github.com/repos/QvaDev-Team/QvaTube_APK/releases',
   );
 
   /// Comunidad de Telegram (canal público, no el bot de subidas).

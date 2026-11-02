@@ -6,15 +6,15 @@
 
 **Streaming cubano — películas, series, novelas, anime, música y libros en un solo lugar, hecho para Cuba.**
 
-[![Build](https://github.com/R0ger0l1va/qvatube_apk/actions/workflows/android.yml/badge.svg)](https://github.com/R0ger0l1va/qvatube_apk/actions/workflows/android.yml)
-[![Release](https://img.shields.io/badge/release-Apk%20%E2%9%93%20latest-blue)](https://github.com/R0ger0l1va/qvatube_apk/releases/latest)
+[![Build](https://github.com/QvaDev-Team/QvaTube_APK/actions/workflows/android.yml/badge.svg)](https://github.com/QvaDev-Team/QvaTube_APK/actions/workflows/android.yml)
+[![Release](https://img.shields.io/badge/release-Apk%20%E2%9%93%20latest-blue)](https://github.com/QvaDev-Team/QvaTube_APK/releases/latest)
 [![Flutter](https://img.shields.io/badge/Flutter-3.47-02569A?logo=flutter&logoColor=white)](https://docs.flutter.dev)
 [![Android](https://img.shields.io/badge/Android-7.0%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
 ![API](https://img.shields.io/badge/API-QvaTube%20v1-FF3D1A)
 [![License](https://img.shields.io/badge/license-MIT-6B6B70)](LICENSE)
 
-[**⬇ Descargar la APK**](https://github.com/R0ger0l1va/qvatube_apk/releases/latest/download/qvatube.apk) ·
-[**⬇ Todas las versiones**](https://github.com/R0ger0l1va/qvatube_apk/releases)
+[**⬇ Descargar la APK**](https://github.com/QvaDev-Team/QvaTube_APK/releases/latest/download/qvatube.apk) ·
+[**⬇ Todas las versiones**](https://github.com/QvaDev-Team/QvaTube_APK/releases)
 
 </div>
 
@@ -97,7 +97,7 @@ release con el APK firmado. El enlace **siempre** apunta a la última versión:
 ### Opción 1 — desde el navegador (la más fácil)
 
 1. Abre la sección **Releases** del repositorio:
-   👉 https://github.com/R0ger0l1va/qvatube_apk/releases
+   👉 https://github.com/QvaDev-Team/QvaTube_APK/releases
 2. En **"QvaTube (última versión)"** descarga el archivo **`qvatube.apk`** (~26 MB).
    - Es el APK de release **solo arm64-v8a** (Android 7+ de 64 bits, el 99 % de
      los teléfonos activos), minificado con R8 y con el código de Dart ofuscado.
@@ -111,7 +111,7 @@ release con el APK firmado. El enlace **siempre** apunta a la última versión:
 Copia y pega este enlace; siempre descarga la última versión publicada:
 
 ```
-https://github.com/R0ger0l1va/qvatube_apk/releases/latest/download/qvatube.apk
+https://github.com/QvaDev-Team/QvaTube_APK/releases/latest/download/qvatube.apk
 ```
 
 Puedes ponerlo en la web, en un grupo de Telegram o en el botón **"Descargar APK"** de la
@@ -127,7 +127,7 @@ propia app.
 ```bash
 # Bajar el APK universal a tu ordenador
 curl -L -o qvatube.apk \
-  https://github.com/R0ger0l1va/qvatube_apk/releases/latest/download/qvatube.apk
+  https://github.com/QvaDev-Team/QvaTube_APK/releases/latest/download/qvatube.apk
 
 # Instalarlo en un teléfono conectado por USB
 adb install -r qvatube.apk
@@ -136,7 +136,7 @@ adb install -r qvatube.apk
 ### Opción 4 — compilarlo tú mismo
 
 ```bash
-git clone https://github.com/R0ger0l1va/qvatube_apk.git
+git clone https://github.com/QvaDev-Team/QvaTube_APK.git
 cd qvatube_apk
 flutter pub get
 flutter run                     # en un dispositivo o emulador

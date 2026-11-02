@@ -757,7 +757,7 @@ Future<void> showAppVersionDialog(
           onPressed: () {
             Navigator.of(context).pop();
             DeviceChannel.openUrl(
-              'https://github.com/R0ger0l1va/qvatube_apk/releases/latest',
+              'https://github.com/QvaDev-Team/QvaTube_APK/releases/latest',
             );
           },
           child: Text(justUpdated ? 'Ver novedades' : 'Ver releases'),
