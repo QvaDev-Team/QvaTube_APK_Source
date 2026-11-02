@@ -784,6 +784,24 @@ class CatalogApi {
     }
   }
 
+  /// POST /api/watched — toggle manual de "visto" (a diferencia de
+  /// [markWatched], propaga el error para revertir la interfaz).
+  Future<void> setWatched({
+    required int chatId,
+    required int msgId,
+    required bool watched,
+  }) async {
+    await _client.post(
+      Endpoints.favoritesProgress.watched,
+      body: <String, dynamic>{
+        'chat_id': chatId,
+        'msg_id': msgId,
+        'watched': watched,
+      },
+      operation: 'el marcado como visto',
+    );
+  }
+
   /// GET /api/category-tracks
   /// Obtiene todas las pistas musicales de una categoría (todos los álbumes).
   Future<List<Map<String, dynamic>>> categoryTracks({

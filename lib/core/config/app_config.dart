@@ -53,6 +53,9 @@ abstract final class AppConfig {
         'https://api.github.com/repos/R0ger0l1va/qvatube_apk/releases',
   );
 
+  /// Comunidad de Telegram (canal público, no el bot de subidas).
+  static const String telegramCommunityUrl = 'https://t.me/qvatube';
+
   /// Clave de la preferencia con el tema (temporada) activo.
   static const String themeIdKey = 'qvatube.theme_id';
 

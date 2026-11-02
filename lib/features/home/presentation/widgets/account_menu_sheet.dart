@@ -5,9 +5,13 @@ import 'package:go_router/go_router.dart';
 import 'package:qvatube_apk/features/catalog/application/catalog_providers.dart';
 import 'package:qvatube_apk/features/home/presentation/widgets/badge_count.dart';
 
+import '../../../../core/config/app_config.dart';
+import '../../../../core/platform/device_channel.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
+import '../../../../core/widgets/app_cached_image.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
+import '../../../catalog/domain/catalog_models.dart';
 
 /// Menú de cuenta que se despliega al pulsar el avatar (spec §6.1).
 Future<void> showAccountMenuSheet(BuildContext context, WidgetRef ref) {
@@ -31,6 +35,18 @@ class _AccountMenuSheet extends ConsumerWidget {
     final authState = ref.watch(authControllerProvider);
     final user = authState.user;
 
+    final avatarUrl = absoluteMediaUrl(user?.avatarUrl);
+    final initials = Center(
+      child: Text(
+        user?.initials ?? 'Q',
+        style: AppTextStyles.body(
+          fontSize: 15,
+          fontWeight: FontWeight.w800,
+          color: AppColors.accentInk,
+        ),
+      ),
+    );
+
     final unreadNotifications = authState.isAuthenticated
         ? ref.watch(notificationsProvider).value?.unread ?? 0
         : 0;
@@ -53,22 +69,23 @@ class _AccountMenuSheet extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
             child: Row(
               children: [
+                // Antes solo pintaba las iniciales aunque hubiera foto.
                 Container(
                   width: 44,
                   height: 44,
-                  alignment: Alignment.center,
+                  clipBehavior: Clip.antiAlias,
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: AppColors.accentGradient,
                   ),
-                  child: Text(
-                    user?.initials ?? 'Q',
-                    style: AppTextStyles.body(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.accentInk,
-                    ),
-                  ),
+                  child: avatarUrl.isNotEmpty
+                      ? AppCachedImage(
+                          imageUrl: avatarUrl,
+                          fit: BoxFit.cover,
+                          placeholder: initials,
+                          errorWidget: initials,
+                        )
+                      : initials,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -165,6 +182,15 @@ class _AccountMenuSheet extends ConsumerWidget {
                   label: 'Comunidad de WhatsApp',
                   accent: AppColors.whatsapp,
                   onTap: () => _go(context, '/cuenta/comunidad'),
+                ),
+                _MenuTile(
+                  icon: Icons.send,
+                  label: 'Comunidad de Telegram',
+                  accent: AppColors.telegram,
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    DeviceChannel.openUrl(AppConfig.telegramCommunityUrl);
+                  },
                 ),
                 const Divider(height: 1),
                 _MenuTile(

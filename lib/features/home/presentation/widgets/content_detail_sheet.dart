@@ -116,6 +116,33 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
     }
   }
 
+  /// Check de "visto" de un episodio (`POST /api/watched`). Se marca al
+  /// instante y se revierte si el servidor falla.
+  Future<void> _toggleEpisodeWatched(Map<String, dynamic> ep) async {
+    final chatId = (ep['chat_id'] as num?)?.toInt();
+    final msgId = (ep['msg_id'] as num?)?.toInt();
+    if (chatId == null || msgId == null) return;
+    final next = ep['watched'] != true;
+    setState(() => ep['watched'] = next);
+    try {
+      await ref
+          .read(catalogApiProvider)
+          .setWatched(chatId: chatId, msgId: msgId, watched: next);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => ep['watched'] = !next);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is ApiException && error.statusCode == 401
+                ? 'Inicia sesión para marcar episodios como vistos.'
+                : 'No se pudo actualizar. Intenta de nuevo.',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _fetchInfo() async {
     final title = _title;
     final type = widget.item.tmdbType;
@@ -1190,6 +1217,7 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                   itemBuilder: (context, index) {
                     final ep = _seasonEpisodes[index];
                     final size = formatFileSize((ep['size'] as num?)?.toInt());
+                    final watched = ep['watched'] == true;
 
                     return InkWell(
                       onTap: () => _handlePlayEpisode(index),
@@ -1197,12 +1225,28 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         child: Row(
                           children: [
-                            const Icon(
-                              Icons.check_circle_outline,
-                              size: 16,
-                              color: Colors.white30,
+                            InkResponse(
+                              onTap: () => _toggleEpisodeWatched(ep),
+                              radius: 18,
+                              child: Tooltip(
+                                message: watched
+                                    ? 'Marcar como no visto'
+                                    : 'Marcar como visto',
+                                child: Padding(
+                                  padding: const EdgeInsets.all(4),
+                                  child: Icon(
+                                    watched
+                                        ? Icons.check_circle
+                                        : Icons.check_circle_outline,
+                                    size: 18,
+                                    color: watched
+                                        ? AppColors.success
+                                        : Colors.white30,
+                                  ),
+                                ),
+                              ),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,

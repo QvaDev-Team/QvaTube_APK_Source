@@ -1,12 +1,13 @@
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_flutter/lucide_flutter.dart';
 import 'package:qvatube_apk/core/utils/icon_mapper.dart';
 
 import '../../../../core/config/app_config.dart';
 import '../../../../core/storage/app_preferences.dart';
-import '../../../../core/platform/device_channel.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
 import '../../../../core/widgets/app_logo.dart';
@@ -16,7 +17,6 @@ import '../../../catalog/domain/catalog_models.dart';
 import '../widgets/content_detail_sheet.dart';
 import '../widgets/media_card.dart';
 import '../widgets/section_header.dart';
-import '../widgets/suggest_content_sheet.dart';
 
 /// Máximo de tarjetas de "Mis favoritos" en Inicio (igual que la web); la
 /// lista completa vive en Cuenta → Favoritos.
@@ -209,88 +209,131 @@ class HomeTab extends ConsumerWidget {
               );
             },
           ),
-          
         ],
       ),
     );
   }
 }
 
-class _Hero extends ConsumerWidget {
+class _Hero extends StatelessWidget {
   const _Hero();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return Column(
       children: [
         const AppLogo(height: 64),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Text(
-          'Streaming cubano — películas, series, novelas, anime, música y libros.',
+          'TODO EL ENTRETENIMIENTO, EN UN SOLO LUGAR.',
           textAlign: TextAlign.center,
-          style: AppTextStyles.display(
-            fontSize: 17,
-            color: AppColors.textSecondary,
-          ),
+          style: AppTextStyles.display(fontSize: 20, letterSpacing: 0.4),
         ),
+        const SizedBox(height: 8),
+        const _RotatingTagline(),
         const SizedBox(height: 20),
         SizedBox(
           width: double.infinity,
           child: _ActionButton(
-            label: 'Sugerir contenido',
-            icon: Icons.auto_awesome,
+            label: 'Planes y Precios',
+            icon: LucideIcons.crown,
             color: AppColors.accent,
             foreground: AppColors.accentInk,
-            onTap: () => showSuggestContentSheet(context, ref),
+            onTap: () => context.push('/cuenta/plan'),
           ),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _ActionButton(
-                label: 'Súbelo tú mismo',
-                icon: Icons.send,
-                color: AppColors.telegram,
-                foreground: Colors.white,
-                onTap: () => _openTelegram(context, ref),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _ActionButton(
-                label: 'Comunidad',
-                icon: Icons.chat_bubble_outline,
-                color: AppColors.whatsapp,
-                foreground: Colors.white,
-                onTap: () => _openCommunity(context, ref),
-              ),
-            ),
-          ],
         ),
       ],
     );
   }
+}
 
-  Future<void> _openTelegram(BuildContext context, WidgetRef ref) async {
-    final config = await ref.read(siteConfigProvider.future);
-    final bot = config.botUsername ?? 'qvatube_bot';
-    await DeviceChannel.openUrl('https://t.me/$bot');
+/// "Disfruta de [CATEGORÍA] y mucho más…", con la categoría rotando en el
+/// color de acento y un pequeño glow.
+class _RotatingTagline extends StatefulWidget {
+  const _RotatingTagline();
+
+  @override
+  State<_RotatingTagline> createState() => _RotatingTaglineState();
+}
+
+class _RotatingTaglineState extends State<_RotatingTagline> {
+  static const _categories = [
+    'Música',
+    'Series',
+    'Anime',
+    'Libros',
+    'Películas',
+    'Televisión',
+  ];
+
+  int _index = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 2200), (_) {
+      setState(() => _index = (_index + 1) % _categories.length);
+    });
   }
 
-  Future<void> _openCommunity(BuildContext context, WidgetRef ref) async {
-    final config = await ref.read(siteConfigProvider.future);
-    final url = config.whatsappUrl;
-    if (url == null || url.isEmpty) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No hay un enlace de comunidad configurado.'),
-        ),
-      );
-      return;
-    }
-    await DeviceChannel.openUrl(url);
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final base = AppTextStyles.body(
+      fontSize: 13.5,
+      color: AppColors.textSecondary,
+      height: 1.5,
+    );
+    final highlight = base.copyWith(
+      color: AppColors.accent,
+      fontWeight: FontWeight.w800,
+      shadows: [
+        Shadow(color: AppColors.accent.withValues(alpha: 0.75), blurRadius: 12),
+      ],
+    );
+
+    return Text.rich(
+      TextSpan(
+        style: base,
+        children: [
+          const TextSpan(text: 'Disfruta de '),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 350),
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.4),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                ),
+              ),
+              child: Text(
+                _categories[_index],
+                key: ValueKey(_index),
+                style: highlight,
+              ),
+            ),
+          ),
+          const TextSpan(
+            text:
+                ' y mucho más en línea o descárgalo para llevarlo contigo sin '
+                'conexión, con contenido nuevo todos los días.',
+          ),
+        ],
+      ),
+      textAlign: TextAlign.center,
+    );
   }
 }
 

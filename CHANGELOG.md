@@ -1,5 +1,13 @@
 # Novedades de QvaTube
 
+## 1.2.1
+- Inicio renovado: nuevo mensaje de bienvenida con las categorías destacadas y acceso directo a "Planes y Precios".
+- Las comunidades de WhatsApp y Telegram ahora están en el menú de tu cuenta, y el enlace de Telegram lleva al canal oficial de la comunidad.
+- El menú de tu cuenta ya muestra tu foto de perfil.
+- Ya puedes marcar episodios como vistos desde la lista de episodios.
+- Popular: se quitó un recuadro vacío que no hacía nada.
+- Índice alfabético lateral en todas las secciones al ordenar de la A a la Z.
+
 ## 1.2.0
 - Actualizaciones mucho más ligeras: la app descarga solo los cambios respecto a tu versión (unos pocos MB en lugar de los 26 MB completos) y verifica el archivo antes de instalarlo.
 - Planes y suscripción habilitados: paga por Transfermóvil (CUP, con descuento a partir de 4 semanas), QvaPay (USD) o Saldo Móvil (plan Ultra) y sigue el estado de tu pago en vivo.
