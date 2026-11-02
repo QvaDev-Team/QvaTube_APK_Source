@@ -2,8 +2,9 @@ name: Android CI
 
 # Se ejecuta en cada push a main, en cada PR y a mano.
 #
-# Compila el APK de release **solo arm64**, minificado con R8 y ofuscado con
-# --obfuscate para que ocupe lo mínimo (26 MB).
+# Compila UN solo APK de release para arm64-v8a y armeabi-v7a (los Android
+# de 32 bits, p. ej. Redmi 9A/9C, también lo instalan), minificado con R8 y
+# ofuscado con --obfuscate.
 # Deja el APK en la release rodante "latest" del repositorio público:
 #       https://github.com/QvaDev-Team/QvaTube_APK/releases/download/latest/qvatube.apk
 #
@@ -108,15 +109,20 @@ jobs:
         run: flutter test
 
       # ---------------------------------------------------------------------
-      # APK de distribución directa: SOLO arm64-v8a, con R8
-      #    (isMinifyEnabled + isShrinkResources) y ofuscación de Dart.
-      #    26 MB en vez de los 66 MB del APK universal.
-      #    --split-per-abi es lo que hace que las librerías nativas de los
-      #    plugins também se filtren (native-code: arm64-v8a únicamente).
+      # APK de distribución directa: un único archivo con arm64-v8a y
+      #    armeabi-v7a (sin x86), con R8 (isMinifyEnabled + isShrinkResources)
+      #    y ofuscación de Dart. Las librerías nativas van sin comprimir
+      #    (empaquetado por defecto): el APK pesa más, pero los parches
+      #    diferenciales de cada actualización quedan en KB en vez de MB.
+      #
+      #    versionCode = 2000 + número de build: los APK anteriores eran
+      #    --split-per-abi de arm64 (2000 + N) y Android no deja instalar
+      #    encima un versionCode menor. La app y el manifiesto siguen usando
+      #    N (normalizeVersionCode quita el 2000). Vale mientras N < 1000.
       #    Los símbolos se suben como artefacto del workflow (no a la release
       #    pública) para poder symbolicar los crash.
       # ---------------------------------------------------------------------
-      - name: APK de release ARM64 (minificado y ofuscado)
+      - name: APK de release ARM64 + ARMv7 (minificado y ofuscado)
         run: |
           set -euo pipefail
           VERSION_LINE=$(grep -E "^version:" pubspec.yaml | head -1)
@@ -131,10 +137,9 @@ jobs:
           echo "Compilando v$VERSION_NAME+$BUILD_NUMBER"
           echo "VERSION_CODE=$BUILD_NUMBER" >> "$GITHUB_ENV"
           flutter build apk --release \
-            --split-per-abi \
-            --target-platform android-arm64 \
+            --target-platform android-arm,android-arm64 \
             --build-name="$VERSION_NAME" \
-            --build-number="$BUILD_NUMBER" \
+            --build-number="$((2000 + BUILD_NUMBER))" \
             --obfuscate \
             --split-debug-info=build/symbols
 
@@ -142,7 +147,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/symbols
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk dist/qvatube.apk
+          cp build/app/outputs/flutter-apk/app-release.apk dist/qvatube.apk
           cp build/symbols/* dist/symbols/ 2>/dev/null || true
           ls -la dist
           df -h / | tail -1

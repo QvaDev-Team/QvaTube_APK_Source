@@ -75,6 +75,15 @@ android {
     }
 }
 
+// Release: solo ARM (64 y 32 bits). Flutter no compila x86 en el APK, pero
+// algún plugin trae su .so x86_64 y en esos equipos Android elegiría esa ABI
+// sin libflutter.so. Debug no se filtra (para el emulador).
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        variant.packaging.jniLibs.excludes.addAll(listOf("lib/x86/**", "lib/x86_64/**"))
+    }
+}
+
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17

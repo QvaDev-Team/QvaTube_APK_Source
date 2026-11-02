@@ -1,6 +1,8 @@
 # Novedades de QvaTube
 
 ## 1.2.2
+- La app ya se puede instalar en teléfonos con Android de 32 bits (como el Redmi 9A y 9C), con el mismo archivo de siempre.
+- Se eliminaron componentes que la app no usaba.
 - Lector de libros integrado: el botón "Leer" abre los EPUB y PDF dentro de la app, con índice, tamaño de letra, temas oscuro/sepia/claro y continúa donde lo dejaste.
 - Aviso de nuevas versiones con una notificación en el teléfono, aunque la app esté cerrada.
 - Películas y libros con varios archivos del mismo nombre se muestran en una sola tarjeta con la etiqueta "N archivos"; desde su ficha, "Ver más archivos con el mismo nombre" permite reproducir o descargar cualquiera de ellos.
