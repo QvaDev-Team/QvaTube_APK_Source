@@ -89,6 +89,16 @@ class MainActivity : FlutterActivity() {
         registerMediaReceiver()
     }
 
+    // App ya abierta y el usuario toca la notificación de actualización:
+    // Flutter vuelve a comprobar para enseñar el banner.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra(UpdateCheckWorker.EXTRA_OPEN_UPDATE, false)) {
+            UpdateCheckWorker.cancelNotification(this)
+            methodChannel?.invokeMethod("onUpdateNotificationTap", null)
+        }
+    }
+
     override fun onDestroy() {
         clearMediaNotification()
         unregisterMediaReceiver()
@@ -156,6 +166,18 @@ class MainActivity : FlutterActivity() {
                 // APK instalado (base.apk): punto de partida de los parches
                 // diferenciales. Se puede leer sin permisos especiales.
                 "getInstalledApkPath" -> result.success(applicationInfo.sourceDir)
+                "scheduleUpdateCheck" -> {
+                    val url = call.argument<String>("manifestUrl")
+                    if (url.isNullOrBlank()) {
+                        result.error("bad_args", "URL vacía", null)
+                    } else {
+                        UpdateCheckWorker.schedule(applicationContext, url)
+                        // Al abrir la app el banner ya avisa: fuera la notificación.
+                        UpdateCheckWorker.cancelNotification(this)
+                        requestNotificationPermissionOnce()
+                        result.success(true)
+                    }
+                }
                 "cacheDirectory" -> result.success(filesDir.absolutePath)
                 "installApk" -> {
                     val path = call.argument<String>("path")
@@ -325,6 +347,24 @@ class MainActivity : FlutterActivity() {
         } catch (_: Exception) {
         }
         mediaReceiverRegistered = false
+    }
+
+    /**
+     * Android 13+: pide permiso de notificaciones la primera vez (para el
+     * aviso de actualizaciones). Si lo deniega no se vuelve a insistir aquí.
+     */
+    private fun requestNotificationPermissionOnce() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) return
+        val prefs = getSharedPreferences("qvatube_update_check", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("asked_notification_permission", false)) return
+        prefs.edit().putBoolean("asked_notification_permission", true).apply()
+        requestPermissions(
+            arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+            notificationPermissionRequestCode
+        )
     }
 
     private fun ensureMediaChannel(nm: NotificationManager) {

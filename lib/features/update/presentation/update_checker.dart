@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/platform/device_channel.dart';
 import '../../../core/router/router.dart';
 import '../../../core/theme/app_colors.dart';
@@ -52,6 +53,11 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
     _instance = this;
     if (widget.checkOnStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _check(silent: true));
+      // Aviso en segundo plano (notificación) aunque la app esté cerrada.
+      DeviceChannel.scheduleUpdateCheck(AppConfig.updateManifestUrl);
+      DeviceChannel.setUpdateNotificationTapListener(
+        () => _check(silent: true),
+      );
     }
   }
 
@@ -59,6 +65,9 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
   void dispose() {
     if (_instance == this) {
       _instance = null;
+    }
+    if (widget.checkOnStart) {
+      DeviceChannel.setUpdateNotificationTapListener(null);
     }
     super.dispose();
   }

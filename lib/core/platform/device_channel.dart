@@ -13,6 +13,7 @@ abstract final class DeviceChannel {
   static const MethodChannel _channel = MethodChannel('qvatube/device');
   static bool _handlerInitialized = false;
   static void Function(String action, int? positionMs)? _mediaActionListener;
+  static void Function()? _updateTapListener;
 
   /// Registra el listener que recibe acciones desde la barra de notificaciones
   /// multimedia (`playPause`, `next`, `previous`, `stop`, `seek`).
@@ -20,10 +21,23 @@ abstract final class DeviceChannel {
     void Function(String action, int? positionMs)? listener,
   ) {
     _mediaActionListener = listener;
+    _ensureHandler();
+  }
+
+  /// Registra quién reacciona al tocar la notificación de "nueva versión"
+  /// con la app ya abierta (el aviso de actualización vuelve a comprobar).
+  static void setUpdateNotificationTapListener(void Function()? listener) {
+    _updateTapListener = listener;
+    _ensureHandler();
+  }
+
+  static void _ensureHandler() {
     if (!_handlerInitialized) {
       _handlerInitialized = true;
       _channel.setMethodCallHandler((call) async {
-        if (call.method == 'onMediaAction') {
+        if (call.method == 'onUpdateNotificationTap') {
+          _updateTapListener?.call();
+        } else if (call.method == 'onMediaAction') {
           final args = call.arguments;
           if (args is Map) {
             final action = args['action']?.toString() ?? '';
@@ -32,6 +46,21 @@ abstract final class DeviceChannel {
           }
         }
       });
+    }
+  }
+
+  /// Programa en Android la comprobación periódica de actualizaciones en
+  /// segundo plano (WorkManager), que avisa con una notificación.
+  static Future<void> scheduleUpdateCheck(String manifestUrl) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('scheduleUpdateCheck', {
+        'manifestUrl': manifestUrl,
+      });
+    } on PlatformException {
+      // sin WorkManager no hay aviso en segundo plano; el banner sigue igual
+    } on MissingPluginException {
+      // ignorar
     }
   }
 

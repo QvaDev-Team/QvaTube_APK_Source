@@ -1,5 +1,14 @@
 # Novedades de QvaTube
 
+## 1.2.2
+- Aviso de nuevas versiones con una notificación en el teléfono, aunque la app esté cerrada.
+- Películas y libros con varios archivos del mismo nombre se muestran en una sola tarjeta con la etiqueta "N archivos"; desde su ficha, "Ver más archivos con el mismo nombre" permite reproducir o descargar cualquiera de ellos.
+- Reproductor: los controles ahora están abajo, junto a la barra de progreso, y ya no tapan la imagen.
+- Al reproducir online, la app avisa claramente si alcanzaste el límite de tu plan (con el tiempo que falta para que se reinicie), si tu sesión caducó o si el servicio está saturado.
+- Si un video no se puede reproducir, se muestra el detalle técnico del error para poder ayudarte mejor.
+- "Comunidad de WhatsApp" en el menú de tu cuenta ahora abre directamente el grupo.
+- Inicio: el texto de bienvenida ya no se mueve al cambiar de categoría.
+
 ## 1.2.1
 - Inicio renovado: nuevo mensaje de bienvenida con las categorías destacadas y acceso directo a "Planes y Precios".
 - Las comunidades de WhatsApp y Telegram ahora están en el menú de tu cuenta, y el enlace de Telegram lleva al canal oficial de la comunidad.

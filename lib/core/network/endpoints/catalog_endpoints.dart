@@ -28,6 +28,9 @@ final class CatalogEndpoints {
   /// GET: Get a share slug/index for an item
   final String shareIndex = '/api/share-index';
 
+  /// GET: Every file sharing a card's name (movies/books with dup_count > 1)
+  final String sameName = '/api/same-name';
+
   /// GET: Catalog version integer for offline sync comparison
   final String syncManifest = '/api/sync-manifest';
 

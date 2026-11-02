@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -44,6 +45,19 @@ class PlayableMediaItem {
   String get readUrl => absoluteMediaUrl(PlaybackEndpoints.read(chatId, msgId));
 }
 
+/// Motivo por el que el servidor rechazó la reproducción antes de empezar
+/// (comprobación previa con `HEAD /watch/...`, igual que `openPlayer` en la web).
+enum PlaybackBlock {
+  /// 403: se agotó el cupo de reproducciones online del plan.
+  limit,
+
+  /// 401: no hay sesión o caducó.
+  auth,
+
+  /// 503: el servicio de streaming está al máximo de capacidad.
+  busy,
+}
+
 /// Controlador global de reproducción que permite mantener la música o película
 /// activa en segundo plano (al salir de la pantalla del reproductor o minimizar
 /// la app) y sincroniza las acciones con la barra de notificaciones del sistema.
@@ -60,6 +74,9 @@ class ActiveMediaSession extends ChangeNotifier {
   int _currentIndex = 0;
   bool _loading = false;
   String? _error;
+  String? _errorDetail;
+  PlaybackBlock? _block;
+  int _resetInSeconds = 0;
   bool _isMuted = false;
   double _playbackSpeed = 1.0;
   bool _markedWatched = false;
@@ -74,6 +91,13 @@ class ActiveMediaSession extends ChangeNotifier {
   int get currentIndex => _currentIndex;
   bool get loading => _loading;
   String? get error => _error;
+
+  /// Mensaje técnico del reproductor (ExoPlayer) para diagnosticar el fallo.
+  String? get errorDetail => _errorDetail;
+  PlaybackBlock? get block => _block;
+
+  /// Segundos hasta que se reinicia el cupo (cabecera `X-Reset-In-Seconds`).
+  int get resetInSeconds => _resetInSeconds;
   bool get isMuted => _isMuted;
   double get playbackSpeed => _playbackSpeed;
   bool get useWebViewFallback => _useWebViewFallback;
@@ -166,6 +190,7 @@ class ActiveMediaSession extends ChangeNotifier {
     if (item.isBook) {
       _loading = false;
       _error = null;
+      _block = null;
       _useWebViewFallback = true;
       await DeviceChannel.clearMediaNotification();
       notifyListeners();
@@ -174,7 +199,19 @@ class ActiveMediaSession extends ChangeNotifier {
 
     _loading = true;
     _error = null;
+    _errorDetail = null;
+    _block = null;
     notifyListeners();
+
+    final block = await _preflight(item);
+    if (currentItem != item) return;
+    if (block != null) {
+      _loading = false;
+      _block = block;
+      await DeviceChannel.clearMediaNotification();
+      notifyListeners();
+      return;
+    }
 
     try {
       var startSeconds = item.initialPositionSeconds ?? 0;
@@ -218,11 +255,49 @@ class ActiveMediaSession extends ChangeNotifier {
           _syncNotification(force: true);
         },
       );
-    } catch (_) {
+    } catch (e) {
       _loading = false;
       _error = 'No se pudo iniciar la reproducción directa de este formato.';
+      _errorDetail = e is PlatformException
+          ? [e.code, e.message, e.details]
+              .whereType<Object>()
+              .map((v) => v.toString())
+              .where((v) => v.isNotEmpty)
+              .join(' · ')
+          : e.toString();
+      debugPrint('Reproducción fallida (${item.streamUrl}): $_errorDetail');
       notifyListeners();
     }
+  }
+
+  /// Pregunta al servidor si se puede reproducir antes de abrir el
+  /// reproductor: si no, ExoPlayer solo da un error genérico de "formato".
+  /// Ante un fallo de red o un código no previsto se deja seguir y que el
+  /// reproductor muestre su propio error.
+  Future<PlaybackBlock?> _preflight(PlayableMediaItem item) async {
+    final ref = _ref;
+    if (ref == null) return null;
+    try {
+      final response = await ref.read(apiClientProvider).dio.head<void>(
+            item.streamUrl,
+            options: Options(
+              validateStatus: (_) => true,
+              receiveTimeout: const Duration(seconds: 15),
+            ),
+          );
+      switch (response.statusCode) {
+        case 403:
+          _resetInSeconds =
+              int.tryParse(response.headers.value('x-reset-in-seconds') ?? '') ??
+                  0;
+          return PlaybackBlock.limit;
+        case 401:
+          return PlaybackBlock.auth;
+        case 503:
+          return PlaybackBlock.busy;
+      }
+    } catch (_) {}
+    return null;
   }
 
   void _onControllerUpdate() {
@@ -388,6 +463,7 @@ class ActiveMediaSession extends ChangeNotifier {
     _currentIndex = 0;
     _loading = false;
     _error = null;
+    _block = null;
     _lastNotifiedPlaying = null;
     _lastNotifiedIndex = null;
 
@@ -818,6 +894,23 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
       );
     }
 
+    final block = _session.block;
+    if (block != null) {
+      return _PlaybackBlockedView(
+        block: block,
+        resetInSeconds: _session.resetInSeconds,
+        isMusic: item.isAudio,
+        onRetry: _session.initCurrentItem,
+        onAction: () async {
+          final router = ref.read(routerProvider);
+          final nav = Navigator.of(context);
+          await _session.stopAndClose();
+          if (mounted) nav.maybePop();
+          router.push(block == PlaybackBlock.auth ? Routes.login : '/cuenta/plan');
+        },
+      );
+    }
+
     if (_session.error != null) {
       return Padding(
         padding: const EdgeInsets.all(24),
@@ -835,6 +928,15 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
               textAlign: TextAlign.center,
               style: AppTextStyles.body(fontSize: 13.5, color: Colors.white),
             ),
+            if (_session.errorDetail != null) ...[
+              const SizedBox(height: 8),
+              SelectableText(
+                _session.errorDetail!,
+                textAlign: TextAlign.center,
+                maxLines: 4,
+                style: AppTextStyles.body(fontSize: 11, color: Colors.white38),
+              ),
+            ],
             const SizedBox(height: 18),
             Wrap(
               spacing: 10,
@@ -1061,7 +1163,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
 
           const Spacer(),
 
-          // Controles centrales
+          // Controles de reproducción
           if (initialized && _session.error == null)
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -1134,9 +1236,9 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
               ],
             ),
 
-          // En audio los controles van pegados a la barra de progreso, debajo
-          // de la carátula, en vez de centrados encima de ella.
-          if (item.isAudio) const SizedBox(height: 12) else const Spacer(),
+          // Los controles van pegados a la barra de progreso, abajo, en vez
+          // de centrados encima del video o de la carátula.
+          const SizedBox(height: 8),
 
           // Barra inferior con progreso y episodios/pistas
           if (initialized)
@@ -1279,6 +1381,145 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                 ),
         ),
       ],
+    );
+  }
+}
+
+/// Pantalla cuando el servidor rechaza la reproducción (límite del plan,
+/// sesión caducada o servicio saturado), con la cuenta atrás del cupo.
+class _PlaybackBlockedView extends StatefulWidget {
+  const _PlaybackBlockedView({
+    required this.block,
+    required this.resetInSeconds,
+    required this.isMusic,
+    required this.onRetry,
+    required this.onAction,
+  });
+
+  final PlaybackBlock block;
+  final int resetInSeconds;
+  final bool isMusic;
+  final VoidCallback onRetry;
+  final VoidCallback onAction;
+
+  @override
+  State<_PlaybackBlockedView> createState() => _PlaybackBlockedViewState();
+}
+
+class _PlaybackBlockedViewState extends State<_PlaybackBlockedView> {
+  Timer? _timer;
+  late int _remaining = widget.resetInSeconds;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_remaining > 0) {
+      _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (_remaining <= 1) _timer?.cancel();
+        setState(() => _remaining = (_remaining - 1).clamp(0, _remaining));
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String _countdown(int total) {
+    final h = total ~/ 3600;
+    final m = (total % 3600) ~/ 60;
+    final s = total % 60;
+    return [h, m, s].map((n) => n.toString().padLeft(2, '0')).join(':');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (IconData icon, String title, String message, String? action) =
+        switch (widget.block) {
+      PlaybackBlock.limit => (
+          Icons.lock_clock_outlined,
+          'Límite alcanzado',
+          'Alcanzaste el límite de reproducciones '
+              '${widget.isMusic ? 'de música' : 'online'} de tu plan.\n'
+              'Para aumentar tu límite, adquiere un plan.',
+          'Ver planes',
+        ),
+      PlaybackBlock.auth => (
+          Icons.person_outline,
+          'Inicia sesión',
+          'Tu sesión caducó. Inicia sesión de nuevo para reproducir online.',
+          'Iniciar sesión',
+        ),
+      PlaybackBlock.busy => (
+          Icons.cloud_off_outlined,
+          'Servicio saturado',
+          'El servicio de reproducción online está al máximo de su capacidad. '
+              'Intenta de nuevo en unos segundos.',
+          null,
+        ),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: AppColors.accent, size: 44),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: AppTextStyles.body(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: AppTextStyles.body(fontSize: 13.5, color: Colors.white70),
+          ),
+          if (widget.block == PlaybackBlock.limit && widget.resetInSeconds > 0) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Se reinicia en ${_countdown(_remaining)}',
+              style: AppTextStyles.body(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.accent,
+              ),
+            ),
+          ],
+          const SizedBox(height: 18),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            alignment: WrapAlignment.center,
+            children: [
+              if (action != null)
+                ElevatedButton.icon(
+                  onPressed: widget.onAction,
+                  icon: Icon(
+                    widget.block == PlaybackBlock.auth
+                        ? Icons.login
+                        : Icons.workspace_premium_outlined,
+                    size: 18,
+                  ),
+                  label: Text(action),
+                ),
+              OutlinedButton.icon(
+                onPressed: widget.onRetry,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Reintentar'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

@@ -181,7 +181,23 @@ class _AccountMenuSheet extends ConsumerWidget {
                   icon: Icons.chat_bubble_outline,
                   label: 'Comunidad de WhatsApp',
                   accent: AppColors.whatsapp,
-                  onTap: () => _go(context, '/cuenta/comunidad'),
+                  onTap: () async {
+                    // Abre directamente la comunidad (enlace de /api/config).
+                    // Solo si no se pudo obtener se cae a la pantalla Comunidad.
+                    final nav = Navigator.of(context);
+                    final router = GoRouter.of(context);
+                    String? url;
+                    try {
+                      url = (await ref.read(siteConfigProvider.future))
+                          .whatsappUrl;
+                    } catch (_) {}
+                    nav.pop();
+                    if (url != null && url.isNotEmpty) {
+                      DeviceChannel.openUrl(url);
+                    } else {
+                      router.push('/cuenta/comunidad');
+                    }
+                  },
                 ),
                 _MenuTile(
                   icon: Icons.send,

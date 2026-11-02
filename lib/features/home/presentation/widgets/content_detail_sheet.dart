@@ -49,6 +49,12 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
   late bool _favorited = widget.item.favorited;
   bool _togglingFavorite = false;
 
+  // "Ver más archivos con el mismo nombre" (películas/libros con dup_count).
+  bool _sameNameOpen = false;
+  bool _sameNameLoading = false;
+  String? _sameNameError;
+  List<SameNameFile>? _sameNameFiles;
+
   bool get _isSeries =>
       widget.item.isSeries ||
       widget.item.categoryKey == 'series' ||
@@ -286,14 +292,17 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
     await DeviceChannel.openUrl('https://t.me/$bot?start=$fallbackPayload');
   }
 
-  Future<void> _handlePlayMovie() async {
-    if (_isAlbum && _episodes.isNotEmpty) {
+  /// Reproduce/lee la película o libro de la tarjeta, o [file] si se eligió
+  /// otro de la lista de archivos con el mismo nombre.
+  Future<void> _handlePlayMovie({SameNameFile? file}) async {
+    if (file == null && _isAlbum && _episodes.isNotEmpty) {
       await _handlePlayAlbumTrack(0);
       return;
     }
 
-    final chatId = widget.item.chatId;
-    final msgId = widget.item.msgId;
+    final chatId = file?.chatId ?? widget.item.chatId;
+    final msgId = file?.msgId ?? widget.item.msgId;
+    final isFront = chatId == widget.item.chatId && msgId == widget.item.msgId;
 
     if (chatId == null || msgId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -316,7 +325,7 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
       posterUrl: widget.item.posterUrl,
       isAudio: _isAudio,
       isBook: _isBook,
-      initialPositionSeconds: widget.item.positionSeconds,
+      initialPositionSeconds: isFront ? widget.item.positionSeconds : null,
     );
 
     await openMediaPlayer(context, playlist: [playable]);
@@ -423,9 +432,9 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
     }
   }
 
-  Future<void> _handleDownloadMovie() async {
-    final chatId = widget.item.chatId;
-    final msgId = widget.item.msgId;
+  Future<void> _handleDownloadMovie({SameNameFile? file}) async {
+    final chatId = file?.chatId ?? widget.item.chatId;
+    final msgId = file?.msgId ?? widget.item.msgId;
 
     if (chatId == null || msgId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -558,6 +567,251 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
   int _trackNumber(Map<String, dynamic> track, int index) {
     final number = (track['track_number'] as num?)?.toInt();
     return number == null || number <= 0 ? index + 1 : number;
+  }
+
+  Future<void> _toggleSameName() async {
+    setState(() => _sameNameOpen = !_sameNameOpen);
+    if (_sameNameOpen && _sameNameFiles == null && !_sameNameLoading) {
+      await _fetchSameName();
+    }
+  }
+
+  /// Se pide al abrir la sección por primera vez (como la web): el número del
+  /// botón sale de `dup_count` sin llamar al servidor.
+  Future<void> _fetchSameName() async {
+    final categoryKey = widget.item.categoryKey;
+    final title = widget.item.title;
+    if (categoryKey == null || title == null) return;
+    setState(() {
+      _sameNameLoading = true;
+      _sameNameError = null;
+    });
+    try {
+      final files = await ref
+          .read(catalogApiProvider)
+          .sameNameFiles(categoryKey: categoryKey, title: title);
+      if (!mounted) return;
+      setState(() {
+        _sameNameFiles = files;
+        _sameNameLoading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _sameNameLoading = false;
+        _sameNameError = e.statusCode == null
+            ? 'Sin conexión. Conéctate para ver los demás archivos.'
+            : e.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _sameNameLoading = false;
+        _sameNameError = 'No se pudieron cargar los archivos.';
+      });
+    }
+  }
+
+  static String _formatFileDate(DateTime? date) {
+    if (date == null) return '';
+    const months = [
+      'ene',
+      'feb',
+      'mar',
+      'abr',
+      'may',
+      'jun',
+      'jul',
+      'ago',
+      'sep',
+      'oct',
+      'nov',
+      'dic',
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
+  }
+
+  Widget _buildSameNameSection() {
+    final files = _sameNameFiles;
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF16181D),
+        borderRadius: BorderRadius.circular(AppRadii.md),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: _toggleSameName,
+            borderRadius: BorderRadius.circular(AppRadii.md),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: [
+                  const Icon(
+                    LucideIcons.files,
+                    size: 16,
+                    color: Colors.white70,
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Ver más archivos con el mismo nombre',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.accent,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '${widget.item.dupCount}',
+                      style: AppTextStyles.mono(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.accentInk,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    _sameNameOpen
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    color: Colors.white54,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_sameNameOpen) ...[
+            const Divider(color: Colors.white10, height: 1),
+            if (_sameNameLoading)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            else if (_sameNameError != null)
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  children: [
+                    Text(
+                      _sameNameError!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.white60,
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _fetchSameName,
+                      icon: const Icon(Icons.refresh, size: 16),
+                      label: const Text('Reintentar'),
+                    ),
+                  ],
+                ),
+              )
+            else if (files != null && files.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(14),
+                child: Text(
+                  'No se encontraron otros archivos.',
+                  style: TextStyle(fontSize: 12, color: Colors.white60),
+                ),
+              )
+            else if (files != null)
+              for (var i = 0; i < files.length; i++) ...[
+                if (i > 0) const Divider(color: Colors.white10, height: 1),
+                _buildSameNameRow(i, files[i]),
+              ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSameNameRow(int index, SameNameFile file) {
+    final isFront =
+        file.chatId == widget.item.chatId && file.msgId == widget.item.msgId;
+    final meta = [
+      formatFileSize(file.size),
+      _formatFileDate(file.date),
+    ].where((v) => v.isNotEmpty).join(' · ');
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'Archivo ${index + 1}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    if (isFront) ...[
+                      const SizedBox(width: 6),
+                      const Text(
+                        '(el de arriba)',
+                        style: TextStyle(fontSize: 11, color: Colors.white38),
+                      ),
+                    ],
+                    if (file.watched) ...[
+                      const SizedBox(width: 6),
+                      const Icon(
+                        Icons.check_circle,
+                        size: 14,
+                        color: AppColors.success,
+                      ),
+                    ],
+                  ],
+                ),
+                if (meta.isNotEmpty)
+                  Text(
+                    meta,
+                    style: AppTextStyles.mono(
+                      fontSize: 11,
+                      color: Colors.white54,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          _TrackActionButton(
+            icon: _isBook ? LucideIcons.bookOpen : LucideIcons.play,
+            onTap: () => _handlePlayMovie(file: file),
+          ),
+          const SizedBox(width: 8),
+          _TrackActionButton(
+            icon: LucideIcons.download,
+            onTap: _loadingAction
+                ? null
+                : () => _handleDownloadMovie(file: file),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildAlbumSheet() {
@@ -1009,6 +1263,10 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                   style: TextStyle(fontSize: 11, color: Colors.white38),
                 ),
               ),
+              if (!_isAlbum && widget.item.dupCount > 1) ...[
+                const SizedBox(height: 14),
+                _buildSameNameSection(),
+              ],
               if (_isAlbum && _episodes.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 ListView.separated(
@@ -1384,7 +1642,7 @@ class _TrackActionButton extends StatelessWidget {
   });
 
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final bool filled;
 
   @override

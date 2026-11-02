@@ -44,6 +44,7 @@ class CatalogItem {
     this.size,
     this.groupKind,
     this.episodeCount = 0,
+    this.dupCount = 1,
     this.popularity,
     this.letter,
     this.isNew = false,
@@ -72,6 +73,7 @@ class CatalogItem {
       size: (json['size'] as num?)?.toInt(),
       groupKind: json['group_kind'] as String?,
       episodeCount: (json['episode_count'] as num?)?.toInt() ?? 0,
+      dupCount: (json['dup_count'] as num?)?.toInt() ?? 1,
       popularity: (json['popularity'] as num?)?.toInt(),
       letter: json['letter']?.toString(),
       isNew: json['is_new'] == true,
@@ -101,6 +103,10 @@ class CatalogItem {
   final int? size;
   final String? groupKind;
   final int episodeCount;
+
+  /// Archivos con el mismo nombre que agrupa esta tarjeta, contando el que
+  /// se muestra (`dup_count`, solo películas y libros). 1 = archivo único.
+  final int dupCount;
   final int? popularity;
 
   /// Letra del índice A-Z (`sort=alpha`), calculada por el backend.
@@ -135,6 +141,37 @@ class CatalogItem {
     }
     return formatFileSize(size);
   }
+}
+
+/// Archivo de `GET /api/same-name`: todos los que comparten el nombre de una
+/// tarjeta de película o libro, del más reciente al más antiguo.
+class SameNameFile {
+  const SameNameFile({
+    required this.chatId,
+    required this.msgId,
+    this.title,
+    this.size,
+    this.date,
+    this.watched = false,
+  });
+
+  factory SameNameFile.fromJson(Map<String, dynamic> json) {
+    return SameNameFile(
+      chatId: (json['chat_id'] as num).toInt(),
+      msgId: (json['msg_id'] as num).toInt(),
+      title: json['title'] as String?,
+      size: (json['size'] as num?)?.toInt(),
+      date: DateTime.tryParse(json['date']?.toString() ?? ''),
+      watched: json['watched'] == true,
+    );
+  }
+
+  final int chatId;
+  final int msgId;
+  final String? title;
+  final int? size;
+  final DateTime? date;
+  final bool watched;
 }
 
 /// Integrante del reparto (`GET /api/info`).

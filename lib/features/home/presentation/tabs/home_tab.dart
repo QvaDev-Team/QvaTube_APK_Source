@@ -306,23 +306,32 @@ class _RotatingTaglineState extends State<_RotatingTagline> {
           WidgetSpan(
             alignment: PlaceholderAlignment.baseline,
             baseline: TextBaseline.alphabetic,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 350),
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 0.4),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: child,
+            // Todas las categorías invisibles reservan el ancho de la más
+            // larga, así el resto del texto no salta al cambiar de palabra.
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                for (final category in _categories)
+                  Opacity(opacity: 0, child: Text(category, style: highlight)),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 350),
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0, 0.4),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  ),
+                  child: Text(
+                    _categories[_index],
+                    key: ValueKey(_index),
+                    style: highlight,
+                  ),
                 ),
-              ),
-              child: Text(
-                _categories[_index],
-                key: ValueKey(_index),
-                style: highlight,
-              ),
+              ],
             ),
           ),
           const TextSpan(

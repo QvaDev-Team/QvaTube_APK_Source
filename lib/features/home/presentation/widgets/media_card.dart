@@ -148,26 +148,57 @@ class MediaCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                  if (badge.isNotEmpty)
+                  if (badge.isNotEmpty || item.dupCount > 1)
                     Positioned(
                       right: 4,
                       bottom: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xD10A0A0B),
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        child: Text(
-                          badge,
-                          style: AppTextStyles.mono(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Varios archivos con el mismo nombre agrupados en
+                          // esta tarjeta (`dup_count`), encima del tamaño.
+                          if (item.dupCount > 1)
+                            Container(
+                              margin: badge.isNotEmpty
+                                  ? const EdgeInsets.only(bottom: 3)
+                                  : null,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.accent,
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: Text(
+                                '${item.dupCount} archivos',
+                                style: AppTextStyles.mono(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.accentInk,
+                                ),
+                              ),
+                            ),
+                          if (badge.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xD10A0A0B),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: Text(
+                                badge,
+                                style: AppTextStyles.mono(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   if (showProgress && (item.progressPct ?? 0) > 0)

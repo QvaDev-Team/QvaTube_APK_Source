@@ -563,6 +563,27 @@ class CatalogApi {
     return ContentInfo.fromJson(_map(response.data));
   }
 
+  /// GET /api/same-name
+  /// Todos los archivos con el mismo nombre que la tarjeta (incluido el que
+  /// muestra), del más reciente al más antiguo. Se pide solo al abrir la
+  /// sección "Ver más archivos con el mismo nombre".
+  Future<List<SameNameFile>> sameNameFiles({
+    required String categoryKey,
+    required String title,
+  }) async {
+    final response = await _client.get(
+      Endpoints.catalog.sameName,
+      query: <String, dynamic>{'cat': categoryKey, 'title': title},
+      operation: 'los archivos con el mismo nombre',
+    );
+    final files = _map(response.data)['files'];
+    if (files is! List) return const [];
+    return files
+        .whereType<Map>()
+        .map((f) => SameNameFile.fromJson(Map<String, dynamic>.from(f)))
+        .toList();
+  }
+
   /// GET /api/episodes
   /// Obtiene los episodios de una serie o temporada.
   ///

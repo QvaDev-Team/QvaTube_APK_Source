@@ -84,3 +84,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Comprobación periódica de actualizaciones en segundo plano (UpdateCheckWorker).
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
+}
