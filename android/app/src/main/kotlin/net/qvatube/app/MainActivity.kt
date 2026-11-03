@@ -168,6 +168,23 @@ class MainActivity : FlutterActivity() {
                 // APK instalado (base.apk): punto de partida de los parches
                 // diferenciales. Se puede leer sin permisos especiales.
                 "getInstalledApkPath" -> result.success(applicationInfo.sourceDir)
+                "shareText" -> {
+                    val text = call.argument<String>("text")
+                    if (text.isNullOrBlank()) {
+                        result.success(false)
+                    } else {
+                        try {
+                            val send = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, text)
+                            }
+                            startActivity(Intent.createChooser(send, "Compartir"))
+                            result.success(true)
+                        } catch (_: Exception) {
+                            result.success(false)
+                        }
+                    }
+                }
                 // Lector de PDF: Android ya trae PdfRenderer, sin librerías extra.
                 "pdfOpen" -> {
                     val path = call.argument<String>("path")

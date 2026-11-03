@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -214,8 +215,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             textInputAction: TextInputAction.done,
                             onFieldSubmitted: (_) => _submit(),
                             style: AppTextStyles.mono(fontSize: 13),
+                            // Referido (6) o creador (3–16): solo A-Z y 0-9,
+                            // en mayúsculas, como la web.
+                            textCapitalization: TextCapitalization.characters,
+                            inputFormatters: [
+                              _UpperCaseFormatter(),
+                              FilteringTextInputFormatter.allow(
+                                RegExp('[A-Z0-9]'),
+                              ),
+                              LengthLimitingTextInputFormatter(16),
+                            ],
                             decoration: const InputDecoration(
-                              labelText: 'Código de invitación (opcional)',
+                              labelText:
+                                  'Código de invitación o de creador (opcional)',
                               prefixIcon: Icon(Icons.card_giftcard, size: 18),
                             ),
                           ),
@@ -265,4 +277,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       ),
     );
   }
+}
+
+class _UpperCaseFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) =>
+      newValue.copyWith(text: newValue.text.toUpperCase());
 }

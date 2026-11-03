@@ -8,6 +8,7 @@ import '../widgets/splash_screen.dart';
 import '../../features/auth/presentation/providers/auth_controller.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
+import '../../features/creator/creator_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/account/presentation/avatar_screen.dart';
 import '../../features/account/presentation/community_screen.dart';
@@ -64,6 +65,7 @@ abstract final class Routes {
     '/cuenta/notificaciones',
     '/cuenta/configuracion',
     '/cuenta/comunidad',
+    '/cuenta/creador',
   ];
 }
 
@@ -315,6 +317,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/cuenta/comunidad',
         builder: (context, state) => const CommunityScreen(),
+      ),
+      GoRoute(
+        path: '/cuenta/creador',
+        builder: (context, state) => const CreatorScreen(),
       ),
       GoRoute(
         path: '/cuenta/descargas',

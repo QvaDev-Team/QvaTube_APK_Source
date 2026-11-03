@@ -1,6 +1,7 @@
 export 'ads_endpoints.dart';
 export 'auth_endpoints.dart';
 export 'catalog_endpoints.dart';
+export 'creator_endpoints.dart';
 export 'downloads_endpoints.dart';
 export 'favorites_progress_endpoints.dart';
 export 'media_endpoints.dart';
@@ -17,6 +18,7 @@ export 'tv_endpoints.dart';
 import 'ads_endpoints.dart';
 import 'auth_endpoints.dart';
 import 'catalog_endpoints.dart';
+import 'creator_endpoints.dart';
 import 'downloads_endpoints.dart';
 import 'favorites_progress_endpoints.dart';
 import 'media_endpoints.dart';
@@ -51,5 +53,6 @@ final class Endpoints {
   static const TvEndpoints tv = TvEndpoints();
   static const PromoEndpoints promo = PromoEndpoints();
   static const MiscEndpoints misc = MiscEndpoints();
+  static const CreatorEndpoints creator = CreatorEndpoints();
 }
 

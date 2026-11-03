@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text.dart';
+import '../../auth/presentation/providers/auth_controller.dart';
 import '../../catalog/application/catalog_providers.dart';
 import '../../catalog/domain/catalog_models.dart';
 
@@ -93,11 +95,26 @@ class NotificationsScreen extends ConsumerWidget {
                 return _NotificationTile(
                   item: item,
                   onTap: () async {
-                    if (item.id == null) return;
-                    await ref
-                        .read(catalogApiProvider)
-                        .markNotificationRead(item.id!);
-                    ref.invalidate(notificationsProvider);
+                    final router = GoRouter.of(context);
+                    if (item.id != null) {
+                      await ref
+                          .read(catalogApiProvider)
+                          .markNotificationRead(item.id!);
+                      ref.invalidate(notificationsProvider);
+                    }
+                    // Avisos del programa de creadores: abren el Modo creador
+                    // (tras refrescar `me` si acaba de ser nombrado).
+                    if (item.isCreator) {
+                      final auth = ref.read(authControllerProvider.notifier);
+                      if (ref.read(authControllerProvider).user?.creator ==
+                          null) {
+                        await auth.restoreSession();
+                      }
+                      if (ref.read(authControllerProvider).user?.creator !=
+                          null) {
+                        router.push('/cuenta/creador');
+                      }
+                    }
                   },
                 );
               },

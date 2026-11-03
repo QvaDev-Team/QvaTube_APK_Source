@@ -582,6 +582,7 @@ class NotificationItem {
     this.imageUrl,
     this.read = false,
     this.createdAt,
+    this.type,
   });
 
   factory NotificationItem.fromJson(Map<String, dynamic> json) {
@@ -593,6 +594,7 @@ class NotificationItem {
       imageUrl: json['image_url'] as String?,
       read: json['read'] == true || json['read'] == 1,
       createdAt: json['created_at'] as String?,
+      type: json['type']?.toString(),
     );
   }
 
@@ -603,6 +605,12 @@ class NotificationItem {
   final String? imageUrl;
   final bool read;
   final String? createdAt;
+
+  /// Tipo de aviso; p. ej. `creator_welcome`, `creator_commission` o
+  /// `creator_payout` (programa de creadores).
+  final String? type;
+
+  bool get isCreator => type?.startsWith('creator_') ?? false;
 
   String get image => absoluteMediaUrl(imageUrl);
 }

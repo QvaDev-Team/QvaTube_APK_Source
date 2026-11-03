@@ -49,6 +49,19 @@ abstract final class DeviceChannel {
     }
   }
 
+  /// Abre el menú "Compartir" de Android con [text]. `false` si no se pudo.
+  static Future<bool> shareText(String text) async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _channel.invokeMethod<bool>('shareText', {'text': text}) ??
+          false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   /// Abre un PDF con el `PdfRenderer` de Android y devuelve el tamaño
   /// (ancho, alto en puntos) de cada página.
   static Future<List<Size>> pdfOpen(String path) async {

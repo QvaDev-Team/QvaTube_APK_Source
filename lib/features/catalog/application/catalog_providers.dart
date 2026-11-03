@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_providers.dart';
+import '../../auth/presentation/providers/auth_controller.dart';
 import '../data/catalog_api.dart';
 import '../domain/catalog_models.dart';
 
@@ -56,7 +59,16 @@ final newContentCountsProvider = FutureProvider<Map<String, int>>((ref) async {
 /// Notificaciones del usuario (`GET /api/notifications`).
 final notificationsProvider =
     FutureProvider<({List<NotificationItem> items, int unread})>((ref) async {
-  return ref.watch(catalogApiProvider).notifications();
+  final result = await ref.watch(catalogApiProvider).notifications();
+  // Recién nombrado creador: se refresca `me` para que salga "Modo creador"
+  // en el menú sin tener que cerrar sesión.
+  final auth = ref.read(authControllerProvider);
+  if (auth.isAuthenticated &&
+      auth.user?.creator == null &&
+      result.items.any((n) => n.type == 'creator_welcome' && !n.read)) {
+    unawaited(ref.read(authControllerProvider.notifier).restoreSession());
+  }
+  return result;
 });
 
 /// Favoritos del usuario (`GET /api/favorites`).

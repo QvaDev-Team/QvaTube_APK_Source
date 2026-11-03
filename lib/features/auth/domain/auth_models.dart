@@ -16,6 +16,7 @@ class AuthUser {
     this.planExpiresAt,
     this.referralCode,
     this.telegramLinked = false,
+    this.creator,
   });
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
@@ -62,6 +63,9 @@ class AuthUser {
         final String value => value.toLowerCase() == 'true',
         _ => false,
       },
+      creator: source['creator'] is Map
+          ? CreatorInfo.fromJson(Map<String, dynamic>.from(source['creator'] as Map))
+          : null,
     );
   }
 
@@ -73,6 +77,10 @@ class AuthUser {
   final String? planExpiresAt;
   final String? referralCode;
   final bool telegramLinked;
+
+  /// Código de creador oficial (`user.creator`). `null` para casi todos los
+  /// usuarios y cuando el admin retira el código: decide si hay Modo creador.
+  final CreatorInfo? creator;
 
   String get name => (displayName?.trim().isNotEmpty ?? false)
       ? displayName!.trim()
@@ -103,8 +111,24 @@ class AuthUser {
       planExpiresAt: planExpiresAt ?? this.planExpiresAt,
       referralCode: referralCode,
       telegramLinked: telegramLinked ?? this.telegramLinked,
+      creator: creator,
     );
   }
+}
+
+/// `user.creator` de login/registro/me: `{"code": "ALEX", "rate": 0.1}`.
+class CreatorInfo {
+  const CreatorInfo({required this.code, required this.rate});
+
+  factory CreatorInfo.fromJson(Map<String, dynamic> json) => CreatorInfo(
+        code: json['code']?.toString() ?? '',
+        rate: (json['rate'] as num?)?.toDouble() ?? 0.1,
+      );
+
+  final String code;
+
+  /// Fracción de comisión (0.1 = 10 %).
+  final double rate;
 }
 
 /// Estado de la verificación por Telegram (gate anti-abuso, spec §6.9).

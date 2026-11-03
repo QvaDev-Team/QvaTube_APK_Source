@@ -166,6 +166,13 @@ class _AccountMenuSheet extends ConsumerWidget {
                   label: 'Favoritos',
                   onTap: () => _go(context, '/cuenta/favoritos'),
                 ),
+                // Solo para creadores oficiales (`user.creator`).
+                if (user?.creator != null)
+                  _MenuTile(
+                    icon: LucideIcons.star,
+                    label: 'Modo creador',
+                    onTap: () => _go(context, '/cuenta/creador'),
+                  ),
                 _MenuTile(
                   icon: Icons.notifications_none,
                   label: 'Notificaciones',
