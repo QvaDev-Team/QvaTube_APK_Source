@@ -10,6 +10,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.media.MediaMetadata
@@ -26,6 +27,10 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -90,6 +95,21 @@ class MainActivity : FlutterActivity() {
         registerMediaReceiver()
     }
 
+    /** Salida de la pantalla completa de un video web (TV embebida), si está activa. */
+    var exitWebFullscreen: (() -> Unit)? = null
+
+    // "Atrás" en pantalla completa solo sale de ella (no cierra el canal).
+    @Deprecated("FlutterActivity aún enruta el botón atrás por aquí")
+    override fun onBackPressed() {
+        val exit = exitWebFullscreen
+        if (exit != null) {
+            exit()
+            return
+        }
+        @Suppress("DEPRECATION")
+        super.onBackPressed()
+    }
+
     // App ya abierta y el usuario toca la notificación de actualización:
     // Flutter vuelve a comprobar para enseñar el banner.
     override fun onNewIntent(intent: Intent) {
@@ -113,7 +133,7 @@ class MainActivity : FlutterActivity() {
         flutterEngine
             .platformViewsController
             .registry
-            .registerViewFactory("qvatube/webview", EmbeddedWebViewFactory())
+            .registerViewFactory("qvatube/webview", EmbeddedWebViewFactory(this))
 
         val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
         methodChannel = channel
@@ -700,19 +720,81 @@ class MainActivity : FlutterActivity() {
     }
 }
 
-private class EmbeddedWebViewFactory : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
+private class EmbeddedWebViewFactory(
+    private val activity: MainActivity
+) : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
     override fun create(context: Context, viewId: Int, args: Any?): PlatformView {
         val params = args as? Map<*, *>
         val url = params?.get("url")?.toString() ?: ""
-        return EmbeddedWebViewPlatformView(context, url)
+        return EmbeddedWebViewPlatformView(context, url, activity)
+    }
+}
+
+/**
+ * Pantalla completa de los reproductores web (`<video>` / iframes de los
+ * canales embebidos). Sin `onShowCustomView` el WebView dice que no admite
+ * pantalla completa y el botón del reproductor sale deshabilitado.
+ */
+private class FullscreenChromeClient(private val activity: MainActivity) : WebChromeClient() {
+    private var customView: View? = null
+    private var callback: CustomViewCallback? = null
+    private var previousOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+
+    override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+        if (customView != null) {
+            callback.onCustomViewHidden()
+            return
+        }
+        customView = view
+        this.callback = callback
+        previousOrientation = activity.requestedOrientation
+
+        val decor = activity.window.decorView as FrameLayout
+        view.setBackgroundColor(Color.BLACK)
+        decor.addView(
+            view,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        WindowCompat.getInsetsController(activity.window, decor).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+        activity.exitWebFullscreen = { onHideCustomView() }
+    }
+
+    override fun onHideCustomView() {
+        val view = customView ?: return
+        val decor = activity.window.decorView as FrameLayout
+        decor.removeView(view)
+        customView = null
+        activity.exitWebFullscreen = null
+        activity.requestedOrientation = previousOrientation
+        WindowCompat.getInsetsController(activity.window, decor)
+            .show(WindowInsetsCompat.Type.systemBars())
+        val cb = callback
+        callback = null
+        cb?.onCustomViewHidden()
+    }
+
+    /** Al cerrar el canal estando en pantalla completa. */
+    fun exitIfNeeded() {
+        if (customView != null) onHideCustomView()
     }
 }
 
 @SuppressLint("SetJavaScriptEnabled")
 private class EmbeddedWebViewPlatformView(
     context: Context,
-    url: String
+    url: String,
+    activity: MainActivity
 ) : PlatformView {
+    private val chromeClient = FullscreenChromeClient(activity)
+
     private val webView: WebView = WebView(context).apply {
         setBackgroundColor(Color.parseColor("#0A0A0B"))
         settings.apply {
@@ -724,7 +806,7 @@ private class EmbeddedWebViewPlatformView(
             useWideViewPort = true
             loadWithOverviewMode = true
         }
-        webChromeClient = WebChromeClient()
+        webChromeClient = chromeClient
         webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(
                 view: WebView?,
@@ -739,6 +821,7 @@ private class EmbeddedWebViewPlatformView(
     override fun getView(): View = webView
 
     override fun dispose() {
+        chromeClient.exitIfNeeded()
         // Corta el audio/video antes de destruir: `destroy()` se ignora si la
         // vista sigue adjunta a la jerarquía, y el reproductor embebido seguía
         // sonando en segundo plano tras cerrar el overlay de TV/Radio.

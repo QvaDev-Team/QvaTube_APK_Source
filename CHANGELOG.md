@@ -1,6 +1,7 @@
 # Novedades de QvaTube
 
 ## 1.2.2
+- Televisión: ya funciona la pantalla completa en todos los canales (antes el botón salía deshabilitado).
 - Modo creador para creadores oficiales: tu código para compartir, lo que has generado, dónde cobrar, solicitud de pago, tus referidos y tus pagos. El registro acepta ahora códigos de creador.
 - La app ya se puede instalar en teléfonos con Android de 32 bits (como el Redmi 9A y 9C), con el mismo archivo de siempre.
 - Se eliminaron componentes que la app no usaba.

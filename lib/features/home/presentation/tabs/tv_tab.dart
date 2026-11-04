@@ -748,6 +748,12 @@ class _TvPlayerSheetState extends ConsumerState<_TvPlayerSheet> {
                     tooltip: 'Recargar señal',
                     icon: const Icon(Icons.refresh),
                   ),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(
+                    onPressed: () => _openFullscreen(_videoController!),
+                    tooltip: 'Pantalla completa',
+                    icon: const Icon(Icons.fullscreen),
+                  ),
                 ],
                 const Spacer(),
                 OutlinedButton.icon(
@@ -761,6 +767,21 @@ class _TvPlayerSheetState extends ConsumerState<_TvPlayerSheet> {
         ),
       ),
     );
+  }
+
+  Future<void> _openFullscreen(VideoPlayerController controller) async {
+    await Navigator.of(context, rootNavigator: true).push(
+      PageRouteBuilder<void>(
+        opaque: true,
+        pageBuilder: (_, _, _) => _TvFullscreenPage(
+          controller: controller,
+          title: widget.channel.name,
+        ),
+        transitionsBuilder: (_, animation, _, child) =>
+            FadeTransition(opacity: animation, child: child),
+      ),
+    );
+    if (mounted) setState(() {});
   }
 
   Widget _buildHlsView() {
@@ -827,6 +848,152 @@ class _TvPlayerSheetState extends ConsumerState<_TvPlayerSheet> {
             ? controller.value.aspectRatio
             : 16 / 9,
         child: VideoPlayer(controller),
+      ),
+    );
+  }
+}
+
+/// Canal HLS a pantalla completa: horizontal, sin barras del sistema y con
+/// controles que se ocultan solos. Usa el mismo reproductor del panel.
+class _TvFullscreenPage extends StatefulWidget {
+  const _TvFullscreenPage({required this.controller, required this.title});
+
+  final VideoPlayerController controller;
+  final String title;
+
+  @override
+  State<_TvFullscreenPage> createState() => _TvFullscreenPageState();
+}
+
+class _TvFullscreenPageState extends State<_TvFullscreenPage> {
+  bool _showControls = true;
+  Timer? _hideTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    widget.controller.addListener(_onTick);
+    _scheduleHide();
+  }
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    widget.controller.removeListener(_onTick);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    super.dispose();
+  }
+
+  void _onTick() {
+    if (mounted) setState(() {});
+  }
+
+  void _scheduleHide() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _showControls = false);
+    });
+  }
+
+  void _toggleControls() {
+    setState(() => _showControls = !_showControls);
+    if (_showControls) _scheduleHide();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final playing = controller.value.isPlaying;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _toggleControls,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Center(
+              child: AspectRatio(
+                aspectRatio: controller.value.aspectRatio > 0
+                    ? controller.value.aspectRatio
+                    : 16 / 9,
+                child: VideoPlayer(controller),
+              ),
+            ),
+            if (controller.value.isBuffering)
+              const Center(
+                child: CircularProgressIndicator(color: AppColors.accent),
+              ),
+            AnimatedOpacity(
+              opacity: _showControls ? 1 : 0,
+              duration: const Duration(milliseconds: 200),
+              child: IgnorePointer(
+                ignoring: !_showControls,
+                child: Container(
+                  color: Colors.black38,
+                  child: SafeArea(
+                    child: Stack(
+                      children: [
+                        Positioned(
+                          top: 8,
+                          left: 8,
+                          right: 8,
+                          child: Row(
+                            children: [
+                              IconButton(
+                                tooltip: 'Salir de pantalla completa',
+                                onPressed: () => Navigator.of(context).pop(),
+                                icon: const Icon(
+                                  Icons.fullscreen_exit,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  widget.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyles.body(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Center(
+                          child: IconButton.filled(
+                            iconSize: 40,
+                            style: IconButton.styleFrom(
+                              backgroundColor: AppColors.accent,
+                            ),
+                            onPressed: () {
+                              playing ? controller.pause() : controller.play();
+                              _scheduleHide();
+                            },
+                            icon: Icon(
+                              playing ? Icons.pause : Icons.play_arrow,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
