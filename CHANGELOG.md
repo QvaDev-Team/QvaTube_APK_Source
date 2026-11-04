@@ -1,5 +1,9 @@
 # Novedades de QvaTube
 
+## 1.2.3
+- Notificaciones al instante: te avisamos en el teléfono de cada nueva versión, con el logo de QvaTube.
+- Nuevo interruptor en Configuración para activar o desactivar las notificaciones.
+
 ## 1.2.2
 - Logos de temporada: el logo, la pantalla de carga y el icono de la app cambian solos según la temporada (Halloween, Navidad, San Valentín) sin tener que actualizar.
 - Televisión: ya funciona la pantalla completa en todos los canales (antes el botón salía deshabilitado).
