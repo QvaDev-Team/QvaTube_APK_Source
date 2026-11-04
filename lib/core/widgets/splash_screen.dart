@@ -1,47 +1,33 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_assets.dart';
-import '../theme/season_branding.dart';
+import '../theme/season_calendar.dart';
 
 /// Pantalla de inicio (Splash) idéntica a la de la web de QvaTube.
 ///
 /// Se mantiene visible hasta que se determina si el usuario va al login o
-/// entra con su sesión directa. Muestra el icono de la temporada que dijo el
-/// servidor la última vez ([SeasonBranding]); sin copia, el del APK.
+/// entra con su sesión directa. El arte de la temporada sale del APK y se
+/// elige por la fecha ([SeasonCalendar]): se ve desde el primer fotograma,
+/// sin esperar al servidor.
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    Widget bundled(BuildContext context, Object error, StackTrace? stack) =>
-        Image.asset(
-          'assets/icons/icon-512.png',
-          width: 256,
-          height: 256,
-          fit: BoxFit.contain,
-        );
-
-    final asset = Image.asset(
-      AppAssets.icon('512'),
-      width: 256,
-      height: 256,
-      fit: BoxFit.contain,
-      errorBuilder: bundled,
-    );
-    final downloaded = SeasonBranding.faviconFile;
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: Center(
-        child: downloaded == null
-            ? asset
-            : Image.file(
-                downloaded,
-                width: 256,
-                height: 256,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stack) => asset,
-              ),
+        child: Image.asset(
+          SeasonCalendar.splashFor(),
+          width: 256,
+          height: 256,
+          fit: BoxFit.contain,
+          errorBuilder: (context, error, stack) => Image.asset(
+            SeasonCalendar.defaultSplash,
+            width: 256,
+            height: 256,
+            fit: BoxFit.contain,
+          ),
+        ),
       ),
     );
   }
