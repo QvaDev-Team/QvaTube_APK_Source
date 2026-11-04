@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "active": "halloween",
-  "description": "Manifiesto de assets de QvaTube. Cambia 'active' o usa la app (Configuración > Tema) para cambiar los logos e iconos por temporada. Cada tema vive en su propia carpeta y debe usar los mismos nombres de archivo.",
+  "active": "default",
+  "description": "Manifiesto de assets de QvaTube. Arte de respaldo incluido en el APK. La temporada activa la decide el servidor (GET /api/season) y la app descarga su logo; estos archivos solo se usan sin conexión o en el primer arranque. Cada tema vive en su propia carpeta y debe usar los mismos nombres de archivo.",
   "androidLauncher": {
     "mipmap-mdpi": "icon-72.png",
     "mipmap-hdpi": "icon-72.png",
@@ -34,7 +34,7 @@
     "halloween": {
       "label": "Halloween",
       "path": "assets/themes/halloween",
-      "description": "Variante de Halloween (logo rojo con splash). Temporada activa.",
+      "description": "Variante de Halloween (logo rojo con splash).",
       "assets": {
         "logo": "logo.png",
         "logoWebp": "logo.webp",

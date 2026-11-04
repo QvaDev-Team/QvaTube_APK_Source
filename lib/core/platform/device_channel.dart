@@ -49,6 +49,20 @@ abstract final class DeviceChannel {
     }
   }
 
+  /// Activa el icono del launcher de [season] (`default`, `halloween`…).
+  /// `true` si quedó aplicado (también si ya lo estaba).
+  static Future<bool> applyLauncherIcon(String season) async {
+    if (!Platform.isAndroid) return false;
+    try {
+      await _channel.invokeMethod<bool>('applyLauncherIcon', {'season': season});
+      return true;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   /// Abre el menú "Compartir" de Android con [text]. `false` si no se pudo.
   static Future<bool> shareText(String text) async {
     if (!Platform.isAndroid) return false;

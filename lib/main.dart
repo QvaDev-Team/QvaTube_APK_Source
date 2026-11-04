@@ -5,22 +5,23 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/config/app_config.dart';
 import 'core/router/router.dart';
 import 'core/storage/app_preferences.dart';
-import 'core/theme/app_assets.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'core/update/update_providers.dart';
 import 'core/widgets/splash_screen.dart';
 import 'features/auth/presentation/providers/auth_controller.dart';
 import 'features/catalog/application/catalog_providers.dart';
+import 'core/theme/season_branding.dart';
+import 'features/home/presentation/widgets/media_player_screen.dart';
 import 'features/update/presentation/update_checker.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final preferences = await SharedPreferences.getInstance();
 
-  // Assets de la temporada (assets/theme.json). Se respeta el tema elegido
-  // en Configuración; si no hay ninguno, se usa el "active" del manifiesto.
-  await AppAssets.init(themeId: preferences.getString(AppConfig.themeIdKey));
+  // Arte de temporada: la última que dijo el servidor (GET /api/season) y su
+  // logo/icono guardados; sin eso, el arte incluido en el APK.
+  await SeasonBranding.init(preferences);
 
   runApp(
     ProviderScope(
@@ -37,18 +38,41 @@ class QvaTubeApp extends ConsumerStatefulWidget {
   ConsumerState<QvaTubeApp> createState() => _QvaTubeAppState();
 }
 
-class _QvaTubeAppState extends ConsumerState<QvaTubeApp> {
+class _QvaTubeAppState extends ConsumerState<QvaTubeApp>
+    with WidgetsBindingObserver {
   bool _homeInitialLoadDone = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshSeason();
       // Restaura la sesión guardada (`GET /api/auth/me`) antes de decidir a
       // qué pantalla ir.
       ref.read(authControllerProvider.notifier).restoreSession();
       _showUpdateWelcome();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshSeason();
+  }
+
+  /// Temporada del servidor al abrir y al volver a primer plano. El icono
+  /// del launcher solo se cambia sin nada reproduciéndose (algunos launchers
+  /// cierran la app al cambiar de alias).
+  void _refreshSeason() {
+    SeasonBranding.refresh(
+      canChangeIcon: !ActiveMediaSession.instance.hasActiveMedia,
+    );
   }
 
   Future<void> _showUpdateWelcome() async {

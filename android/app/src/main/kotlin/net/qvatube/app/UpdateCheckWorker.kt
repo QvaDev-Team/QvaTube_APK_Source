@@ -146,6 +146,14 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
             .setContentTitle("Nueva versión de QvaTube $versionName")
             .setContentText("Toca para actualizar$sizeText")
             .setContentIntent(pending)
+            .apply {
+                // Icono grande con el arte de la temporada que la app guardó
+                // de /assets/favicon.png; el pequeño es siempre el del APK.
+                val art = File(ctx.filesDir, "branding/favicon.png")
+                if (art.isFile) {
+                    android.graphics.BitmapFactory.decodeFile(art.path)?.let { setLargeIcon(it) }
+                }
+            }
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()

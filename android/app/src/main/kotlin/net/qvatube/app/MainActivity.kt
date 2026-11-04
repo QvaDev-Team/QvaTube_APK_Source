@@ -7,6 +7,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -94,6 +95,43 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         registerMediaReceiver()
     }
+
+    /**
+     * Activa el icono del launcher de la temporada ([season] de
+     * `GET /api/season`; `null` o desconocida = normal) con los
+     * `<activity-alias>` del manifiesto. Devuelve `true` si cambió algo.
+     */
+    private fun applyLauncherIcon(season: String?): Boolean {
+        val target = if (season != null && season in launcherAliases) season else "default"
+        val targetComponent = ComponentName(this, "$packageName.icon.$target")
+        val current = packageManager.getComponentEnabledSetting(targetComponent)
+        val enabled = current == PackageManager.COMPONENT_ENABLED_STATE_ENABLED ||
+            (current == PackageManager.COMPONENT_ENABLED_STATE_DEFAULT && target == "default")
+        val othersOff = launcherAliases.filter { it != target }.all { id ->
+            val state = packageManager.getComponentEnabledSetting(
+                ComponentName(this, "$packageName.icon.$id")
+            )
+            state == PackageManager.COMPONENT_ENABLED_STATE_DISABLED ||
+                (state == PackageManager.COMPONENT_ENABLED_STATE_DEFAULT && id != "default")
+        }
+        if (enabled && othersOff) return false
+        // Primero el nuevo (para no quedar nunca sin icono) y luego los demás.
+        packageManager.setComponentEnabledSetting(
+            targetComponent,
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+            PackageManager.DONT_KILL_APP
+        )
+        launcherAliases.filter { it != target }.forEach { id ->
+            packageManager.setComponentEnabledSetting(
+                ComponentName(this, "$packageName.icon.$id"),
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP
+            )
+        }
+        return true
+    }
+
+    private val launcherAliases = listOf("default", "halloween", "navidad", "sanvalentin")
 
     /** Salida de la pantalla completa de un video web (TV embebida), si está activa. */
     var exitWebFullscreen: (() -> Unit)? = null
@@ -188,6 +226,13 @@ class MainActivity : FlutterActivity() {
                 // APK instalado (base.apk): punto de partida de los parches
                 // diferenciales. Se puede leer sin permisos especiales.
                 "getInstalledApkPath" -> result.success(applicationInfo.sourceDir)
+                "applyLauncherIcon" -> {
+                    try {
+                        result.success(applyLauncherIcon(call.argument<String>("season")))
+                    } catch (e: Exception) {
+                        result.error("launcher_icon", e.message, null)
+                    }
+                }
                 "shareText" -> {
                     val text = call.argument<String>("text")
                     if (text.isNullOrBlank()) {
