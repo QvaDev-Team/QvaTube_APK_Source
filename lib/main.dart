@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/config/app_config.dart';
 import 'core/network/api_providers.dart';
+import 'core/platform/device_channel.dart';
 import 'core/push/push_service.dart';
 import 'core/router/router.dart';
 import 'core/storage/app_preferences.dart';
@@ -81,17 +82,27 @@ class _QvaTubeAppState extends ConsumerState<QvaTubeApp>
   /// Notificaciones push (FCM). Al tocar una se abre Notificaciones (o el
   /// Modo creador si es un aviso `creator_*`); con la app abierta se
   /// refresca la lista y se avisa con un mensaje breve.
-  void _startPush() {
-    PushService.start(
+  Future<void> _startPush() async {
+    await PushService.start(
       client: ref.read(apiClientProvider),
       onOpen: (message) {
-        ref.invalidate(notificationsProvider);
         final type = message.data['type']?.toString() ?? '';
+        // Push de "nueva versión" (lo manda el CI): banner de actualización.
+        if (type == 'app_update') {
+          recheckForUpdates();
+          return;
+        }
+        ref.invalidate(notificationsProvider);
         ref.read(routerProvider).push(
               type.startsWith('creator_') ? '/cuenta/creador' : '/cuenta/notificaciones',
             );
       },
       onForeground: (message) {
+        // Con la app abierta el banner ya avisa de la versión nueva.
+        if (message.data['type'] == 'app_update') {
+          recheckForUpdates();
+          return;
+        }
         ref.invalidate(notificationsProvider);
         final title = message.notification?.title;
         final context = rootNavigatorKey.currentContext;
@@ -108,6 +119,15 @@ class _QvaTubeAppState extends ConsumerState<QvaTubeApp>
         );
       },
     );
+    // Aviso de nueva versión: por push si este teléfono lo recibe (tema
+    // app-updates); si no (sin Play Services / sin conexión con Google),
+    // con la comprobación periódica en segundo plano. Nunca los dos.
+    if (await PushService.subscribeToUpdates()) {
+      DeviceChannel.cancelUpdateCheck();
+    } else {
+      DeviceChannel.scheduleUpdateCheck(AppConfig.updateManifestUrl);
+    }
+
     // Con sesión (también tras iniciarla), el backend recibe el token.
     ref.listenManual(authControllerProvider, (previous, next) {
       if (next.isAuthenticated && previous?.isAuthenticated != true) {

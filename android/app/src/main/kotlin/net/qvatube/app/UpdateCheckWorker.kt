@@ -195,6 +195,11 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
             )
         }
 
+        /** Deja de comprobar (el aviso llega por push). */
+        fun cancel(context: Context) {
+            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+        }
+
         /** Quita la notificación (p. ej. al abrir la app, que ya muestra el banner). */
         fun cancelNotification(context: Context) {
             NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)

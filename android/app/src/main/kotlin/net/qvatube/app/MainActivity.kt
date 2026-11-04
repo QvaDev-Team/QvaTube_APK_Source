@@ -101,14 +101,26 @@ class MainActivity : FlutterActivity() {
     private fun ensureGeneralChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (nm.getNotificationChannel("qvatube_general") != null) return
-        nm.createNotificationChannel(
-            NotificationChannel(
-                "qvatube_general",
-                "Avisos de QvaTube",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply { description = "Notificaciones de tu cuenta: estrenos, pagos, planes y más" }
-        )
+        if (nm.getNotificationChannel("qvatube_general") == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(
+                    "qvatube_general",
+                    "Avisos de QvaTube",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply { description = "Notificaciones de tu cuenta: estrenos, pagos, planes y más" }
+            )
+        }
+        // Mismo canal que la comprobación en segundo plano: el push de
+        // "nueva versión" (CI) lo usa y tiene que existir antes de que llegue.
+        if (nm.getNotificationChannel("qvatube_updates") == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(
+                    "qvatube_updates",
+                    "Actualizaciones",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply { description = "Aviso cuando hay una nueva versión de QvaTube" }
+            )
+        }
     }
 
     /**
@@ -295,6 +307,10 @@ class MainActivity : FlutterActivity() {
                 }
                 "pdfClose" -> {
                     pdfExecutor.execute { PdfPages.close() }
+                    result.success(true)
+                }
+                "cancelUpdateCheck" -> {
+                    UpdateCheckWorker.cancel(applicationContext)
                     result.success(true)
                 }
                 "scheduleUpdateCheck" -> {

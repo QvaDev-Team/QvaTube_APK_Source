@@ -63,6 +63,19 @@ abstract final class DeviceChannel {
     }
   }
 
+  /// Quita la comprobación periódica de actualizaciones: con push, el aviso
+  /// llega por FCM y así no sale dos veces.
+  static Future<void> cancelUpdateCheck() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('cancelUpdateCheck');
+    } on PlatformException {
+      // ignorar
+    } on MissingPluginException {
+      // ignorar
+    }
+  }
+
   /// Abre el menú "Compartir" de Android con [text]. `false` si no se pudo.
   static Future<bool> shareText(String text) async {
     if (!Platform.isAndroid) return false;

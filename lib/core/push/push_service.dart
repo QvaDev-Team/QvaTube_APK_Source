@@ -100,6 +100,22 @@ class PushService {
     await registerWithBackend();
   }
 
+  /// Tema al que el CI manda el aviso de "nueva versión" de cada release.
+  static const updatesTopic = 'app-updates';
+
+  /// `true` si hay token y el teléfono quedó suscrito a [updatesTopic].
+  static Future<bool> subscribeToUpdates() async {
+    if (status.value.state != 'ready') return false;
+    try {
+      await FirebaseMessaging.instance
+          .subscribeToTopic(updatesTopic)
+          .timeout(const Duration(seconds: 30));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Envía el token al backend para que pueda mandar los avisos de
   /// `/api/notifications` como push. Requiere sesión; los errores (sin
   /// sesión o endpoint aún no creado) se ignoran.

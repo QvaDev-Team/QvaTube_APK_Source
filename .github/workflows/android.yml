@@ -258,6 +258,14 @@ jobs:
       # "latest" del repositorio. Así el APK más reciente se descarga
       # siempre desde el mismo enlace y aparece en la portada del repo.
       # ---------------------------------------------------------------------
+      # latest.json de la release que se va a reemplazar (para saber si
+      # cambió la versión y hay que avisar por push). El repo es público.
+      - name: Guardar el manifiesto de la versión anterior
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          curl -sfL "https://github.com/$DIST_REPO/releases/download/latest/latest.json" \
+            -o dist/previous-latest.json || rm -f dist/previous-latest.json
+
       - name: Publicar la release "latest" en el repo público
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
@@ -308,6 +316,23 @@ jobs:
           )"
 
           echo ">> Release publicada: $(gh release view "$TAG" --repo "$DIST_REPO" --json url --jq .url)"
+
+      # Aviso de "nueva versión" por notificación push (FCM, tema
+      # app-updates) a los teléfonos con Google Play Services. Solo cuando
+      # sube version_name; los demás teléfonos se enteran con la
+      # comprobación periódica de la app. Si falla, la release ya está
+      # publicada igual.
+      - name: Avisar de la nueva versión por push
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          MANIFEST: dist/latest.json
+          PREVIOUS: dist/previous-latest.json
+        run: |
+          set -euo pipefail
+          pip install --quiet --disable-pip-version-check google-auth requests
+          python3 tool/push/send_update_push.py
 
       # Guarda este APK en la release "apk-archive" (qvatube-<versionCode>.apk)
       # para poder generar parches desde él en los próximos builds. Se

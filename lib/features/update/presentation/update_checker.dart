@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/config/app_config.dart';
 import '../../../core/platform/device_channel.dart';
 import '../../../core/router/router.dart';
 import '../../../core/theme/app_colors.dart';
@@ -37,6 +36,10 @@ class UpdateChecker extends ConsumerStatefulWidget {
   ConsumerState<UpdateChecker> createState() => _UpdateCheckerState();
 }
 
+/// Vuelve a comprobar y, si hay versión nueva, muestra el banner (al tocar
+/// la notificación push de actualización con la app ya abierta).
+void recheckForUpdates() => _UpdateCheckerState._instance?._check(silent: true);
+
 class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
   static _UpdateCheckerState? _instance;
 
@@ -53,8 +56,7 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
     _instance = this;
     if (widget.checkOnStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _check(silent: true));
-      // Aviso en segundo plano (notificación) aunque la app esté cerrada.
-      DeviceChannel.scheduleUpdateCheck(AppConfig.updateManifestUrl);
+      // Aviso de la comprobación en segundo plano (respaldo sin push).
       DeviceChannel.setUpdateNotificationTapListener(
         () => _check(silent: true),
       );
