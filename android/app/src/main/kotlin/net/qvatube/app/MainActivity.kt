@@ -644,7 +644,7 @@ class MainActivity : FlutterActivity() {
         }
 
         builder
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_qvatube)
             .setContentTitle(title)
             .setContentText(if (subtitle.isNotBlank()) subtitle else "Reproduciendo en QvaTube")
             .setSubText("QvaTube")

@@ -142,7 +142,8 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
             ""
         }
         val notification = NotificationCompat.Builder(ctx, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_qvatube)
+            .setColor(0xFFFF3D1A.toInt())
             .setContentTitle("Nueva versión de QvaTube $versionName")
             .setContentText("Toca para actualizar$sizeText")
             .setContentIntent(pending)

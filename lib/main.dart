@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/config/app_config.dart';
 import 'core/network/api_providers.dart';
-import 'core/platform/device_channel.dart';
 import 'core/push/push_service.dart';
 import 'core/router/router.dart';
 import 'core/storage/app_preferences.dart';
@@ -83,7 +82,10 @@ class _QvaTubeAppState extends ConsumerState<QvaTubeApp>
   /// Modo creador si es un aviso `creator_*`); con la app abierta se
   /// refresca la lista y se avisa con un mensaje breve.
   Future<void> _startPush() async {
+    // También decide por dónde llega el aviso de versión nueva: push (tema
+    // app-updates) o, sin push, la comprobación periódica. Nunca los dos.
     await PushService.start(
+      prefs: ref.read(sharedPreferencesProvider),
       client: ref.read(apiClientProvider),
       onOpen: (message) {
         final type = message.data['type']?.toString() ?? '';
@@ -119,15 +121,6 @@ class _QvaTubeAppState extends ConsumerState<QvaTubeApp>
         );
       },
     );
-    // Aviso de nueva versión: por push si este teléfono lo recibe (tema
-    // app-updates); si no (sin Play Services / sin conexión con Google),
-    // con la comprobación periódica en segundo plano. Nunca los dos.
-    if (await PushService.subscribeToUpdates()) {
-      DeviceChannel.cancelUpdateCheck();
-    } else {
-      DeviceChannel.scheduleUpdateCheck(AppConfig.updateManifestUrl);
-    }
-
     // Con sesión (también tras iniciarla), el backend recibe el token.
     ref.listenManual(authControllerProvider, (previous, next) {
       if (next.isAuthenticated && previous?.isAuthenticated != true) {

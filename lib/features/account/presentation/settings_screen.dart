@@ -6,7 +6,7 @@ import '../../../core/storage/app_preferences.dart';
 import '../../../core/theme/app_assets.dart';
 import '../../../core/update/app_update_service.dart';
 import '../../update/presentation/update_checker.dart';
-import 'push_test_tile.dart';
+import 'notifications_switch_tile.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text.dart';
 
@@ -45,13 +45,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const UpdateMenuEntry(),
           //const _InstalledVersionTile(),
 
-          const SizedBox(height: 20),
-          Text(
-            'Notificaciones push (prueba)',
-            style: Theme.of(context).textTheme.displaySmall,
-          ),
           const SizedBox(height: 10),
-          const PushTestTile(),
+          const NotificationsSwitchTile(),
 
           const SizedBox(height: 20),
           Text('Acerca de', style: Theme.of(context).textTheme.displaySmall),
