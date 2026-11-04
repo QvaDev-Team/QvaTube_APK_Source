@@ -94,6 +94,21 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         registerMediaReceiver()
+        ensureGeneralChannel()
+    }
+
+    /** Canal de las notificaciones push (avisos de QvaTube). */
+    private fun ensureGeneralChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (nm.getNotificationChannel("qvatube_general") != null) return
+        nm.createNotificationChannel(
+            NotificationChannel(
+                "qvatube_general",
+                "Avisos de QvaTube",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply { description = "Notificaciones de tu cuenta: estrenos, pagos, planes y más" }
+        )
     }
 
     /**

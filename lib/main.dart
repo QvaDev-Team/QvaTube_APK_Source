@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/config/app_config.dart';
+import 'core/network/api_providers.dart';
+import 'core/push/push_service.dart';
 import 'core/router/router.dart';
 import 'core/storage/app_preferences.dart';
 import 'core/theme/app_colors.dart';
@@ -52,6 +54,7 @@ class _QvaTubeAppState extends ConsumerState<QvaTubeApp>
       // qué pantalla ir.
       ref.read(authControllerProvider.notifier).restoreSession();
       _showUpdateWelcome();
+      _startPush();
     });
   }
 
@@ -73,6 +76,44 @@ class _QvaTubeAppState extends ConsumerState<QvaTubeApp>
     SeasonBranding.refresh(
       canChangeIcon: !ActiveMediaSession.instance.hasActiveMedia,
     );
+  }
+
+  /// Notificaciones push (FCM). Al tocar una se abre Notificaciones (o el
+  /// Modo creador si es un aviso `creator_*`); con la app abierta se
+  /// refresca la lista y se avisa con un mensaje breve.
+  void _startPush() {
+    PushService.start(
+      client: ref.read(apiClientProvider),
+      onOpen: (message) {
+        ref.invalidate(notificationsProvider);
+        final type = message.data['type']?.toString() ?? '';
+        ref.read(routerProvider).push(
+              type.startsWith('creator_') ? '/cuenta/creador' : '/cuenta/notificaciones',
+            );
+      },
+      onForeground: (message) {
+        ref.invalidate(notificationsProvider);
+        final title = message.notification?.title;
+        final context = rootNavigatorKey.currentContext;
+        if (title == null || context == null || !context.mounted) return;
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text(title),
+            action: SnackBarAction(
+              label: 'Ver',
+              onPressed: () =>
+                  ref.read(routerProvider).push('/cuenta/notificaciones'),
+            ),
+          ),
+        );
+      },
+    );
+    // Con sesión (también tras iniciarla), el backend recibe el token.
+    ref.listenManual(authControllerProvider, (previous, next) {
+      if (next.isAuthenticated && previous?.isAuthenticated != true) {
+        PushService.registerWithBackend();
+      }
+    });
   }
 
   Future<void> _showUpdateWelcome() async {

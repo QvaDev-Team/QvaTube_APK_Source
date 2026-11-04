@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/push/push_service.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/storage/app_preferences.dart';
 import '../../data/auth_repository.dart';
@@ -146,6 +147,8 @@ class AuthController extends Notifier<AuthState> {
 
   /// `POST /api/auth/logout`
   Future<void> logout() async {
+    // Antes de perder la cookie: que no lleguen avisos de esta cuenta.
+    await PushService.unregisterFromBackend();
     try {
       await _repository.logout();
     } catch (_) {

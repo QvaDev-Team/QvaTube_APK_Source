@@ -84,6 +84,18 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity-alias>
+        <!-- Notificaciones push (FCM) mostradas por el sistema con la app en
+             segundo plano: canal propio (lo crea MainActivity) e icono
+             pequeño monocromo. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="qvatube_general" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_qvatube" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_accent" />
         <!-- Permite compartir los APK descargados con el instalador del sistema. -->
         <provider
             android:name="androidx.core.content.FileProvider"
