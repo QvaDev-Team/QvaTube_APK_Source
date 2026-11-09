@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -72,8 +74,25 @@ class AuthState {
 
 /// Controlador del flujo de autenticación.
 class AuthController extends Notifier<AuthState> {
+  Timer? _retryTimer;
+  int _retryAttempt = 0;
+
   @override
   AuthState build() {
+    ref.onDispose(() => _retryTimer?.cancel());
+    // El último usuario conocido se guarda en el teléfono para poder entrar
+    // con mala conexión; se borra al quedar sin sesión.
+    listenSelf((previous, next) {
+      if (previous?.user == next.user && previous?.status == next.status) {
+        return;
+      }
+      final store = ref.read(sessionStoreProvider);
+      if (next.isAuthenticated && next.user != null) {
+        store.saveUser(next.user!.toJson());
+      } else if (next.status == AuthStatus.unauthenticated) {
+        store.saveUser(null);
+      }
+    });
     return const AuthState();
   }
 
@@ -81,27 +100,52 @@ class AuthController extends Notifier<AuthState> {
 
   /// Comprueba la sesión actual con `GET /api/auth/me`.
   ///
-  /// Si el servidor responde 401 se cierra la sesión localmente.
+  /// La sesión solo se cierra si el servidor responde 401 (cookie vencida o
+  /// revocada). Con mala conexión (tiempo agotado, sin red, error del
+  /// servidor) se entra con la sesión guardada y se vuelve a comprobar en
+  /// segundo plano: no hay que iniciar sesión otra vez.
   Future<void> restoreSession() async {
+    _retryTimer?.cancel();
+    final cookie = ref.read(apiClientProvider).sessionCookie;
+    if (cookie == null || cookie.isEmpty) {
+      if (state.status == AuthStatus.unknown) {
+        state = const AuthState(status: AuthStatus.unauthenticated);
+      }
+      return;
+    }
     try {
       final user = await _repository.me();
+      _retryAttempt = 0;
       state = AuthState(status: AuthStatus.authenticated, user: user);
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
+        _retryAttempt = 0;
         ref.read(apiClientProvider).sessionCookie = null;
         state = const AuthState(status: AuthStatus.unauthenticated);
         return;
       }
+      _keepOfflineSession();
+    } catch (_) {
+      _keepOfflineSession();
+    }
+  }
+
+  /// Sin respuesta válida del servidor pero con cookie guardada: se sigue
+  /// con la sesión (el usuario guardado o el que ya estaba en memoria) y se
+  /// reintenta con espera creciente (15 s, 30 s, 60 s... hasta 2 min).
+  void _keepOfflineSession() {
+    if (!state.isAuthenticated) {
+      final cached = ref.read(sessionStoreProvider).user;
       state = AuthState(
-        status: AuthStatus.unauthenticated,
-        error: authErrorMessage(error),
-      );
-    } catch (error) {
-      state = AuthState(
-        status: AuthStatus.unauthenticated,
-        error: authErrorMessage(error),
+        status: AuthStatus.authenticated,
+        user: state.user ?? (cached == null ? null : AuthUser.fromJson(cached)),
       );
     }
+    final seconds = (15 * (1 << _retryAttempt)).clamp(15, 120);
+    if (_retryAttempt < 3) _retryAttempt++;
+    _retryTimer = Timer(Duration(seconds: seconds), () {
+      if (state.isAuthenticated) restoreSession();
+    });
   }
 
   /// `POST /api/auth/login`
@@ -159,6 +203,7 @@ class AuthController extends Notifier<AuthState> {
 
   /// `POST /api/auth/logout`
   Future<void> logout() async {
+    _retryTimer?.cancel();
     // Antes de perder la cookie: que no lleguen avisos de esta cuenta.
     await PushService.unregisterFromBackend();
     try {

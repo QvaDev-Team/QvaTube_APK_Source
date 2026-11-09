@@ -24,6 +24,9 @@ abstract final class AppConfig {
   /// Clave de almacenamiento de la sesión (cookie `qva_session`).
   static const String sessionCookieKey = 'qvatube.session_cookie';
 
+  /// Último usuario de `GET /api/auth/me` (JSON), para entrar sin red.
+  static const String sessionUserKey = 'qvatube.session_user';
+
   /// Manifiesto JSON con la última versión publicada.
   ///
   /// Lo publica el workflow de GitHub Actions (archivo `latest.json` de la

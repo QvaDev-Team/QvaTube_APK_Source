@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -36,6 +38,27 @@ class SessionStore {
       return;
     }
     await _prefs.setString(AppConfig.sessionCookieKey, cookie);
+  }
+
+  /// Último usuario conocido, para abrir la app con mala conexión sin
+  /// volver a pedir el login.
+  Map<String, dynamic>? get user {
+    final raw = _prefs.getString(AppConfig.sessionUserKey);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final data = jsonDecode(raw);
+      return data is Map ? Map<String, dynamic>.from(data) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveUser(Map<String, dynamic>? user) async {
+    if (user == null) {
+      await _prefs.remove(AppConfig.sessionUserKey);
+      return;
+    }
+    await _prefs.setString(AppConfig.sessionUserKey, jsonEncode(user));
   }
 }
 

@@ -84,6 +84,20 @@ class AuthUser {
   /// usuarios y cuando el admin retira el código: decide si hay Modo creador.
   final CreatorInfo? creator;
 
+  /// Mismo formato que `GET /api/auth/me` (se guarda en el teléfono).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'id': id,
+    'email': email,
+    'display_name': displayName,
+    'avatar_url': avatarUrl,
+    'plan': plan,
+    'plan_expires_at': planExpiresAt,
+    'referral_code': referralCode,
+    'telegram_linked': telegramLinked,
+    if (creator != null)
+      'creator': {'code': creator!.code, 'rate': creator!.rate},
+  };
+
   String get name => (displayName?.trim().isNotEmpty ?? false)
       ? displayName!.trim()
       : (email?.split('@').first ?? 'Invitado');
