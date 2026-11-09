@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/endpoints/endpoints.dart';
 import '../domain/catalog_models.dart';
@@ -514,6 +515,60 @@ class CatalogApi {
                 .toList()
           : const <ReviewItem>[],
     );
+  }
+
+  /// Enlace público para compartir un ítem, igual que `buildShareUrl` de la
+  /// web: `<sitio>/share/<categoría>/<slug>[/<idx>]`. `GET /api/share-index`
+  /// da el slug y el índice corto (solo > 0 si hay títulos repetidos en la
+  /// categoría); si falla, se usa el slug local con índice 0.
+  Future<String> shareUrl(CatalogItem item) async {
+    final category = item.categoryKey ?? '';
+    final title = item.title ?? '';
+    var slug = _slugify(title);
+    var idx = 0;
+    try {
+      final response = await _client.get(
+        Endpoints.catalog.shareIndex,
+        query: <String, dynamic>{
+          'cat': category,
+          'title': title,
+          if (!item.isSeries) ...{
+            if (item.chatId != null) 'chat_id': item.chatId,
+            if (item.msgId != null) 'msg_id': item.msgId,
+          },
+        },
+        operation: 'el enlace para compartir',
+      );
+      final data = _map(response.data);
+      final remoteSlug = data['slug']?.toString();
+      if (remoteSlug != null && remoteSlug.isNotEmpty) slug = remoteSlug;
+      idx = (data['idx'] as num?)?.toInt() ?? 0;
+    } catch (_) {
+      // Sin red o error del servidor: enlace con el slug local.
+    }
+    final base = AppConfig.apiBaseUrl.endsWith('/')
+        ? AppConfig.apiBaseUrl.substring(0, AppConfig.apiBaseUrl.length - 1)
+        : AppConfig.apiBaseUrl;
+    final suffix = idx > 0 ? '/$idx' : '';
+    return '$base/share/$category/$slug$suffix';
+  }
+
+  /// `slugify` de la web (catalog.js): sin acentos, minúsculas, guiones.
+  static String _slugify(String title) {
+    const from = 'áàäâãåéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÅÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ';
+    const to = 'aaaaaaeeeeiiiiooooouuuuncaaaaaaeeeeiiiiooooouuuunc';
+    final buffer = StringBuffer();
+    for (final ch in title.split('')) {
+      final i = from.indexOf(ch);
+      buffer.write(i >= 0 ? to[i] : ch);
+    }
+    var slug = buffer
+        .toString()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    if (slug.length > 60) slug = slug.substring(0, 60);
+    return slug.isEmpty ? 'x' : slug;
   }
 
   /// POST /api/download/authorize

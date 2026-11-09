@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_flutter/lucide_flutter.dart';
 
@@ -61,6 +62,8 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
   bool _selectingTracks = false;
   final Set<String> _selectedTrackKeys = <String>{};
   bool _batchLoading = false;
+
+  bool _sharing = false;
 
   bool get _isSeries =>
       widget.item.isSeries ||
@@ -657,6 +660,21 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
     } catch (_) {
       await _openTelegram('dl_${chatId}_$msgId');
     }
+  }
+
+  /// Comparte el enlace público del título con el menú "Compartir" de
+  /// Android (WhatsApp, Telegram...). Si no se puede abrir, lo copia.
+  Future<void> _shareItem() async {
+    setState(() => _sharing = true);
+    final url = await ref.read(catalogApiProvider).shareUrl(widget.item);
+    if (!mounted) return;
+    setState(() => _sharing = false);
+    if (await DeviceChannel.shareText(url)) return;
+    await Clipboard.setData(ClipboardData(text: url));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Enlace copiado al portapapeles.')),
+    );
   }
 
   void _openTrailer() {
@@ -1441,11 +1459,7 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                   icon: Icons.share_outlined,
                   label: 'Compartir',
                   onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Enlace copiado al portapapeles.'),
-                      ),
-                    );
+                    if (!_sharing) _shareItem();
                   },
                 ),
                 const SizedBox(width: 8),
