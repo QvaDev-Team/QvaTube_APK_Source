@@ -1,5 +1,8 @@
 # Novedades de QvaTube
 
+## 1.2.5
+- Ya no tienes que iniciar sesión otra vez cuando abres la app con mala conexión: tu sesión se conserva hasta que la cierres tú.
+
 ## 1.2.4
 - Música: descarga un álbum completo de una vez o elige las pistas que quieras (plan Ultra).
 - Compartir ya funciona: envía el enlace de cualquier película, serie o álbum por WhatsApp, Telegram y más.
