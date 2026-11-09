@@ -1,5 +1,11 @@
 # Novedades de QvaTube
 
+## 1.2.4
+- Música: descarga un álbum completo de una vez o elige las pistas que quieras (plan Ultra).
+- Compartir ya funciona: envía el enlace de cualquier película, serie o álbum por WhatsApp, Telegram y más.
+- La verificación con Telegram ahora se pide al crear la cuenta, paso a paso.
+- La pantalla de carga de temporada viene incluida en la app.
+
 ## 1.2.3
 - Notificaciones al instante: te avisamos en el teléfono de cada nueva versión, con el logo de QvaTube.
 - Nuevo interruptor en Configuración para activar o desactivar las notificaciones.
