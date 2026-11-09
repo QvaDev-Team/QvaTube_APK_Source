@@ -92,6 +92,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         return null;
       }
 
+      // Verificación de Telegram obligatoria: una cuenta (nueva o vieja) sin
+      // Telegram vinculado no puede salir de esta pantalla hasta verificar o
+      // cerrar sesión, como el gate de la web.
+      if (authState.needsTelegramVerification) {
+        return location == Routes.telegramVerify ? null : Routes.telegramVerify;
+      }
+      if (location == Routes.telegramVerify) {
+        return canBrowse ? Routes.home : Routes.login;
+      }
+
       if (location == Routes.root) {
         if (!introSeen) return Routes.intro;
         return canBrowse ? Routes.home : Routes.login;

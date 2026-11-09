@@ -56,15 +56,17 @@ class AuthUser {
         'referralCode',
         'invite_code',
       ]),
-      telegramLinked: switch (
-          source['telegram_linked'] ?? source['telegramLinked']) {
+      telegramLinked: switch (source['telegram_linked'] ??
+          source['telegramLinked']) {
         final bool value => value,
         final num value => value != 0,
         final String value => value.toLowerCase() == 'true',
         _ => false,
       },
       creator: source['creator'] is Map
-          ? CreatorInfo.fromJson(Map<String, dynamic>.from(source['creator'] as Map))
+          ? CreatorInfo.fromJson(
+              Map<String, dynamic>.from(source['creator'] as Map),
+            )
           : null,
     );
   }
@@ -92,7 +94,8 @@ class AuthUser {
     if (parts.length == 1) {
       return parts.first.substring(0, 1).toUpperCase();
     }
-    return (parts.first.substring(0, 1) + parts.last.substring(0, 1)).toUpperCase();
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+        .toUpperCase();
   }
 
   AuthUser copyWith({
@@ -121,9 +124,9 @@ class CreatorInfo {
   const CreatorInfo({required this.code, required this.rate});
 
   factory CreatorInfo.fromJson(Map<String, dynamic> json) => CreatorInfo(
-        code: json['code']?.toString() ?? '',
-        rate: (json['rate'] as num?)?.toDouble() ?? 0.1,
-      );
+    code: json['code']?.toString() ?? '',
+    rate: (json['rate'] as num?)?.toDouble() ?? 0.1,
+  );
 
   final String code;
 
@@ -143,10 +146,14 @@ class TelegramVerification {
     this.deepLink,
     this.status = TelegramVerifyStatus.pending,
     this.reason,
+    this.sent = false,
+    this.user,
   });
 
   factory TelegramVerification.fromJson(Map<String, dynamic> json) {
-    final rawStatus = (json['status'] ?? json['state'] ?? '').toString().toLowerCase();
+    final rawStatus = (json['status'] ?? json['state'] ?? '')
+        .toString()
+        .toLowerCase();
     final status = switch (rawStatus) {
       'confirmed' || 'verified' || 'ok' => TelegramVerifyStatus.confirmed,
       'failed' || 'error' || 'rejected' => TelegramVerifyStatus.failed,
@@ -156,9 +163,16 @@ class TelegramVerification {
 
     return TelegramVerification(
       token: (json['token'] ?? json['verification_token']) as String?,
-      deepLink: (json['deep_link'] ?? json['deepLink'] ?? json['bot_link']) as String?,
+      deepLink:
+          (json['deep_link'] ?? json['deepLink'] ?? json['bot_link'])
+              as String?,
       status: status,
       reason: json['reason'] as String?,
+      // `GET /api/auth/verify/status` -> `{"sent": true}` en cuanto el
+      // usuario tocó "Iniciar" en el bot y este le mandó el código.
+      sent: json['sent'] == true,
+      // `POST /api/auth/verify/confirm` -> `{"user": {...}}` al verificar.
+      user: json['user'] is Map ? AuthUser.fromJson(json) : null,
     );
   }
 
@@ -166,6 +180,8 @@ class TelegramVerification {
   final String? deepLink;
   final TelegramVerifyStatus status;
   final String? reason;
+  final bool sent;
+  final AuthUser? user;
 }
 
 /// Código corto para vincular la cuenta con Telegram.

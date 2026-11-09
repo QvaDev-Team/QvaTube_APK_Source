@@ -41,6 +41,11 @@ class AuthState {
 
   bool get isAuthenticated => status == AuthStatus.authenticated;
 
+  /// Sesión iniciada pero sin vincular Telegram: la verificación es
+  /// obligatoria antes de usar la app (igual que el gate de la web).
+  bool get needsTelegramVerification =>
+      isAuthenticated && user != null && !user!.telegramLinked;
+
   bool get isGuest => status == AuthStatus.guest;
 
   /// Permite entrar a la app como invitado o con sesión activa.
@@ -143,6 +148,13 @@ class AuthController extends Notifier<AuthState> {
       );
       return false;
     }
+  }
+
+  /// La cuenta quedó vinculada con Telegram (`POST /api/auth/verify/confirm`).
+  /// Usa el usuario que devolvió el servidor o, si no vino, marca el actual.
+  void completeTelegramVerification(AuthUser? user) {
+    final next = (user ?? state.user)?.copyWith(telegramLinked: true);
+    state = AuthState(status: AuthStatus.authenticated, user: next);
   }
 
   /// `POST /api/auth/logout`
