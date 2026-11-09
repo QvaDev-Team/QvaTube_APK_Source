@@ -549,6 +549,45 @@ class CatalogApi {
     return _map(response.data);
   }
 
+  /// POST /api/download/authorize-album
+  /// Autoriza la descarga del álbum completo (solo Ultra). El servidor arma la
+  /// lista de pistas a partir de `artist` + `album` (igual que
+  /// `/api/album-tracks`, así que `album` se envía aunque sea `""`).
+  Future<Map<String, dynamic>> authorizeAlbumDownload({
+    required String categoryKey,
+    required String artist,
+    required String album,
+  }) async {
+    final response = await _client.post(
+      Endpoints.downloads.authorizeAlbum,
+      body: <String, dynamic>{
+        'category_key': categoryKey,
+        'artist': artist,
+        'album': album,
+      },
+      operation: 'la autorización de descarga del álbum',
+    );
+    return _map(response.data);
+  }
+
+  /// POST /api/download/authorize-batch
+  /// Autoriza una selección libre de archivos (1–200, solo Ultra), en el orden
+  /// en que se ven en pantalla.
+  Future<Map<String, dynamic>> authorizeBatchDownload(
+    List<({int chatId, int msgId})> items,
+  ) async {
+    final response = await _client.post(
+      Endpoints.downloads.authorizeBatch,
+      body: <String, dynamic>{
+        'items': [
+          for (final it in items) {'chat_id': it.chatId, 'msg_id': it.msgId},
+        ],
+      },
+      operation: 'la autorización de descarga en lote',
+    );
+    return _map(response.data);
+  }
+
   /// GET /api/info
   /// Ficha TMDb del título (sinopsis, reparto, tráiler, año y nota).
   Future<ContentInfo> info(String title, {String? type}) async {

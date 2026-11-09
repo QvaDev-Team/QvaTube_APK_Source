@@ -56,6 +56,12 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
   String? _sameNameError;
   List<SameNameFile>? _sameNameFiles;
 
+  // Descarga en lote de pistas (álbum, solo Ultra): modo selección y claves
+  // `chat_id:msg_id` marcadas.
+  bool _selectingTracks = false;
+  final Set<String> _selectedTrackKeys = <String>{};
+  bool _batchLoading = false;
+
   bool get _isSeries =>
       widget.item.isSeries ||
       widget.item.categoryKey == 'series' ||
@@ -86,6 +92,7 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
       _fetchPlan();
     } else if (_isAlbum) {
       _fetchAlbumTracks();
+      _fetchPlan();
     }
   }
 
@@ -521,6 +528,111 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
     }
   }
 
+  static String? _trackKey(Map<String, dynamic> track) {
+    final chatId = (track['chat_id'] as num?)?.toInt();
+    final msgId = (track['msg_id'] as num?)?.toInt();
+    if (chatId == null || msgId == null) return null;
+    return '$chatId:$msgId';
+  }
+
+  List<Map<String, dynamic>> get _selectableTracks =>
+      _episodes.where((t) => _trackKey(t) != null).toList();
+
+  void _toggleTrackSelectionMode() {
+    setState(() {
+      _selectingTracks = !_selectingTracks;
+      _selectedTrackKeys.clear();
+    });
+  }
+
+  void _toggleTrackSelected(Map<String, dynamic> track) {
+    final key = _trackKey(track);
+    if (key == null) return;
+    setState(() {
+      if (!_selectedTrackKeys.remove(key)) _selectedTrackKeys.add(key);
+    });
+  }
+
+  void _toggleSelectAllTracks() {
+    final rows = _selectableTracks;
+    final allOn = rows.isNotEmpty && _selectedTrackKeys.length == rows.length;
+    setState(() {
+      _selectedTrackKeys.clear();
+      if (!allOn) _selectedTrackKeys.addAll(rows.map((t) => _trackKey(t)!));
+    });
+  }
+
+  /// Pide el deep link de un lote y lo abre en Telegram (el bot entrega los
+  /// archivos uno por uno). Devuelve `true` si se abrió.
+  Future<bool> _runBatchRequest(
+    Future<Map<String, dynamic>> Function() request,
+  ) async {
+    if (_batchLoading) return false;
+    setState(() => _batchLoading = true);
+    try {
+      final response = await request();
+      final url = _downloadLink(response);
+      if (url == null) {
+        throw const ApiException('El servidor no devolvió el enlace.');
+      }
+      await DeviceChannel.openUrl(url);
+      return true;
+    } on ApiException catch (e) {
+      if (!mounted) return false;
+      final message = switch (e.statusCode) {
+        401 => 'Inicia sesión para descargar en lote.',
+        null => 'Sin conexión. Intenta de nuevo.',
+        _ => e.message,
+      };
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+      return false;
+    } catch (_) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo preparar la descarga.')),
+      );
+      return false;
+    } finally {
+      if (mounted) setState(() => _batchLoading = false);
+    }
+  }
+
+  Future<void> _handleDownloadAlbum() async {
+    final item = widget.item;
+    await _runBatchRequest(
+      () => ref
+          .read(catalogApiProvider)
+          .authorizeAlbumDownload(
+            categoryKey: item.categoryKey ?? 'music',
+            artist: item.artist ?? '',
+            album: item.album ?? '',
+          ),
+    );
+  }
+
+  Future<void> _handleDownloadSelectedTracks() async {
+    // En el orden en que se ven, no en el que se tocaron.
+    final items = <({int chatId, int msgId})>[
+      for (final t in _selectableTracks)
+        if (_selectedTrackKeys.contains(_trackKey(t)))
+          (
+            chatId: (t['chat_id'] as num).toInt(),
+            msgId: (t['msg_id'] as num).toInt(),
+          ),
+    ];
+    if (items.isEmpty) return;
+    final ok = await _runBatchRequest(
+      () => ref.read(catalogApiProvider).authorizeBatchDownload(items),
+    );
+    if (ok && mounted) {
+      setState(() {
+        _selectingTracks = false;
+        _selectedTrackKeys.clear();
+      });
+    }
+  }
+
   Future<void> _handleDownloadEpisode(Map<String, dynamic> episode) async {
     final chatId = (episode['chat_id'] as num?)?.toInt() ?? widget.item.chatId;
     final msgId = (episode['msg_id'] as num?)?.toInt() ?? widget.item.msgId;
@@ -833,6 +945,8 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
         .toString()
         .toUpperCase();
     final artist = item.artist ?? '';
+    final showBatch =
+        _isUnlimitedPlan && !_loadingEpisodes && _episodes.length > 1;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.9,
@@ -840,7 +954,7 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
       maxChildSize: 0.95,
       expand: false,
       builder: (context, scrollController) {
-        return ListView(
+        final list = ListView(
           controller: scrollController,
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
@@ -921,6 +1035,10 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                 ),
               ),
             ),
+            if (showBatch) ...[
+              const SizedBox(height: 10),
+              _buildAlbumBatchActions(),
+            ],
             const SizedBox(height: 16),
             if (_loadingEpisodes)
               const Padding(
@@ -955,8 +1073,16 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                       track['title']?.toString() ??
                       'Pista ${(index + 1).toString().padLeft(2, '0')}';
                   final subtitle = _trackSubtitle(track);
+                  final selecting = _selectingTracks && showBatch;
+                  final key = _trackKey(track);
+                  final selected =
+                      key != null && _selectedTrackKeys.contains(key);
                   return InkWell(
-                    onTap: () => _handlePlayAlbumTrack(index),
+                    onTap: selecting
+                        ? (key == null
+                              ? null
+                              : () => _toggleTrackSelected(track))
+                        : () => _handlePlayAlbumTrack(index),
                     borderRadius: BorderRadius.circular(8),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -967,14 +1093,26 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                         children: [
                           SizedBox(
                             width: 20,
-                            child: Text(
-                              '${_trackNumber(track, index)}',
-                              textAlign: TextAlign.center,
-                              style: AppTextStyles.mono(
-                                fontSize: 11,
-                                color: AppColors.textMuted,
-                              ),
-                            ),
+                            child: selecting
+                                ? Icon(
+                                    selected
+                                        ? Icons.check_box_rounded
+                                        : Icons.check_box_outline_blank_rounded,
+                                    size: 20,
+                                    color: selected
+                                        ? AppColors.accent
+                                        : (key == null
+                                              ? Colors.white12
+                                              : Colors.white38),
+                                  )
+                                : Text(
+                                    '${_trackNumber(track, index)}',
+                                    textAlign: TextAlign.center,
+                                    style: AppTextStyles.mono(
+                                      fontSize: 11,
+                                      color: AppColors.textMuted,
+                                    ),
+                                  ),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
@@ -1007,17 +1145,19 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                               ],
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          _TrackActionButton(
-                            icon: Icons.play_arrow_rounded,
-                            filled: true,
-                            onTap: () => _handlePlayAlbumTrack(index),
-                          ),
-                          const SizedBox(width: 6),
-                          _TrackActionButton(
-                            icon: Icons.download_rounded,
-                            onTap: () => _handleDownloadEpisode(track),
-                          ),
+                          if (!selecting) ...[
+                            const SizedBox(width: 8),
+                            _TrackActionButton(
+                              icon: Icons.play_arrow_rounded,
+                              filled: true,
+                              onTap: () => _handlePlayAlbumTrack(index),
+                            ),
+                            const SizedBox(width: 6),
+                            _TrackActionButton(
+                              icon: Icons.download_rounded,
+                              onTap: () => _handleDownloadEpisode(track),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -1026,7 +1166,170 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
               ),
           ],
         );
+        if (!(_selectingTracks && showBatch)) return list;
+        return Column(
+          children: [
+            Expanded(child: list),
+            _buildTrackBatchBar(),
+          ],
+        );
       },
+    );
+  }
+
+  /// "Descargar álbum" + "Seleccionar" (solo Ultra), como en la web.
+  Widget _buildAlbumBatchActions() {
+    const accent = Color(0xFFFF3D1A);
+    return Row(
+      children: [
+        Expanded(
+          child: InkWell(
+            onTap: _batchLoading ? null : _handleDownloadAlbum,
+            borderRadius: BorderRadius.circular(AppRadii.md),
+            child: Container(
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF16181D),
+                borderRadius: BorderRadius.circular(AppRadii.md),
+                border: Border.all(color: accent),
+              ),
+              child: Row(
+                children: [
+                  if (_batchLoading && !_selectingTracks)
+                    const SizedBox(
+                      width: 15,
+                      height: 15,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: accent,
+                      ),
+                    )
+                  else
+                    const Icon(Icons.arrow_downward, size: 15, color: accent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _batchLoading && !_selectingTracks
+                          ? 'Preparando...'
+                          : 'Descargar álbum',
+                      style: const TextStyle(
+                        color: accent,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: accent,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${_episodes.length} pistas',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          height: 44,
+          child: OutlinedButton(
+            onPressed: _batchLoading ? null : _toggleTrackSelectionMode,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _selectingTracks ? accent : Colors.white70,
+              side: BorderSide(
+                color: _selectingTracks ? accent : Colors.white24,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadii.md),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+            ),
+            child: Text(
+              _selectingTracks ? 'Cancelar' : 'Seleccionar',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Barra fija al pie en modo selección: "Todo/Quitar · Descargar N · ✕".
+  Widget _buildTrackBatchBar() {
+    final rows = _selectableTracks;
+    final n = _selectedTrackKeys.length;
+    final allOn = rows.isNotEmpty && n == rows.length;
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        12,
+        10,
+        12,
+        10 + MediaQuery.paddingOf(context).bottom,
+      ),
+      decoration: const BoxDecoration(
+        color: Color(0xFF16181D),
+        border: Border(top: BorderSide(color: Colors.white12)),
+      ),
+      child: Row(
+        children: [
+          TextButton(
+            onPressed: _batchLoading ? null : _toggleSelectAllTracks,
+            child: Text(allOn ? 'Quitar' : 'Todo'),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: n == 0 || _batchLoading
+                  ? null
+                  : _handleDownloadSelectedTracks,
+              icon: _batchLoading
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.download_rounded, size: 16),
+              label: Text(
+                _batchLoading
+                    ? 'Preparando...'
+                    : 'Descargar $n ${n == 1 ? 'pista' : 'pistas'}',
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: AppColors.accent.withValues(
+                  alpha: 0.4,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadii.md),
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Cancelar selección',
+            onPressed: _batchLoading ? null : _toggleTrackSelectionMode,
+            icon: const Icon(Icons.close, color: Colors.white70),
+          ),
+        ],
+      ),
     );
   }
 
