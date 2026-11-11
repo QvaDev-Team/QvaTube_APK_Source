@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -76,9 +78,10 @@ class _PartialStar extends StatelessWidget {
   }
 }
 
-/// Qubi, la mascota de QvaTube (PNG con fondo transparente), sobre un
-/// resplandor rojo suave para que se integre con el fondo oscuro.
-class QubiMascot extends StatelessWidget {
+/// Qubi, la mascota de QvaTube (PNG con fondo transparente), con un glow
+/// rojo de la marca que late: un halo detrás y un resplandor que sigue su
+/// silueta (copia desenfocada y teñida de la propia imagen).
+class QubiMascot extends StatefulWidget {
   const QubiMascot({super.key, this.size = 120});
 
   static const String asset = 'assets/mascota/qubi.png';
@@ -86,26 +89,88 @@ class QubiMascot extends StatelessWidget {
   final double size;
 
   @override
+  State<QubiMascot> createState() => _QubiMascotState();
+}
+
+class _QubiMascotState extends State<QubiMascot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return SizedBox.square(
-      dimension: size,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(
-            colors: [
-              AppColors.accent.withValues(alpha: 0.30),
-              AppColors.accent.withValues(alpha: 0.0),
-            ],
-            stops: const [0.0, 0.72],
-          ),
-        ),
-        child: Image.asset(
-          asset,
-          fit: BoxFit.contain,
-          alignment: Alignment.center,
-          filterQuality: FilterQuality.medium,
-          semanticLabel: 'Qubi, la mascota de QvaTube',
+    final size = widget.size;
+    final image = Image.asset(
+      QubiMascot.asset,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.medium,
+    );
+    // Sin animaciones si el sistema pide reducir movimiento.
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+
+    return Semantics(
+      label: 'Qubi, la mascota de QvaTube',
+      image: true,
+      child: SizedBox.square(
+        dimension: size,
+        child: AnimatedBuilder(
+          animation: _pulse,
+          builder: (context, child) {
+            final t = reduceMotion
+                ? 0.5
+                : Curves.easeInOut.transform(_pulse.value);
+            return Stack(
+              alignment: Alignment.center,
+              clipBehavior: Clip.none,
+              children: [
+                // Halo que respira detrás de Qubi.
+                Transform.scale(
+                  scale: 1.0 + 0.12 * t,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          AppColors.accent.withValues(alpha: 0.22 + 0.26 * t),
+                          AppColors.accentDim.withValues(alpha: 0.08 * t),
+                          AppColors.accent.withValues(alpha: 0.0),
+                        ],
+                        stops: const [0.0, 0.5, 0.75],
+                      ),
+                    ),
+                    child: SizedBox.square(dimension: size),
+                  ),
+                ),
+                // Resplandor con la forma de Qubi.
+                Opacity(
+                  opacity: 0.35 + 0.55 * t,
+                  child: ImageFiltered(
+                    imageFilter: ImageFilter.blur(
+                      sigmaX: size * (0.05 + 0.04 * t),
+                      sigmaY: size * (0.05 + 0.04 * t),
+                    ),
+                    child: ColorFiltered(
+                      colorFilter: const ColorFilter.mode(
+                        AppColors.accent,
+                        BlendMode.srcIn,
+                      ),
+                      child: child,
+                    ),
+                  ),
+                ),
+                child!,
+              ],
+            );
+          },
+          child: image,
         ),
       ),
     );
