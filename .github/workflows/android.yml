@@ -161,6 +161,7 @@ jobs:
       # cae a la descarga completa.
       # ---------------------------------------------------------------------
       - name: Generar parches diferenciales
+        id: patches
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         continue-on-error: true
         env:
@@ -171,8 +172,24 @@ jobs:
           MAX_SOURCES: '3'
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq bsdiff
+
+          # bsdiff: apt con reintentos (los mirrors de Ubuntu fallan a veces
+          # por DNS) y, si no hay manera, bsdiff4 de PyPI, que genera el
+          # mismo formato BSDIFF40 con la misma interfaz `old new patch`.
+          for attempt in 1 2 3; do
+            if sudo apt-get update -qq && sudo apt-get install -y -qq bsdiff; then
+              break
+            fi
+            echo ">> apt falló (intento $attempt), reintentando en $((attempt * 15)) s"
+            sleep $((attempt * 15))
+          done
+          if ! command -v bsdiff >/dev/null; then
+            echo "::warning::No se pudo instalar bsdiff con apt; se usa bsdiff4 de PyPI"
+            python3 -m venv "$RUNNER_TEMP/bsdiff4"
+            "$RUNNER_TEMP/bsdiff4/bin/pip" install --quiet --retries 5 bsdiff4
+            export BSDIFF="$RUNNER_TEMP/bsdiff4/bin/bsdiff4"
+          fi
+
           bash tool/delta/make_patches.sh
 
       # Manifiesto de versión: la app lo consulta para saber si hay una
@@ -240,6 +257,17 @@ jobs:
               published_at: $published_at}' \
             > dist/latest.json
           cat dist/latest.json
+
+      # Que una release sin parches no pase desapercibida detrás del check
+      # verde: los usuarios bajarían el APK completo.
+      - name: Avisar si la release sale sin parches
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          if [ "${{ steps.patches.outcome }}" = "failure" ]; then
+            echo "::warning title=Sin parches diferenciales::Falló la generación de parches; esta versión solo se podrá descargar completa. Revisa el paso 'Generar parches diferenciales'."
+          elif [ "$(jq '.patches | length' dist/latest.json)" -eq 0 ]; then
+            echo "::warning title=Sin parches diferenciales::latest.json no incluye parches (no hay versiones anteriores o ninguno ahorraba lo suficiente)."
+          fi
 
       - name: Publicar el APK como artefacto
         uses: actions/upload-artifact@v4
