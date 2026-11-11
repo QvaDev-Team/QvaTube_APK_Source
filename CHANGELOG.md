@@ -1,5 +1,9 @@
 # Novedades de QvaTube
 
+## 1.2.7
+- Vuelve el lema de QvaTube a Inicio, con el resumen de todo lo que puedes disfrutar.
+- El botón «Valorar la APK» ahora es amarillo para encontrarlo mejor.
+
 ## 1.2.6
 - Valora QvaTube desde la app: elige de 1 a 5 estrellas, deja un comentario y lee lo que opinan otros usuarios.
 - Inicio muestra la valoración media y cuántas valoraciones hay.
