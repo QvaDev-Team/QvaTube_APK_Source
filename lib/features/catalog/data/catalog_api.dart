@@ -517,6 +517,17 @@ class CatalogApi {
     );
   }
 
+  /// POST /api/reviews — crea o reemplaza la valoración del usuario (una por
+  /// cuenta). Requiere sesión: sin ella el servidor responde 401
+  /// "Debes iniciar sesión".
+  Future<void> submitReview({required int rating, String comment = ''}) async {
+    await _client.post(
+      Endpoints.reviews.reviews,
+      body: <String, dynamic>{'rating': rating, 'comment': comment.trim()},
+      operation: 'el envío de la valoración',
+    );
+  }
+
   /// Enlace público para compartir un ítem, igual que `buildShareUrl` de la
   /// web: `<sitio>/share/<categoría>/<slug>[/<idx>]`. `GET /api/share-index`
   /// da el slug y el índice corto (solo > 0 si hay títulos repetidos en la

@@ -25,6 +25,7 @@ import '../../features/home/presentation/tabs/catalog_tab.dart';
 import '../../features/home/presentation/tabs/home_tab.dart';
 import '../../features/home/presentation/tabs/tv_tab.dart';
 import '../../features/onboarding/presentation/intro_screen.dart';
+import '../../features/reviews/presentation/reviews_screen.dart';
 
 /// Navigator raíz (se usa también para mostrar diálogos globales, como el
 /// aviso de actualización, desde un contexto que está por encima del
@@ -331,6 +332,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/cuenta/creador',
         builder: (context, state) => const CreatorScreen(),
+      ),
+      GoRoute(
+        path: '/cuenta/valoraciones',
+        builder: (context, state) => const ReviewsScreen(),
       ),
       GoRoute(
         path: '/cuenta/descargas',
