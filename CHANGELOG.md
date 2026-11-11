@@ -1,5 +1,8 @@
 # Novedades de QvaTube
 
+## 1.2.9
+- Qubi ahora brilla con un resplandor rojo que late junto a la valoración de la app.
+
 ## 1.2.8
 - Conoce a Qubi, la mascota de QvaTube: ahora te acompaña junto a la valoración de la app.
 - Los botones de Inicio tienen un nuevo brillo.
