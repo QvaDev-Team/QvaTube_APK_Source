@@ -215,8 +215,9 @@ class HomeTab extends ConsumerWidget {
   }
 }
 
-/// Cabecera de Inicio: valoración media real (`GET /api/reviews`), "Planes y
-/// Precios" y "Valorar la APK" (abre la pantalla de valoraciones).
+/// Cabecera de Inicio: lema, resumen con la categoría rotando, valoración
+/// media real (`GET /api/reviews`), "Planes y Precios" y "Valorar la APK"
+/// (abre la pantalla de valoraciones).
 class _Hero extends StatelessWidget {
   const _Hero();
 
@@ -224,6 +225,14 @@ class _Hero extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        Text(
+          'TODO EL ENTRETENIMIENTO, EN UN SOLO LUGAR.',
+          textAlign: TextAlign.center,
+          style: AppTextStyles.display(fontSize: 20, letterSpacing: 0.4),
+        ),
+        const SizedBox(height: 8),
+        const _RotatingTagline(),
+        const SizedBox(height: 16),
         const RatingSummary(),
         const SizedBox(height: 20),
         SizedBox(
@@ -242,14 +251,111 @@ class _Hero extends StatelessWidget {
           child: _ActionButton(
             label: 'Valorar la APK',
             icon: LucideIcons.star,
-            color: Colors.transparent,
-            foreground: AppColors.textPrimary,
-            iconColor: ratingGold,
-            borderColor: ratingGold,
+            color: ratingGold,
+            foreground: const Color(0xFF1A1300),
             onTap: () => context.push('/cuenta/valoraciones'),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// "Disfruta de [CATEGORÍA] y mucho más…", con la categoría rotando en el
+/// color de acento y un pequeño glow.
+class _RotatingTagline extends StatefulWidget {
+  const _RotatingTagline();
+
+  @override
+  State<_RotatingTagline> createState() => _RotatingTaglineState();
+}
+
+class _RotatingTaglineState extends State<_RotatingTagline> {
+  static const _categories = [
+    'Música',
+    'Series',
+    'Anime',
+    'Libros',
+    'Películas',
+    'Televisión',
+  ];
+
+  int _index = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 2200), (_) {
+      setState(() => _index = (_index + 1) % _categories.length);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final base = AppTextStyles.body(
+      fontSize: 13.5,
+      color: AppColors.textSecondary,
+      height: 1.5,
+    );
+    final highlight = base.copyWith(
+      color: AppColors.accent,
+      fontWeight: FontWeight.w800,
+      shadows: [
+        Shadow(color: AppColors.accent.withValues(alpha: 0.75), blurRadius: 12),
+      ],
+    );
+
+    return Text.rich(
+      TextSpan(
+        style: base,
+        children: [
+          const TextSpan(text: 'Disfruta de '),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            // Todas las categorías invisibles reservan el ancho de la más
+            // larga, así el resto del texto no salta al cambiar de palabra.
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                for (final category in _categories)
+                  Opacity(opacity: 0, child: Text(category, style: highlight)),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 350),
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0, 0.4),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  ),
+                  child: Text(
+                    _categories[_index],
+                    key: ValueKey(_index),
+                    style: highlight,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const TextSpan(
+            text:
+                ' y mucho más en línea o descárgalo para llevarlo contigo sin '
+                'conexión, con contenido nuevo todos los días.',
+          ),
+        ],
+      ),
+      textAlign: TextAlign.center,
     );
   }
 }
@@ -261,8 +367,6 @@ class _ActionButton extends StatelessWidget {
     required this.color,
     required this.foreground,
     required this.onTap,
-    this.iconColor,
-    this.borderColor,
   });
 
   final String label;
@@ -270,8 +374,6 @@ class _ActionButton extends StatelessWidget {
   final Color color;
   final Color foreground;
   final VoidCallback onTap;
-  final Color? iconColor;
-  final Color? borderColor;
 
   @override
   Widget build(BuildContext context) {
@@ -286,15 +388,12 @@ class _ActionButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppRadii.md),
-            border: borderColor == null
-                ? null
-                : Border.all(color: borderColor!, width: 1.4),
             boxShadow: color == AppColors.accent ? AppColors.playGlow : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 18, color: iconColor ?? foreground),
+              Icon(icon, size: 18, color: foreground),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(

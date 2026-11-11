@@ -173,22 +173,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          # bsdiff: apt con reintentos (los mirrors de Ubuntu fallan a veces
-          # por DNS) y, si no hay manera, bsdiff4 de PyPI, que genera el
-          # mismo formato BSDIFF40 con la misma interfaz `old new patch`.
-          for attempt in 1 2 3; do
-            if sudo apt-get update -qq && sudo apt-get install -y -qq bsdiff; then
-              break
-            fi
-            echo ">> apt falló (intento $attempt), reintentando en $((attempt * 15)) s"
-            sleep $((attempt * 15))
-          done
-          if ! command -v bsdiff >/dev/null; then
-            echo "::warning::No se pudo instalar bsdiff con apt; se usa bsdiff4 de PyPI"
-            python3 -m venv "$RUNNER_TEMP/bsdiff4"
-            "$RUNNER_TEMP/bsdiff4/bin/pip" install --quiet --retries 5 bsdiff4
-            export BSDIFF="$RUNNER_TEMP/bsdiff4/bin/bsdiff4"
-          fi
+          # bsdiff4 de PyPI: mismo formato BSDIFF40 y misma interfaz
+          # `old new patch` que el bsdiff de apt, sin depender de los mirrors
+          # de Ubuntu (security.ubuntu.com no resuelve en las imágenes de
+          # Ubuntu 26 del runner).
+          python3 -m venv "$RUNNER_TEMP/bsdiff4"
+          "$RUNNER_TEMP/bsdiff4/bin/pip" install --quiet --retries 5 bsdiff4
+          export BSDIFF="$RUNNER_TEMP/bsdiff4/bin/bsdiff4"
 
           bash tool/delta/make_patches.sh
 
