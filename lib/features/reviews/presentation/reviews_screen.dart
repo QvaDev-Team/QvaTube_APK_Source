@@ -37,7 +37,7 @@ class ReviewsScreen extends ConsumerWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
           children: [
-            const RatingSummary(starSize: 110),
+            const RatingSummary(mascotSize: 110),
             const SizedBox(height: 22),
             const _ReviewForm(),
             const SizedBox(height: 28),

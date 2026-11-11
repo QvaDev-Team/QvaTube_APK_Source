@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,7 +8,6 @@ import '../../catalog/application/catalog_providers.dart';
 
 /// Dorado de las estrellas de valoración.
 const Color ratingGold = Color(0xFFFFC83D);
-const Color _ratingGoldDeep = Color(0xFFFF9E1B);
 
 /// `1234` → `1.234`.
 String formatCount(int value) {
@@ -79,122 +76,48 @@ class _PartialStar extends StatelessWidget {
   }
 }
 
-/// Estrella dorada con una órbita roja brillante y destellos.
-class OrbitStar extends StatelessWidget {
-  const OrbitStar({super.key, this.size = 120});
+/// Qubi, la mascota de QvaTube (PNG con fondo transparente), sobre un
+/// resplandor rojo suave para que se integre con el fondo oscuro.
+class QubiMascot extends StatelessWidget {
+  const QubiMascot({super.key, this.size = 120});
+
+  static const String asset = 'assets/mascota/qubi.png';
 
   final double size;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Mitad trasera de la órbita (queda detrás de la estrella).
-          CustomPaint(
-            size: Size.square(size),
-            painter: const _OrbitPainter(front: false),
+    return SizedBox.square(
+      dimension: size,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [
+              AppColors.accent.withValues(alpha: 0.30),
+              AppColors.accent.withValues(alpha: 0.0),
+            ],
+            stops: const [0.0, 0.72],
           ),
-          ShaderMask(
-            shaderCallback: (rect) => const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFFFFE680), ratingGold, _ratingGoldDeep],
-            ).createShader(rect),
-            child: Icon(
-              Icons.star_rounded,
-              size: size * 0.82,
-              color: Colors.white,
-              shadows: [
-                Shadow(
-                  color: _ratingGoldDeep.withValues(alpha: 0.6),
-                  blurRadius: size * 0.18,
-                ),
-              ],
-            ),
-          ),
-          // Mitad delantera (cruza por delante de la estrella).
-          CustomPaint(
-            size: Size.square(size),
-            painter: const _OrbitPainter(front: true),
-          ),
-        ],
+        ),
+        child: Image.asset(
+          asset,
+          fit: BoxFit.contain,
+          alignment: Alignment.center,
+          filterQuality: FilterQuality.medium,
+          semanticLabel: 'Qubi, la mascota de QvaTube',
+        ),
       ),
     );
   }
 }
 
-class _OrbitPainter extends CustomPainter {
-  const _OrbitPainter({required this.front});
-
-  final bool front;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = size.center(Offset.zero);
-    canvas.save();
-    canvas.translate(c.dx, c.dy + size.height * 0.04);
-    canvas.rotate(-0.32);
-    final rect = Rect.fromCenter(
-      center: Offset.zero,
-      width: size.width * 1.02,
-      height: size.height * 0.36,
-    );
-    // La mitad inferior de la elipse va delante; la superior, detrás.
-    final start = front ? 0.0 : math.pi;
-    final glow = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = size.width * 0.05
-      ..color = AppColors.accent.withValues(alpha: 0.55)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.04);
-    final line = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = size.width * 0.022
-      ..color = AppColors.accent;
-    canvas.drawArc(rect, start, math.pi, false, glow);
-    canvas.drawArc(rect, start, math.pi, false, line);
-    canvas.restore();
-
-    if (front) {
-      _sparkle(
-        canvas,
-        Offset(size.width * 0.82, size.height * 0.08),
-        size.width * 0.06,
-      );
-      _sparkle(
-        canvas,
-        Offset(size.width * 0.12, size.height * 0.9),
-        size.width * 0.04,
-      );
-    }
-  }
-
-  void _sparkle(Canvas canvas, Offset o, double r) {
-    final path = Path()
-      ..moveTo(o.dx, o.dy - r)
-      ..quadraticBezierTo(o.dx, o.dy, o.dx + r, o.dy)
-      ..quadraticBezierTo(o.dx, o.dy, o.dx, o.dy + r)
-      ..quadraticBezierTo(o.dx, o.dy, o.dx - r, o.dy)
-      ..quadraticBezierTo(o.dx, o.dy, o.dx, o.dy - r)
-      ..close();
-    canvas.drawPath(path, Paint()..color = const Color(0xFFFFE2B0));
-  }
-
-  @override
-  bool shouldRepaint(covariant _OrbitPainter oldDelegate) =>
-      oldDelegate.front != front;
-}
-
-/// Bloque de valoración media: estrella, "4.8 /5", estrellas y número real de
+/// Bloque de valoración media: Qubi, "4.8 /5", estrellas y número real de
 /// valoraciones (`GET /api/reviews`).
 class RatingSummary extends ConsumerWidget {
-  const RatingSummary({super.key, this.starSize = 120});
+  const RatingSummary({super.key, this.mascotSize = 120});
 
-  final double starSize;
+  final double mascotSize;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -205,8 +128,8 @@ class RatingSummary extends ConsumerWidget {
 
     return Row(
       children: [
-        OrbitStar(size: starSize),
-        SizedBox(width: starSize * 0.16),
+        QubiMascot(size: mascotSize),
+        SizedBox(width: mascotSize * 0.16),
         Expanded(
           child: summary.when(
             loading: () => const AppShimmer(
