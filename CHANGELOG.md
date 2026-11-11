@@ -1,5 +1,9 @@
 # Novedades de QvaTube
 
+## 1.2.6
+- Valora QvaTube desde la app: elige de 1 a 5 estrellas, deja un comentario y lee lo que opinan otros usuarios.
+- Inicio muestra la valoración media y cuántas valoraciones hay.
+
 ## 1.2.5
 - Ya no tienes que iniciar sesión otra vez cuando abres la app con mala conexión: tu sesión se conserva hasta que la cierres tú.
 
