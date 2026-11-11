@@ -1,5 +1,9 @@
 # Novedades de QvaTube
 
+## 1.2.8
+- Conoce a Qubi, la mascota de QvaTube: ahora te acompaña junto a la valoración de la app.
+- Los botones de Inicio tienen un nuevo brillo.
+
 ## 1.2.7
 - Vuelve el lema de QvaTube a Inicio, con el resumen de todo lo que puedes disfrutar.
 - El botón «Valorar la APK» ahora es amarillo para encontrarlo mejor.
