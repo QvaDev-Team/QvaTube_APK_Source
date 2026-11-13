@@ -573,6 +573,9 @@ class _TransfermovilQr extends StatelessWidget {
   }
 }
 
+/// Etiqueta en su línea y, debajo, el valor en una sola línea (se encoge un
+/// poco si no cabe, nunca se parte: así la tarjeta se lee y se copia bien)
+/// con el botón de copiar al lado.
 class _CopyRow extends StatelessWidget {
   const _CopyRow({required this.label, required this.value});
 
@@ -582,38 +585,62 @@ class _CopyRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final configured = value.trim().isNotEmpty;
-    return Row(
-      children: [
-        Expanded(
-          child: Text.rich(
-            TextSpan(
-              text: '$label: ',
-              children: [
-                TextSpan(
-                  text: configured ? value : 'No configurado',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$label:',
+            style: AppTextStyles.body(
+              fontSize: 12,
+              height: 1.3,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          Row(
+            children: [
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    configured ? value : 'No configurado',
+                    maxLines: 1,
+                    softWrap: false,
+                    style: AppTextStyles.body(
+                      fontSize: 14,
+                      height: 1.4,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
-              ],
-            ),
+              ),
+              if (configured)
+                IconButton(
+                  tooltip: 'Copiar $label',
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: value));
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context)
+                      ..hideCurrentSnackBar()
+                      ..showSnackBar(
+                        SnackBar(content: Text('$label copiado.')),
+                      );
+                  },
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 34,
+                    height: 30,
+                  ),
+                  color: AppColors.accent,
+                  icon: const Icon(Icons.copy, size: 16),
+                ),
+            ],
           ),
-        ),
-        if (configured)
-          TextButton.icon(
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: value));
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context)
-                ..hideCurrentSnackBar()
-                ..showSnackBar(SnackBar(content: Text('$label copiado.')));
-            },
-            style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              foregroundColor: AppColors.accent,
-            ),
-            icon: const Icon(Icons.copy, size: 14),
-            label: const Text('Copiar'),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
