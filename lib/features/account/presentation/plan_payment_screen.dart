@@ -34,6 +34,15 @@ const int mobileBalancePriceCup = 120;
   );
 }
 
+/// QR de Transfermóvil para pagar (TRANSFERMOVIL_ETECSA,TRANSFERENCIA,
+/// tarjeta, teléfono). Solo se muestra si la tarjeta configurada en el
+/// servidor es la misma que lleva el QR: si cambia, no sale un QR viejo.
+const String _transfermovilQrAsset = 'assets/pagos/qr-transfermovil.png';
+const String _transfermovilQrCard = '9238129977296526';
+
+bool _qrMatchesCard(String? card) =>
+    card != null && card.replaceAll(RegExp(r'\D'), '') == _transfermovilQrCard;
+
 /// Formulario de pago por Transfermóvil (CUP, con semanas y descuento) o por
 /// Saldo Móvil (solo Ultra). Devuelve `true` al hacer `pop` si la solicitud
 /// se envió: la pantalla de planes pasa entonces a "Revisando tu pago".
@@ -69,8 +78,7 @@ class _PlanPaymentScreenState extends ConsumerState<PlanPaymentScreen> {
   bool _submitting = false;
   String? _error;
 
-  bool get _isMobileBalance =>
-      widget.method == PlanPaymentMethod.mobileBalance;
+  bool get _isMobileBalance => widget.method == PlanPaymentMethod.mobileBalance;
   int get _minWeeks => widget.plan.cupMinWeeks ?? 1;
   int get _maxWeeks => widget.plan.cupMaxWeeks ?? 52;
   int get _discountMinWeeks => widget.plan.cupDiscountMinWeeks ?? 4;
@@ -125,8 +133,7 @@ class _PlanPaymentScreenState extends ConsumerState<PlanPaymentScreen> {
       final destination = _destinationPhone;
       if (destination.isEmpty) {
         setState(
-          () => _error =
-              'Este método de pago todavía no está configurado. Contacta con soporte.',
+          () => _error = 'Este método de pago todavía no está configurado. Contacta con soporte.',
         );
         return;
       }
@@ -221,6 +228,9 @@ class _PlanPaymentScreenState extends ConsumerState<PlanPaymentScreen> {
             const SizedBox(height: 14),
           ],
           _InfoBox(
+            trailing: !_isMobileBalance && _qrMatchesCard(config?.paymentCard)
+                ? const _TransfermovilQr()
+                : null,
             children: _isMobileBalance
                 ? [
                     Text.rich(
@@ -228,9 +238,7 @@ class _PlanPaymentScreenState extends ConsumerState<PlanPaymentScreen> {
                         text: 'Transfiere ',
                         children: [
                           _bold('$mobileBalancePriceCup CUP'),
-                          const TextSpan(
-                            text: ' de saldo móvil por 1 mes a:',
-                          ),
+                          const TextSpan(text: ' de saldo móvil por 1 mes a:'),
                         ],
                       ),
                     ),
@@ -313,7 +321,10 @@ class _PlanPaymentScreenState extends ConsumerState<PlanPaymentScreen> {
             const SizedBox(height: 10),
             Text(
               _error!,
-              style: AppTextStyles.body(fontSize: 12.5, color: AppColors.danger),
+              style: AppTextStyles.body(
+                fontSize: 12.5,
+                color: AppColors.danger,
+              ),
             ),
           ],
           const SizedBox(height: 16),
@@ -410,9 +421,12 @@ class _WeeksPicker extends StatelessWidget {
 }
 
 class _InfoBox extends StatelessWidget {
-  const _InfoBox({required this.children});
+  const _InfoBox({required this.children, this.trailing});
 
   final List<Widget> children;
+
+  /// Se pone a la derecha del texto (el QR de Transfermóvil).
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -425,9 +439,134 @@ class _InfoBox extends StatelessWidget {
       ),
       child: DefaultTextStyle.merge(
         style: AppTextStyles.body(fontSize: 13, height: 1.6),
+        child: trailing == null
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: children,
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: children,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  trailing!,
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+/// QR de Transfermóvil junto al monto; al tocarlo se amplía para escanearlo
+/// desde otro teléfono.
+class _TransfermovilQr extends StatelessWidget {
+  const _TransfermovilQr();
+
+  static const double _size = 104;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'QR de Transfermóvil. Toca para ampliarlo',
+      child: GestureDetector(
+        onTap: () => _showLarge(context),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: children,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: _size,
+              height: _size,
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(AppRadii.sm),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.accent.withValues(alpha: 0.35),
+                    blurRadius: 14,
+                  ),
+                ],
+              ),
+              child: Image.asset(
+                _transfermovilQrAsset,
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.none,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.zoom_in, size: 13, color: AppColors.accent),
+                const SizedBox(width: 3),
+                Text(
+                  'Ampliar',
+                  style: AppTextStyles.body(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.accent,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLarge(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: AppColors.surface,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Escanéalo con Transfermóvil',
+                style: AppTextStyles.body(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(AppRadii.md),
+                ),
+                child: Image.asset(
+                  _transfermovilQrAsset,
+                  width: 260,
+                  height: 260,
+                  filterQuality: FilterQuality.none,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'El monto lo escribes tú en Transfermóvil.',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.body(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cerrar'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -523,8 +662,16 @@ class _PhotoPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (IconData? icon, String status, Color color) = switch (state) {
-      _UploadState.uploading => (null, 'Subiendo captura…', AppColors.textMuted),
-      _UploadState.ready => (Icons.check, 'Lista para enviar', AppColors.success),
+      _UploadState.uploading => (
+        null,
+        'Subiendo captura…',
+        AppColors.textMuted,
+      ),
+      _UploadState.ready => (
+        Icons.check,
+        'Lista para enviar',
+        AppColors.success,
+      ),
       _UploadState.error => (
         Icons.refresh,
         'Se enviará al tocar "Enviar comprobante"',
@@ -606,7 +753,10 @@ class _PhotoPicker extends StatelessWidget {
               else
                 Icon(icon, size: 14, color: color),
               const SizedBox(width: 6),
-              Text(status, style: AppTextStyles.body(fontSize: 11.5, color: color)),
+              Text(
+                status,
+                style: AppTextStyles.body(fontSize: 11.5, color: color),
+              ),
             ],
           ),
         ],

@@ -76,6 +76,7 @@ flutter:
     - assets/logo.png
     - assets/icons/icon-512.png
     - assets/mascota/qubi.png
+    - assets/pagos/qr-transfermovil.png
     - assets/themes/halloween/logo.png
     - assets/themes/halloween/icons/icon-512.png
     # Pantalla de carga de las temporadas sin carpeta propia (SeasonCalendar).
