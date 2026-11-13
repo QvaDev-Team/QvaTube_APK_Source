@@ -1,5 +1,8 @@
 # Novedades de QvaTube
 
+## 1.2.11
+- Al pagar un plan, el número de tarjeta ahora se ve completo en una sola línea, más fácil de leer y copiar.
+
 ## 1.2.10
 - Paga tu plan más rápido: escanea el QR de Transfermóvil que aparece junto al monto a pagar.
 
