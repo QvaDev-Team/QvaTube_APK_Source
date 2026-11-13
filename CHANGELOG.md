@@ -1,5 +1,8 @@
 # Novedades de QvaTube
 
+## 1.2.10
+- Paga tu plan más rápido: escanea el QR de Transfermóvil que aparece junto al monto a pagar.
+
 ## 1.2.9
 - Qubi ahora brilla con un resplandor rojo que late junto a la valoración de la app.
 
