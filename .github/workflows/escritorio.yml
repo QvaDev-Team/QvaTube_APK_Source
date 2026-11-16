@@ -189,7 +189,13 @@ jobs:
   publicar:
     name: Publicar en la release "escritorio"
     needs: [version, linux, windows, macos]
-    if: needs.version.outputs.publish == 'true'
+    # Linux y Windows son obligatorios; si macOS falla (GitHub a veces no
+    # asigna un Mac), se publica igual sin el .dmg.
+    if: >-
+      always() &&
+      needs.version.outputs.publish == 'true' &&
+      needs.linux.result == 'success' &&
+      needs.windows.result == 'success'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.DIST_REPO_TOKEN }}
@@ -204,6 +210,12 @@ jobs:
         run: |
           set -euo pipefail
           ls -la dist
+          MAC_ROW=""
+          if ls dist/*.dmg >/dev/null 2>&1; then
+            MAC_ROW="| **macOS** 12+ (Intel y Apple Silicon) | \`QvaTube-$VERSION-macos.dmg\` |"
+          else
+            echo "::warning::Sin build de macOS: se publica solo Windows y Linux."
+          fi
           NOTES=$(cat <<EOF
           ## QvaTube $VERSION para escritorio
 
@@ -211,7 +223,7 @@ jobs:
           |---|---|
           | **Windows** 10/11 | \`QvaTube-$VERSION-windows-x64-instalador.exe\` (o el \`.zip\` portable) |
           | **Linux** | \`QvaTube-$VERSION-linux-x86_64.AppImage\` |
-          | **macOS** 12+ (Intel y Apple Silicon) | \`QvaTube-$VERSION-macos.dmg\` |
+          $MAC_ROW
 
           **Windows:** si aparece "Windows protegió su PC", toca *Más información → Ejecutar de todas formas*.
 
