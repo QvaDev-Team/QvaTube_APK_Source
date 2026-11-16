@@ -130,6 +130,8 @@ abstract final class AppTheme {
         space: 1,
       ),
       bottomSheetTheme: const BottomSheetThemeData(
+        // En escritorio no ocupa todo el ancho de la ventana.
+        constraints: BoxConstraints(maxWidth: 720),
         backgroundColor: AppColors.surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(

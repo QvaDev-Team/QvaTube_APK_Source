@@ -6,6 +6,7 @@ import '../../../core/theme/app_text.dart';
 import '../../catalog/application/catalog_providers.dart';
 import '../../home/presentation/widgets/content_detail_sheet.dart';
 import '../../home/presentation/widgets/media_card.dart';
+import '../../../core/layout/responsive.dart';
 
 /// Favoritos del usuario (`GET /api/favorites`).
 class FavoritesScreen extends ConsumerWidget {
@@ -50,8 +51,8 @@ class FavoritesScreen extends ConsumerWidget {
             onRefresh: () async => ref.invalidate(favoritesProvider),
             child: GridView.builder(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
+              gridDelegate: posterGridDelegate(
+                context,
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 10,
                 childAspectRatio: 0.5,

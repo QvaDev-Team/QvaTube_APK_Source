@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player_media_kit/video_player_media_kit.dart';
 
 import 'core/config/app_config.dart';
+import 'core/layout/responsive.dart';
 import 'core/network/api_providers.dart';
 import 'core/push/push_service.dart';
 import 'core/router/router.dart';
@@ -181,6 +182,8 @@ class _QvaTubeAppState extends ConsumerState<QvaTubeApp>
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.dark,
       routerConfig: router,
+      // Carruseles y listas también se arrastran con el ratón (escritorio).
+      scrollBehavior: const QvaScrollBehavior(),
       builder: (context, child) {
         // Evita que el tamaño de fuente del sistema rompa el diseño.
         final media = MediaQuery.of(context);

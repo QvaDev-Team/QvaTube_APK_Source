@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../layout/responsive.dart';
 
 /// Efecto de brillo / resplandor Shimmer para loaders tipo esqueleto.
 class AppShimmer extends StatefulWidget {
@@ -202,8 +203,8 @@ class SkeletonCatalogGrid extends StatelessWidget {
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
+        gridDelegate: posterGridDelegate(
+          context,
           mainAxisSpacing: 12,
           crossAxisSpacing: 10,
           childAspectRatio: gridAspectRatio,

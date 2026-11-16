@@ -75,7 +75,13 @@ class HomeTab extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
         children: [
-          const _Hero(),
+          // En escritorio la cabecera no se estira a todo el ancho.
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 640),
+              child: const _Hero(),
+            ),
+          ),
           const SizedBox(height: 26),
           if (!showContinue)
             const SizedBox.shrink()

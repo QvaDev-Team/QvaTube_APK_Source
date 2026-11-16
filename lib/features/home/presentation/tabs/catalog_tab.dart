@@ -12,6 +12,7 @@ import '../../../catalog/domain/catalog_models.dart';
 import '../widgets/content_detail_sheet.dart';
 import '../widgets/media_card.dart';
 import '../widgets/media_player_screen.dart';
+import '../../../../core/layout/responsive.dart';
 
 /// Pestaña de catálogo conectada a `GET /api/movies`, `GET /api/genres` y
 /// `GET /api/categories`.
@@ -485,8 +486,8 @@ class _CatalogTabState extends ConsumerState<CatalogTab> {
                     28,
                   ),
                   sliver: SliverGrid(
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
+                    gridDelegate: posterGridDelegate(
+                      context,
                       mainAxisSpacing: 12,
                       crossAxisSpacing: 10,
                       childAspectRatio: widget.gridAspectRatio,

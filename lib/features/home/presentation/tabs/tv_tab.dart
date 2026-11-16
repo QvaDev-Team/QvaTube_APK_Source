@@ -13,6 +13,7 @@ import '../../../../core/theme/app_text.dart';
 import '../../../../core/widgets/app_cached_image.dart';
 import '../../../catalog/application/catalog_providers.dart';
 import '../../../catalog/domain/catalog_models.dart';
+import '../../../../core/layout/responsive.dart';
 
 /// Pestaña de Televisión y Radio en vivo (`GET /api/tv/channels`).
 class TvTab extends ConsumerStatefulWidget {
@@ -288,13 +289,14 @@ class _TvTabState extends ConsumerState<TvTab> {
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                     sliver: SliverGrid(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            mainAxisSpacing: 10,
-                            crossAxisSpacing: 10,
-                            childAspectRatio: 1.55,
-                          ),
+                      gridDelegate: posterGridDelegate(
+                        context,
+                        mobileColumns: 2,
+                        mainAxisSpacing: 10,
+                        crossAxisSpacing: 10,
+                        childAspectRatio: 1.55,
+                        wideMaxWidth: 300,
+                      ),
                       delegate: SliverChildBuilderDelegate((context, index) {
                         final channel = section.items[index];
                         return TvChannelCard(

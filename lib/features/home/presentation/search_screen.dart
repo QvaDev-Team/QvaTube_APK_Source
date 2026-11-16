@@ -13,6 +13,7 @@ import 'tabs/tv_tab.dart';
 import 'widgets/content_detail_sheet.dart';
 import 'widgets/media_card.dart';
 import 'widgets/suggest_content_sheet.dart';
+import '../../../core/layout/responsive.dart';
 
 /// Pantalla de búsqueda global (`GET /api/search`).
 ///
@@ -342,11 +343,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
+            gridDelegate: posterGridDelegate(
+              context,
+              mobileColumns: 2,
               mainAxisSpacing: 10,
               crossAxisSpacing: 10,
               childAspectRatio: 1.55,
+              wideMaxWidth: 300,
             ),
             itemCount: response.tv.length,
             itemBuilder: (context, index) {
@@ -372,8 +375,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
+              gridDelegate: posterGridDelegate(
+                context,
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 10,
                 childAspectRatio: cat.key == 'music' ? 0.68 : 0.5,

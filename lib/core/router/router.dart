@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qvatube_apk/features/auth/presentation/screens/telegram_verification_screen.dart';
 
+import '../layout/responsive.dart';
 import '../storage/app_preferences.dart';
 import '../widgets/splash_screen.dart';
 import '../../features/auth/presentation/providers/auth_controller.dart';
@@ -137,28 +138,32 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: Routes.intro,
-        builder: (context, state) => const IntroScreen(),
+        builder: (context, state) => const DesktopFrame(child: IntroScreen()),
       ),
       GoRoute(
         path: Routes.login,
-        builder: (context, state) => const LoginScreen(),
+        builder: (context, state) => const DesktopFrame(child: LoginScreen()),
       ),
       GoRoute(
         path: Routes.register,
-        builder: (context, state) => const RegisterScreen(),
+        builder: (context, state) =>
+            const DesktopFrame(child: RegisterScreen()),
       ),
       GoRoute(
         path: Routes.forgotPassword,
-        builder: (context, state) => const ForgotPasswordScreen(),
+        builder: (context, state) =>
+            const DesktopFrame(child: ForgotPasswordScreen()),
       ),
       GoRoute(
         path: Routes.resetPassword,
-        builder: (context, state) =>
-            ResetPasswordScreen(token: state.extra as String?),
+        builder: (context, state) => DesktopFrame(
+          child: ResetPasswordScreen(token: state.extra as String?),
+        ),
       ),
       GoRoute(
         path: Routes.telegramVerify,
-        builder: (context, state) => const TelegramVerificationScreen(),
+        builder: (context, state) =>
+            const DesktopFrame(child: TelegramVerificationScreen()),
       ),
       GoRoute(
         path: Routes.search,
@@ -299,47 +304,53 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/cuenta/perfil',
-        builder: (context, state) => const ProfileScreen(),
+        builder: (context, state) => const DesktopFrame(child: ProfileScreen()),
       ),
       GoRoute(
         path: '/cuenta/nombre',
-        builder: (context, state) => const EditNameScreen(),
+        builder: (context, state) =>
+            const DesktopFrame(child: EditNameScreen()),
       ),
       GoRoute(
         path: '/cuenta/avatar',
-        builder: (context, state) => const AvatarScreen(),
+        builder: (context, state) => const DesktopFrame(child: AvatarScreen()),
       ),
       GoRoute(
         path: '/cuenta/plan',
-        builder: (context, state) => const PlanScreen(),
+        builder: (context, state) => const DesktopFrame(child: PlanScreen()),
       ),
       GoRoute(
         path: '/cuenta/notificaciones',
-        builder: (context, state) => const NotificationsScreen(),
+        builder: (context, state) =>
+            const DesktopFrame(child: NotificationsScreen()),
       ),
       GoRoute(
         path: '/cuenta/favoritos',
-        builder: (context, state) => const FavoritesScreen(),
+        builder: (context, state) =>
+            const DesktopFrame(maxWidth: 1200, child: FavoritesScreen()),
       ),
       GoRoute(
         path: '/cuenta/configuracion',
-        builder: (context, state) => const SettingsScreen(),
+        builder: (context, state) =>
+            const DesktopFrame(child: SettingsScreen()),
       ),
       GoRoute(
         path: '/cuenta/comunidad',
-        builder: (context, state) => const CommunityScreen(),
+        builder: (context, state) =>
+            const DesktopFrame(child: CommunityScreen()),
       ),
       GoRoute(
         path: '/cuenta/creador',
-        builder: (context, state) => const CreatorScreen(),
+        builder: (context, state) => const DesktopFrame(child: CreatorScreen()),
       ),
       GoRoute(
         path: '/cuenta/valoraciones',
-        builder: (context, state) => const ReviewsScreen(),
+        builder: (context, state) => const DesktopFrame(child: ReviewsScreen()),
       ),
       GoRoute(
         path: '/cuenta/descargas',
-        builder: (context, state) => const DownloadsScreen(),
+        builder: (context, state) =>
+            const DesktopFrame(child: DownloadsScreen()),
       ),
     ],
   );

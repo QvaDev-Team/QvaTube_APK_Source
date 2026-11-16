@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/layout/responsive.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../catalog/application/catalog_providers.dart';
 import 'widgets/media_player_screen.dart';
 import 'widgets/qvatube_bottom_nav.dart';
+import 'widgets/qvatube_side_nav.dart';
 import 'widgets/qvatube_top_bar.dart';
 
 /// Contenedor principal de la app tras el login.
 ///
 /// - Barra superior fija con logo, buscador y avatar de usuario.
-/// - Barra de navegación inferior con 9 secciones e "Inicio" a la izquierda.
+/// - Barra de navegación inferior con 9 secciones e "Inicio" a la izquierda;
+///   en pantallas anchas (escritorio) pasa a ser un menú lateral.
 class HomeShell extends ConsumerWidget {
   const HomeShell({super.key, required this.navigationShell});
 
@@ -74,6 +77,43 @@ class HomeShell extends ConsumerWidget {
           badgeCount: badges[index],
         ),
     ];
+
+    final width = MediaQuery.sizeOf(context).width;
+    if (width >= kWideLayoutMinWidth) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: Column(
+          children: [
+            const QvaTopBar(),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  QvaSideNav(
+                    items: items,
+                    currentIndex: navigationShell.currentIndex,
+                    onTap: _onTap,
+                    compact: width < 1180,
+                  ),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: kMaxContentWidth,
+                        ),
+                        child: navigationShell,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const MiniMediaPlayerBar(),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: AppColors.background,
