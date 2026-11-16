@@ -150,7 +150,10 @@ jobs:
   macos:
     name: macOS (.dmg)
     needs: version
-    runs-on: macos-latest
+    # Mac Intel: los Apple Silicon (macos-latest) suelen no tener capacidad
+    # y el job se cancela sin empezar. El build de release de Flutter es
+    # universal igual (Intel + Apple Silicon).
+    runs-on: macos-15-intel
     env:
       VERSION: ${{ needs.version.outputs.name }}
     steps:
