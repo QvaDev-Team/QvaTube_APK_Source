@@ -17,7 +17,7 @@ import '../../../core/update/update_providers.dart';
 /// (por ejemplo, al restaurar la sesión).
 /// Página de la última release, donde están los instaladores de escritorio.
 const String desktopReleasesUrl =
-    'https://github.com/QvaDev-Team/QvaTube_APK/releases/latest';
+    'https://github.com/QvaDev-Team/QvaTube_APK/releases/tag/escritorio';
 
 class UpdateChecker extends ConsumerStatefulWidget {
   const UpdateChecker({
@@ -326,7 +326,10 @@ class _UpdateBanner extends ConsumerWidget {
                               ],
                             ],
                           ),
-                          if (info.downloadSizeMb != null &&
+                          // En escritorio no se baja el APK: su tamaño no
+                          // aplica.
+                          if (!DeviceChannel.isDesktop &&
+                              info.downloadSizeMb != null &&
                               info.downloadSizeMb! > 0)
                             Padding(
                               padding: const EdgeInsets.only(top: 2),

@@ -1,0 +1,235 @@
+name: Escritorio (Windows, Linux, macOS)
+
+# Compila QvaTube para escritorio y publica los instaladores en la release
+# "escritorio" del repositorio público:
+#   https://github.com/QvaDev-Team/QvaTube_APK/releases/tag/escritorio
+#
+# Cuándo corre (el repo es privado: los minutos de macOS cuentan x10 y los
+# de Windows x2, así que NO se compila en cada push como el APK):
+#   - push a main que cambia pubspec.yaml (al subir la versión) → compila y
+#     publica.
+#   - a mano (Actions → "Run workflow") → compila y publica si es main.
+#   - push a otra rama que toca la parte de escritorio → solo compila, para
+#     probar sin publicar.
+on:
+  push:
+    branches: ['**']
+    paths:
+      - pubspec.yaml
+      - linux/**
+      - windows/**
+      - macos/**
+      - tool/escritorio/**
+      - .github/workflows/escritorio.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: '3.47.7'
+  DIST_REPO: QvaDev-Team/QvaTube_APK
+  RELEASE_TAG: escritorio
+
+jobs:
+  # Misma versión que el APK: versionName del pubspec y, como build number,
+  # el mayor entre el del pubspec y el número de commits (así compara bien
+  # con version_code de latest.json).
+  version:
+    name: Versión
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.v.outputs.name }}
+      code: ${{ steps.v.outputs.code }}
+      publish: ${{ steps.v.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: v
+        run: |
+          set -euo pipefail
+          LINE=$(grep -E "^version:" pubspec.yaml | head -1)
+          NAME=$(echo "$LINE" | sed -E 's/^version:[[:space:]]*([^+ ]+).*/\1/')
+          PUBSPEC_CODE=$(echo "$LINE" | sed -E 's/.*\+([0-9]+).*/\1/')
+          COMMITS=$(git rev-list --count HEAD)
+          CODE=$(( COMMITS > PUBSPEC_CODE ? COMMITS : PUBSPEC_CODE ))
+          PUBLISH=false
+          [ "$GITHUB_REF" = "refs/heads/main" ] && PUBLISH=true
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo ">> QvaTube $NAME ($CODE) · publicar: $PUBLISH"
+
+  linux:
+    name: Linux (AppImage)
+    needs: version
+    # La glibc más antigua posible: el AppImage funciona en más distros.
+    runs-on: ubuntu-22.04
+    env:
+      VERSION: ${{ needs.version.outputs.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencias del sistema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libmpv-dev libfuse2 file
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Compilar
+        run: |
+          flutter pub get
+          flutter build linux --release \
+            --build-name="$VERSION" \
+            --build-number="${{ needs.version.outputs.code }}"
+      - name: Empaquetar (AppImage y .tar.gz)
+        run: |
+          curl -sSL -o linuxdeploy-x86_64.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+          tool/escritorio/empaquetar_linux.sh "$VERSION" dist
+      - name: Comprobar que el AppImage arranca sus librerías
+        run: |
+          APP=$(ls dist/*.AppImage)
+          "$APP" --appimage-extract >/dev/null
+          # Ninguna librería del bundle debe quedar sin resolver.
+          if ldd squashfs-root/usr/bin/qvatube squashfs-root/usr/bin/lib/*.so \
+               | grep "not found"; then
+            echo "::error::Faltan librerías dentro del AppImage"; exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: escritorio-linux
+          path: dist/*
+          if-no-files-found: error
+
+  windows:
+    name: Windows (instalador)
+    needs: version
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.version.outputs.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Compilar
+        run: |
+          flutter pub get
+          flutter build windows --release --build-name="$env:VERSION" --build-number="${{ needs.version.outputs.code }}"
+      - name: Empaquetar (instalador y .zip portable)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $src = "$env:GITHUB_WORKSPACE\build\windows\x64\runner\Release"
+          $out = "$env:GITHUB_WORKSPACE\dist"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Compress-Archive -Path "$src\*" -DestinationPath "$out\QvaTube-$env:VERSION-windows-x64-portable.zip"
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) {
+            choco install innosetup -y --no-progress | Out-Null
+            $env:Path += ";${env:ProgramFiles(x86)}\Inno Setup 6"
+          }
+          iscc /Q "/DAppVersion=$env:VERSION" "/DSourceDir=$src" "/DOutputDir=$out" windows\packaging\qvatube.iss
+          Get-ChildItem $out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: escritorio-windows
+          path: dist/*
+          if-no-files-found: error
+
+  macos:
+    name: macOS (.dmg)
+    needs: version
+    runs-on: macos-latest
+    env:
+      VERSION: ${{ needs.version.outputs.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Compilar (Intel y Apple Silicon)
+        run: |
+          flutter pub get
+          flutter build macos --release \
+            --build-name="$VERSION" \
+            --build-number="${{ needs.version.outputs.code }}"
+      - name: Empaquetar (.dmg)
+        run: |
+          set -euo pipefail
+          APP="build/macos/Build/Products/Release/QvaTube.app"
+          lipo -info "$APP/Contents/MacOS/QvaTube"
+          mkdir -p dmg dist
+          cp -R "$APP" dmg/
+          ln -s /Applications dmg/Aplicaciones
+          hdiutil create -volname "QvaTube" -srcfolder dmg -ov -format UDZO \
+            "dist/QvaTube-$VERSION-macos.dmg"
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: escritorio-macos
+          path: dist/*
+          if-no-files-found: error
+
+  publicar:
+    name: Publicar en la release "escritorio"
+    needs: [version, linux, windows, macos]
+    if: needs.version.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.DIST_REPO_TOKEN }}
+      VERSION: ${{ needs.version.outputs.name }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: escritorio-*
+          merge-multiple: true
+          path: dist
+      - name: Publicar
+        run: |
+          set -euo pipefail
+          ls -la dist
+          NOTES=$(cat <<EOF
+          ## QvaTube $VERSION para escritorio
+
+          | Sistema | Descarga |
+          |---|---|
+          | **Windows** 10/11 | \`QvaTube-$VERSION-windows-x64-instalador.exe\` (o el \`.zip\` portable) |
+          | **Linux** | \`QvaTube-$VERSION-linux-x86_64.AppImage\` |
+          | **macOS** 12+ (Intel y Apple Silicon) | \`QvaTube-$VERSION-macos.dmg\` |
+
+          **Windows:** si aparece "Windows protegió su PC", toca *Más información → Ejecutar de todas formas*.
+
+          **Linux:** dale permiso de ejecución al AppImage (\`chmod +x QvaTube-*.AppImage\`) y ábrelo.
+
+          **macOS:** arrastra QvaTube a Aplicaciones. La primera vez, si dice que no se puede verificar, ve a *Ajustes del Sistema → Privacidad y seguridad → Abrir igualmente*.
+
+          La app para Android está en la release [latest](https://github.com/$DIST_REPO/releases/tag/latest).
+          EOF
+          )
+          if gh release view "$RELEASE_TAG" --repo "$DIST_REPO" >/dev/null 2>&1; then
+            # Se borran los instaladores anteriores y se suben los nuevos.
+            gh release view "$RELEASE_TAG" --repo "$DIST_REPO" --json assets --jq '.assets[].name' \
+              | while read -r name; do
+                  gh release delete-asset "$RELEASE_TAG" "$name" --repo "$DIST_REPO" --yes
+                done
+            gh release edit "$RELEASE_TAG" --repo "$DIST_REPO" \
+              --title "QvaTube $VERSION para escritorio" --notes "$NOTES"
+          else
+            gh release create "$RELEASE_TAG" --repo "$DIST_REPO" --target main \
+              --title "QvaTube $VERSION para escritorio" --notes "$NOTES" --latest=false
+          fi
+          gh release upload "$RELEASE_TAG" dist/* --repo "$DIST_REPO" --clobber
+          echo ">> $(gh release view "$RELEASE_TAG" --repo "$DIST_REPO" --json url --jq .url)"

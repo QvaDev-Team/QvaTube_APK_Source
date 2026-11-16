@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=QvaTube
+GenericName=Películas, series y TV
+Comment=Películas, series, anime, TV cubana, música y libros
+Exec=qvatube
+Icon=qvatube
+Terminal=false
+Categories=AudioVideo;Video;Player;
+StartupWMClass=net.qvatube.app
