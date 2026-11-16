@@ -1,5 +1,8 @@
 # Novedades de QvaTube
 
+## 1.2.12
+- QvaTube ya está disponible para computadoras con Windows y Linux: descárgala desde la página de descargas de QvaTube en GitHub.
+
 ## 1.2.11
 - Al pagar un plan, el número de tarjeta ahora se ve completo en una sola línea, más fácil de leer y copiar.
 
