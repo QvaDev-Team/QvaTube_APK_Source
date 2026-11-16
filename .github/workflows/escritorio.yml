@@ -141,6 +141,34 @@ jobs:
           }
           iscc /Q "/DAppVersion=$env:VERSION" "/DSourceDir=$src" "/DOutputDir=$out" windows\packaging\qvatube.iss
           Get-ChildItem $out
+      # Prueba real: instala en silencio con el instalador recién creado y
+      # comprueba que todos los archivos llegan íntegros (mismo SHA-256 que
+      # el build) antes de publicarlo.
+      - name: Probar el instalador
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $src = "$env:GITHUB_WORKSPACE\build\windows\x64\runner\Release"
+          $setup = Get-ChildItem "$env:GITHUB_WORKSPACE\dist\*instalador.exe" | Select-Object -First 1
+          $dir = "$env:RUNNER_TEMP\QvaTubePrueba"
+          $log = "$env:RUNNER_TEMP\instalador.log"
+          $p = Start-Process -FilePath $setup.FullName -Wait -PassThru -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER',
+            "/DIR=$dir", "/LOG=$log")
+          if ($p.ExitCode -ne 0) {
+            Get-Content $log -ErrorAction SilentlyContinue | Select-Object -Last 40
+            throw "El instalador terminó con código $($p.ExitCode)"
+          }
+          $mal = 0
+          Get-ChildItem $src -Recurse -File | ForEach-Object {
+            $rel = $_.FullName.Substring($src.Length + 1)
+            $dst = Join-Path $dir $rel
+            if (-not (Test-Path $dst)) { Write-Host "FALTA: $rel"; $mal++ }
+            elseif ((Get-FileHash $_.FullName).Hash -ne (Get-FileHash $dst).Hash) {
+              Write-Host "DISTINTO: $rel"; $mal++
+            }
+          }
+          if ($mal -gt 0) { throw "$mal archivos no se instalaron bien" }
+          Write-Host ">> Instalación de prueba correcta en $dir"
       - uses: actions/upload-artifact@v4
         with:
           name: escritorio-windows
@@ -210,6 +238,8 @@ jobs:
         run: |
           set -euo pipefail
           ls -la dist
+          # Sumas de verificación para comprobar que una descarga llegó entera.
+          (cd dist && sha256sum QvaTube-* > SHA256SUMS.txt && cat SHA256SUMS.txt)
           MAC_ROW=""
           if ls dist/*.dmg >/dev/null 2>&1; then
             MAC_ROW="| **macOS** 12+ (Intel y Apple Silicon) | \`QvaTube-$VERSION-macos.dmg\` |"
@@ -225,7 +255,7 @@ jobs:
           | **Linux** | \`QvaTube-$VERSION-linux-x86_64.AppImage\` |
           $MAC_ROW
 
-          **Windows:** si aparece "Windows protegió su PC", toca *Más información → Ejecutar de todas formas*.
+          **Windows:** si aparece "Windows protegió su PC", toca *Más información → Ejecutar de todas formas*. Si el instalador dice que un archivo "está dañado", la descarga llegó incompleta: vuelve a descargarlo (o usa el \`.zip\` portable). En \`SHA256SUMS.txt\` está la suma de cada archivo para comprobarlo.
 
           **Linux:** dale permiso de ejecución al AppImage (\`chmod +x QvaTube-*.AppImage\`) y ábrelo.
 
