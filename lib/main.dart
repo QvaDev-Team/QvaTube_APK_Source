@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:video_player_media_kit/video_player_media_kit.dart';
 
 import 'core/config/app_config.dart';
 import 'core/network/api_providers.dart';
@@ -19,6 +20,9 @@ import 'features/update/presentation/update_checker.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // video_player no reproduce en Windows ni Linux: ahí lo sustituye
+  // media_kit (libmpv). Android y macOS siguen con su reproductor nativo.
+  VideoPlayerMediaKit.ensureInitialized(windows: true, linux: true);
   final preferences = await SharedPreferences.getInstance();
 
   // Arte de temporada: la última que dijo el servidor (GET /api/season) y su

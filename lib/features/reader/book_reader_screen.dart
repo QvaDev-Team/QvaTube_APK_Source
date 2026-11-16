@@ -229,6 +229,31 @@ class _BookReaderScreenState extends ConsumerState<BookReaderScreen> {
             : 'epub');
 
     final pos = _savedPosition(prefs);
+    if (format == 'pdf' && DeviceChannel.isDesktop) {
+      // En escritorio no hay PdfRenderer: se guarda y se abre con el visor
+      // de PDF del sistema (no se borra al cerrar, el visor lo necesita).
+      final file = File(
+        '${Directory.systemTemp.path}/QvaTube_${widget.chatId}_${widget.msgId}.pdf',
+      );
+      await file.writeAsBytes(bytes, flush: true);
+      final opened = await DeviceChannel.openUrl(file.path);
+      if (!mounted) return;
+      if (!opened) {
+        setState(() {
+          _loading = false;
+          _error = 'No hay un visor de PDF instalado para abrir este libro.';
+        });
+        return;
+      }
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      Navigator.of(context).maybePop();
+      messenger?.showSnackBar(
+        const SnackBar(
+          content: Text('Abrimos el libro con el visor de PDF de tu sistema.'),
+        ),
+      );
+      return;
+    }
     if (format == 'pdf') {
       try {
         // PdfRenderer necesita un archivo: se guarda en la caché y se borra

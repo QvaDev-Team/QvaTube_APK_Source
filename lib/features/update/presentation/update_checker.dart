@@ -15,6 +15,10 @@ import '../../../core/update/update_providers.dart';
 /// Se monta por encima del Navigator (en el `builder` de `MaterialApp.router`),
 /// por eso el aviso **no** se pierde cuando go_router refresca las páginas
 /// (por ejemplo, al restaurar la sesión).
+/// Página de la última release, donde están los instaladores de escritorio.
+const String desktopReleasesUrl =
+    'https://github.com/QvaDev-Team/QvaTube_APK/releases/latest';
+
 class UpdateChecker extends ConsumerStatefulWidget {
   const UpdateChecker({
     super.key,
@@ -121,6 +125,14 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
     final info = _info;
     if (info == null) return;
 
+    // Escritorio: no hay APK ni parches; se abre la release para bajar el
+    // instalador de su sistema.
+    if (DeviceChannel.isDesktop) {
+      await DeviceChannel.openUrl(desktopReleasesUrl);
+      _dismiss();
+      return;
+    }
+
     setState(() {
       _downloading = true;
       _progress = 0;
@@ -138,7 +150,8 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
         }
       }
 
-      final file = existingFile ??
+      final file =
+          existingFile ??
           await service.download(
             info,
             onProgress: (received, total) {
@@ -502,7 +515,9 @@ class _DownloadOverlay extends StatelessWidget {
                   children: [
                     Icon(
                       error != null ? Icons.error_outline : Icons.downloading,
-                      color: error != null ? AppColors.danger : AppColors.accent,
+                      color: error != null
+                          ? AppColors.danger
+                          : AppColors.accent,
                       size: 20,
                     ),
                     const SizedBox(width: 10),

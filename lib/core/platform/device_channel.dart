@@ -1,12 +1,19 @@
 import 'dart:io';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 /// Puente con el canal nativo `qvatube/device` (MainActivity.kt).
 ///
 /// - `pickImage()`: abre la galería y devuelve la ruta local de la imagen
 ///   (usada por `POST /api/auth/avatar`).
 /// - `openUrl(url)`: abre un enlace externo (bot de Telegram, WhatsApp).
+///
+/// En escritorio (Windows, Linux, macOS) no hay canal nativo propio: abrir
+/// enlaces, elegir imágenes y leer la versión se resuelven aquí en Dart; lo
+/// exclusivo de Android (APK, parches, icono, WorkManager, PdfRenderer) se
+/// omite o devuelve "no disponible".
 abstract final class DeviceChannel {
   const DeviceChannel._();
 
@@ -54,7 +61,9 @@ abstract final class DeviceChannel {
   static Future<bool> applyLauncherIcon(String season) async {
     if (!Platform.isAndroid) return false;
     try {
-      await _channel.invokeMethod<bool>('applyLauncherIcon', {'season': season});
+      await _channel.invokeMethod<bool>('applyLauncherIcon', {
+        'season': season,
+      });
       return true;
     } on PlatformException {
       return false;
@@ -171,9 +180,26 @@ abstract final class DeviceChannel {
     }
   }
 
+  /// `true` en Windows, Linux y macOS.
+  static bool get isDesktop =>
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
   /// Devuelve la ruta local de la imagen elegida, o `null` si el usuario
   /// cancela la selección.
   static Future<String?> pickImage() async {
+    if (isDesktop) {
+      const images = XTypeGroup(
+        label: 'Imágenes',
+        extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic'],
+        uniformTypeIdentifiers: ['public.image'],
+      );
+      try {
+        final file = await openFile(acceptedTypeGroups: const [images]);
+        return file?.path;
+      } catch (_) {
+        return null;
+      }
+    }
     try {
       return await _channel.invokeMethod<String>('pickImage');
     } on PlatformException {
@@ -185,7 +211,19 @@ abstract final class DeviceChannel {
 
   /// Versión instalada de la app (`versionCode` / `versionName` / `lastUpdateTime`).
   static Future<({int versionCode, String versionName, int lastUpdateTime})>
-      getInstalledVersion() async {
+  getInstalledVersion() async {
+    if (isDesktop) {
+      try {
+        final info = await PackageInfo.fromPlatform();
+        return (
+          versionCode: int.tryParse(info.buildNumber) ?? 0,
+          versionName: info.version,
+          lastUpdateTime: 0,
+        );
+      } catch (_) {
+        return (versionCode: 0, versionName: '', lastUpdateTime: 0);
+      }
+    }
     try {
       final result = await _channel.invokeMapMethod<String, dynamic>(
         'getInstalledVersion',
@@ -261,14 +299,38 @@ abstract final class DeviceChannel {
     return Directory.systemTemp.path;
   }
 
-  /// Abre una URL en el navegador del sistema.
+  /// Abre una URL (o un archivo local) con la aplicación del sistema.
   static Future<bool> openUrl(String url) async {
+    if (isDesktop) return _openWithSystem(url);
     try {
       return await _channel.invokeMethod<bool>('openUrl', {'url': url}) ??
           false;
     } on PlatformException {
       return false;
     } on MissingPluginException {
+      return false;
+    }
+  }
+
+  /// Escritorio: abre [target] (URL o ruta de archivo) con el programa
+  /// predeterminado: `xdg-open` (Linux), `open` (macOS) o el shell de
+  /// Windows (`rundll32 url.dll`, que no pasa por `cmd` y así no interpreta
+  /// los `&` de las URL).
+  static Future<bool> _openWithSystem(String target) async {
+    try {
+      final ProcessResult result;
+      if (Platform.isWindows) {
+        result = await Process.run('rundll32', [
+          'url.dll,FileProtocolHandler',
+          target,
+        ]);
+      } else if (Platform.isMacOS) {
+        result = await Process.run('open', [target]);
+      } else {
+        result = await Process.run('xdg-open', [target]);
+      }
+      return result.exitCode == 0;
+    } catch (_) {
       return false;
     }
   }
