@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../../../core/media/music_preloader.dart';
 import '../../../../core/network/api_providers.dart';
 import '../../../../core/network/endpoints/playback_endpoints.dart';
 import '../../../../core/platform/device_channel.dart';
@@ -85,6 +86,26 @@ class ActiveMediaSession extends ChangeNotifier {
   Timer? _progressSaveTimer;
   bool? _lastNotifiedPlaying;
   int? _lastNotifiedIndex;
+  bool _keepScreenOn = false;
+
+  /// Precarga de la siguiente pista de música (ver [MusicPreloader]).
+  final MusicPreloader _preloader = MusicPreloader();
+
+  /// Destino del último salto (±10 s o barra): los toques seguidos suman
+  /// desde aquí aunque la posición del reproductor aún no se haya
+  /// actualizado.
+  Duration? _seekTarget;
+  Timer? _seekCheck;
+
+  /// Aviso puntual para la pantalla del reproductor (se lee una vez).
+  String? _notice;
+
+  /// Devuelve y borra el aviso pendiente.
+  String? takeNotice() {
+    final value = _notice;
+    _notice = null;
+    return value;
+  }
 
   VideoPlayerController? get controller => _controller;
   List<PlayableMediaItem> get playlist => _playlist;
@@ -159,6 +180,7 @@ class ActiveMediaSession extends ChangeNotifier {
     }
 
     _saveCurrentProgress();
+    _preloader.cancel();
     _playlist = items;
     _currentIndex = targetIdx;
     await initCurrentItem();
@@ -176,6 +198,8 @@ class ActiveMediaSession extends ChangeNotifier {
 
   Future<void> initCurrentItem() async {
     _progressSaveTimer?.cancel();
+    _seekCheck?.cancel();
+    _seekTarget = null;
     _markedWatched = false;
     _useWebViewFallback = false;
 
@@ -203,7 +227,13 @@ class ActiveMediaSession extends ChangeNotifier {
     _block = null;
     notifyListeners();
 
-    final block = await _preflight(item);
+    // Pista ya precargada: suena al instante desde el archivo local.
+    final local = item.isAudio
+        ? await _preloader.completedFile(item.chatId, item.msgId)
+        : null;
+    if (currentItem != item) return;
+
+    final block = local != null ? null : await _preflight(item);
     if (currentItem != item) return;
     if (block != null) {
       _loading = false;
@@ -223,13 +253,14 @@ class ActiveMediaSession extends ChangeNotifier {
             );
       }
 
-      final controller = VideoPlayerController.networkUrl(
-        Uri.parse(item.streamUrl),
-        httpHeaders: _buildAuthHeaders(),
-        videoPlayerOptions: VideoPlayerOptions(
-          allowBackgroundPlayback: true,
-        ),
-      );
+      final options = VideoPlayerOptions(allowBackgroundPlayback: true);
+      final controller = local != null
+          ? VideoPlayerController.file(local, videoPlayerOptions: options)
+          : VideoPlayerController.networkUrl(
+              Uri.parse(item.streamUrl),
+              httpHeaders: _buildAuthHeaders(),
+              videoPlayerOptions: options,
+            );
       _controller = controller;
       await controller.initialize();
       await controller.setPlaybackSpeed(_playbackSpeed);
@@ -325,8 +356,41 @@ class ActiveMediaSession extends ChangeNotifier {
       return;
     }
 
+    _maybePreloadNext(ctrl, item);
+    _updateKeepScreenOn();
     _syncNotification();
     notifyListeners();
+  }
+
+  /// Como la web: con la pista actual sonando desde hace unos segundos, se
+  /// descarga la siguiente para que el cambio de pista no tenga cortes.
+  void _maybePreloadNext(VideoPlayerController ctrl, PlayableMediaItem item) {
+    if (!item.isAudio || !hasNext || !ctrl.value.isPlaying) return;
+    final seconds = ctrl.value.position.inMilliseconds / 1000.0;
+    if (seconds < MusicPreloader.startAfterSeconds) return;
+    final next = _playlist[_currentIndex + 1];
+    if (!next.isAudio) return;
+    _preloader.preload(
+      chatId: next.chatId,
+      msgId: next.msgId,
+      url: next.streamUrl,
+      headers: _buildAuthHeaders(),
+    );
+  }
+
+  /// Pantalla siempre encendida solo mientras suena un video.
+  void _updateKeepScreenOn() {
+    final ctrl = _controller;
+    final item = currentItem;
+    final want = ctrl != null &&
+        ctrl.value.isInitialized &&
+        ctrl.value.isPlaying &&
+        item != null &&
+        !item.isAudio &&
+        !item.isBook;
+    if (want == _keepScreenOn) return;
+    _keepScreenOn = want;
+    DeviceChannel.setKeepScreenOn(want);
   }
 
   void _syncNotification({bool force = false}) {
@@ -383,6 +447,7 @@ class ActiveMediaSession extends ChangeNotifier {
     } else {
       ctrl.play();
     }
+    _updateKeepScreenOn();
     _syncNotification(force: true);
     notifyListeners();
   }
@@ -390,23 +455,42 @@ class ActiveMediaSession extends ChangeNotifier {
   void seekRelative(int deltaSeconds) {
     final ctrl = _controller;
     if (ctrl == null || !ctrl.value.isInitialized) return;
-    final currentSec = ctrl.value.position.inSeconds;
-    final maxSec = ctrl.value.duration.inSeconds;
-    final target = (currentSec + deltaSeconds).clamp(
-      0,
-      maxSec > 0 ? maxSec : 86400,
-    );
-    ctrl.seekTo(Duration(seconds: target));
-    _syncNotification(force: true);
-    notifyListeners();
+    // Toques seguidos suman desde el último destino, no desde una posición
+    // que el reproductor todavía no actualizó.
+    final base = _seekTarget ?? ctrl.value.position;
+    seekTo(base + Duration(seconds: deltaSeconds));
   }
 
   void seekTo(Duration position) {
     final ctrl = _controller;
     if (ctrl == null || !ctrl.value.isInitialized) return;
-    ctrl.seekTo(position);
+    final max = ctrl.value.duration;
+    var target = position < Duration.zero ? Duration.zero : position;
+    if (max > Duration.zero && target > max) target = max;
+    _seekTarget = target;
+    ctrl.seekTo(target);
+    _checkSeek(ctrl, target);
     _syncNotification(force: true);
     notifyListeners();
+  }
+
+  /// Si tras el salto el reproductor volvió al principio, el archivo no
+  /// permite saltar (le falta el índice de búsqueda): se avisa en vez de
+  /// dejar al usuario sin saber por qué empezó de nuevo.
+  void _checkSeek(VideoPlayerController ctrl, Duration target) {
+    _seekCheck?.cancel();
+    _seekCheck = Timer(const Duration(milliseconds: 2500), () {
+      _seekTarget = null;
+      if (_controller != ctrl || !ctrl.value.isInitialized) return;
+      if (ctrl.value.isBuffering) return; // aún cargando el punto pedido
+      final pos = ctrl.value.position;
+      if (target.inSeconds >= 20 && pos < const Duration(seconds: 8)) {
+        _notice = 'Este archivo no permite adelantar ni retroceder: el '
+            'reproductor vuelve al inicio. Repórtalo desde la ficha para '
+            'que lo revisemos.';
+        notifyListeners();
+      }
+    });
   }
 
   Future<void> setPlaybackSpeed(double speed) async {
@@ -450,6 +534,9 @@ class ActiveMediaSession extends ChangeNotifier {
 
   Future<void> stopAndClose() async {
     _progressSaveTimer?.cancel();
+    _seekCheck?.cancel();
+    _seekTarget = null;
+    _preloader.cancel();
     _saveCurrentProgress();
     final ref = _ref;
     if (ref != null) {
@@ -469,6 +556,7 @@ class ActiveMediaSession extends ChangeNotifier {
 
     prev?.removeListener(_onControllerUpdate);
     await prev?.dispose();
+    _updateKeepScreenOn();
     await DeviceChannel.clearMediaNotification();
     notifyListeners();
   }
@@ -699,6 +787,14 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
     if (!_session.hasActiveMedia && !_session.useWebViewFallback) {
       Navigator.of(context).maybePop();
       return;
+    }
+    final notice = _session.takeNotice();
+    if (notice != null) {
+      ScaffoldMessenger.maybeOf(context)
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(notice), duration: const Duration(seconds: 6)),
+        );
     }
     setState(() {});
   }

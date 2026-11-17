@@ -209,14 +209,24 @@ class MainActivity : FlutterActivity() {
                     val url = call.argument<String>("url")
                     if (url.isNullOrBlank()) {
                         result.error("bad_args", "URL vacía", null)
+                    } else if (openExternalUrl(url)) {
+                        result.success(true)
                     } else {
-                        try {
-                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                            result.success(true)
-                        } catch (e: Exception) {
-                            result.error("open_url", e.message, null)
+                        result.error("open_url", "Ninguna app puede abrir $url", null)
+                    }
+                }
+                "setKeepScreenOn" -> {
+                    // Pantalla siempre encendida mientras se ve un video (si
+                    // no, MIUI/HyperOS y otros la atenúan y la apagan).
+                    val on = call.argument<Boolean>("on") ?: false
+                    runOnUiThread {
+                        if (on) {
+                            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        } else {
+                            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                         }
                     }
+                    result.success(true)
                 }
                 "getInstalledVersion" -> {
                     try {
@@ -793,6 +803,95 @@ class MainActivity : FlutterActivity() {
             target.outputStream().use { output -> input.copyTo(output) }
         }
         return target.absolutePath
+    }
+
+    // ── Abrir enlaces externos sin depender del navegador ───────────────
+    // Los enlaces https://t.me/... y https://wa.me/... no siempre los abre
+    // Telegram/WhatsApp: en muchos teléfonos Android se los da al navegador
+    // (la app no tiene verificado el dominio) y, si el navegador está
+    // desactivado, no se abría nada aunque Telegram estuviera instalado.
+    // Orden: 1) esquema propio de la app (tg://, whatsapp://), 2) el enlace
+    // https dirigido a las apps conocidas, 3) cualquier app (navegador).
+
+    private val telegramPackages = listOf(
+        "org.telegram.messenger",
+        "org.telegram.messenger.web",
+        "org.telegram.messenger.beta",
+        "org.thunderdog.challegram",
+        "tw.nekomimi.nekogram",
+        "org.telegram.plus",
+        "nekox.messenger",
+        "com.exteragram.messenger",
+    )
+    private val whatsappPackages = listOf("com.whatsapp", "com.whatsapp.w4b")
+
+    private fun tryStart(intent: Intent): Boolean = try {
+        startActivity(intent)
+        true
+    } catch (e: Exception) {
+        false
+    }
+
+    private fun openExternalUrl(url: String): Boolean {
+        val uri = Uri.parse(url)
+        val host = uri.host?.lowercase()?.removePrefix("www.") ?: ""
+        val view = { u: Uri -> Intent(Intent.ACTION_VIEW, u) }
+
+        if (host == "t.me" || host == "telegram.me" || host == "telegram.dog") {
+            telegramSchemeUri(uri)?.let { if (tryStart(view(it))) return true }
+            for (pkg in telegramPackages) {
+                if (tryStart(view(uri).setPackage(pkg))) return true
+            }
+        } else if (host == "wa.me" || host == "api.whatsapp.com" || host == "chat.whatsapp.com") {
+            whatsappSchemeUri(uri)?.let { if (tryStart(view(it))) return true }
+            for (pkg in whatsappPackages) {
+                if (tryStart(view(uri).setPackage(pkg))) return true
+            }
+        }
+
+        if (uri.scheme == "file" || uri.scheme == null) {
+            return false
+        }
+        return tryStart(view(uri))
+    }
+
+    /** https://t.me/bot?start=x → tg://resolve?domain=bot&start=x */
+    private fun telegramSchemeUri(uri: Uri): Uri? {
+        val segments = uri.pathSegments
+        if (segments.isEmpty()) return null
+        val first = segments[0]
+        // Invitaciones: t.me/+CODIGO o t.me/joinchat/CODIGO
+        if (first.startsWith("+") && first.length > 1) {
+            return Uri.parse("tg://join?invite=${Uri.encode(first.substring(1))}")
+        }
+        if (first == "joinchat" && segments.size > 1) {
+            return Uri.parse("tg://join?invite=${Uri.encode(segments[1])}")
+        }
+        // Rutas especiales (canales privados, stickers…): se quedan en https.
+        if (first in setOf("c", "s", "addstickers", "addemoji", "share", "proxy", "socks")) {
+            return null
+        }
+        val builder = Uri.Builder().scheme("tg").authority("resolve")
+            .appendQueryParameter("domain", first)
+        if (segments.size > 1 && segments[1].all { it.isDigit() }) {
+            builder.appendQueryParameter("post", segments[1])
+        }
+        for (name in uri.queryParameterNames) {
+            builder.appendQueryParameter(name, uri.getQueryParameter(name) ?: "")
+        }
+        return builder.build()
+    }
+
+    /** https://wa.me/5355555555?text=hola → whatsapp://send?phone=…&text=… */
+    private fun whatsappSchemeUri(uri: Uri): Uri? {
+        val host = uri.host?.lowercase()?.removePrefix("www.") ?: return null
+        if (host == "chat.whatsapp.com") return null // invitación a grupo: va por https
+        val phone = if (host == "wa.me") uri.pathSegments.firstOrNull()
+            else uri.getQueryParameter("phone")
+        val builder = Uri.Builder().scheme("whatsapp").authority("send")
+        if (!phone.isNullOrBlank()) builder.appendQueryParameter("phone", phone)
+        uri.getQueryParameter("text")?.let { builder.appendQueryParameter("text", it) }
+        return builder.build()
     }
 }
 

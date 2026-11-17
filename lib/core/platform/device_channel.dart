@@ -169,6 +169,19 @@ abstract final class DeviceChannel {
     }
   }
 
+  /// Mantiene la pantalla encendida (`true`) mientras se ve un video, o
+  /// devuelve el comportamiento normal (`false`). Solo Android.
+  static Future<void> setKeepScreenOn(bool on) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('setKeepScreenOn', {'on': on});
+    } on PlatformException {
+      // ignorar
+    } on MissingPluginException {
+      // ignorar
+    }
+  }
+
   /// Oculta la notificación de reproducción multimedia.
   static Future<void> clearMediaNotification() async {
     try {

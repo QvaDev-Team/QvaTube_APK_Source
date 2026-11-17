@@ -300,7 +300,25 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
         .read(siteConfigProvider.future)
         .catchError((_) => const SiteConfig());
     final bot = botConfig.botUsername ?? 'qvatube_bot';
-    await DeviceChannel.openUrl('https://t.me/$bot?start=$fallbackPayload');
+    await _openLink('https://t.me/$bot?start=$fallbackPayload');
+  }
+
+  /// Abre el enlace (Telegram primero, sin depender del navegador) y avisa si
+  /// ninguna app del teléfono pudo abrirlo.
+  Future<void> _openLink(String url) async {
+    final opened = await DeviceChannel.openUrl(url);
+    if (opened || !mounted) return;
+    final telegram = url.contains('t.me/') || url.startsWith('tg:');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          telegram
+              ? 'No se pudo abrir Telegram. Instálalo o actualízalo para '
+                    'recibir el archivo.'
+              : 'No hay ninguna app para abrir este enlace.',
+        ),
+      ),
+    );
   }
 
   /// Reproduce/lee la película o libro de la tarjeta, o [file] si se eligió
@@ -480,7 +498,7 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
 
       final url = _downloadLink(response);
       if (url != null) {
-        await DeviceChannel.openUrl(url);
+        await _openLink(url);
       } else {
         await _openTelegram('dl_${chatId}_$msgId');
       }
@@ -515,7 +533,7 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
 
       final url = _downloadLink(response);
       if (url != null) {
-        await DeviceChannel.openUrl(url);
+        await _openLink(url);
       } else {
         await _openTelegram('season_${categoryKey}_$_selectedSeason');
       }
@@ -578,7 +596,7 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
       if (url == null) {
         throw const ApiException('El servidor no devolvió el enlace.');
       }
-      await DeviceChannel.openUrl(url);
+      await _openLink(url);
       return true;
     } on ApiException catch (e) {
       if (!mounted) return false;
@@ -649,7 +667,7 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
       final url = _downloadLink(response);
 
       if (url != null) {
-        await DeviceChannel.openUrl(url);
+        await _openLink(url);
       } else {
         await _openTelegram('dl_${chatId}_$msgId');
       }
