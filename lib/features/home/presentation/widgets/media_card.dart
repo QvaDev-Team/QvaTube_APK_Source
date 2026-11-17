@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/compact_number.dart';
 import '../../../../core/theme/app_text.dart';
 import '../../../../core/widgets/app_cached_image.dart';
 import '../../../catalog/domain/catalog_models.dart';
@@ -138,7 +139,7 @@ class MediaCard extends StatelessWidget {
                             ),
                             const SizedBox(width: 2),
                             Text(
-                              '${item.popularity}',
+                              formatCompactNumber(item.popularity!),
                               style: AppTextStyles.mono(
                                 fontSize: 9.5,
                                 fontWeight: FontWeight.w700,

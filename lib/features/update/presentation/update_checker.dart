@@ -44,7 +44,8 @@ class UpdateChecker extends ConsumerStatefulWidget {
 /// la notificación push de actualización con la app ya abierta).
 void recheckForUpdates() => _UpdateCheckerState._instance?._check(silent: true);
 
-class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
+class _UpdateCheckerState extends ConsumerState<UpdateChecker>
+    with WidgetsBindingObserver {
   static _UpdateCheckerState? _instance;
 
   AppUpdateInfo? _info;
@@ -54,10 +55,32 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
   String? _status;
   String? _error;
 
+  /// La descarga sigue, pero el aviso grande está plegado en una píldora
+  /// para poder seguir usando la app.
+  bool _minimized = false;
+
+  /// La actualización terminó de bajarse con la app en segundo plano y
+  /// espera a que el usuario vuelva para instalarla.
+  bool _readyToInstall = false;
+
+  /// Último porcentaje enviado a la notificación (para no saturar el canal).
+  int? _notifiedPercent;
+  String? _notifiedStatus;
+
+  bool get _inForeground {
+    // `inactive` (persiana de notificaciones bajada, diálogo del sistema)
+    // sigue siendo visible: el instalador se puede abrir.
+    final state = WidgetsBinding.instance.lifecycleState;
+    return state == null ||
+        state == AppLifecycleState.resumed ||
+        state == AppLifecycleState.inactive;
+  }
+
   @override
   void initState() {
     super.initState();
     _instance = this;
+    WidgetsBinding.instance.addObserver(this);
     if (widget.checkOnStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _check(silent: true));
       // Aviso de la comprobación en segundo plano (respaldo sin push).
@@ -69,6 +92,7 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (_instance == this) {
       _instance = null;
     }
@@ -101,6 +125,29 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
     }
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Al volver a la app con la actualización ya descargada, se ofrece
+    // instalarla (si no se abrió ya el instalador desde la notificación).
+    if (state == AppLifecycleState.resumed && _readyToInstall && mounted) {
+      setState(() {
+        _readyToInstall = false;
+        _minimized = false;
+        _error = null;
+      });
+      _showReadyPrompt();
+    }
+  }
+
+  /// Aviso "lista para instalar" con el botón "Instalar ahora".
+  void _showReadyPrompt() {
+    setState(() {
+      _error =
+          'La actualización ya se descargó. Toca en "Instalar ahora" para '
+          'terminar.';
+    });
+  }
+
   /// Muestra el aviso de una versión concreta.
   void _showInfo(AppUpdateInfo info) => setState(() => _info = info);
 
@@ -115,6 +162,10 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
 
   /// Lanza la descarga de la actualización.
   void _startDownload([AppUpdateInfo? customInfo]) {
+    if (_downloading) {
+      setState(() => _minimized = false);
+      return;
+    }
     if (customInfo != null) {
       _info = customInfo;
     }
@@ -135,10 +186,21 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
 
     setState(() {
       _downloading = true;
+      _minimized = false;
+      _readyToInstall = false;
       _progress = 0;
       _status = null;
       _error = null;
     });
+    _notifiedPercent = null;
+    _notifiedStatus = null;
+
+    // Servicio en primer plano: Android no congela ni mata el proceso si el
+    // usuario sale de la app mientras se descarga, y el progreso se ve en
+    // la barra de notificaciones.
+    if (Platform.isAndroid && !info.isDownloaded) {
+      await DeviceChannel.startUpdateDownload(text: 'Descargando');
+    }
 
     try {
       final service = ref.read(appUpdateServiceProvider);
@@ -155,12 +217,22 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
           await service.download(
             info,
             onProgress: (received, total) {
+              final progress = total > 0 ? received / total : 0.0;
+              _reportProgress(total > 0 ? (progress * 100).floor() : null);
               if (!mounted) return;
               setState(() {
-                _progress = total > 0 ? received / total : 0;
+                _progress = progress;
               });
             },
             onStatus: (status) {
+              _notifiedStatus = status;
+              _reportProgress(
+                status.startsWith('Aplicando') ||
+                        status.startsWith('Verificando')
+                    ? null
+                    : _notifiedPercent,
+                force: true,
+              );
               if (!mounted) return;
               setState(() {
                 _status = status;
@@ -177,6 +249,23 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
       // a descargarlo si el usuario tuvo que autorizar permisos del sistema.
       _info = info.copyWith(localPath: file.path);
 
+      // Con la app en segundo plano Android no deja abrir el instalador:
+      // se avisa con una notificación y se instala al tocarla (o al volver).
+      if (!_inForeground) {
+        await DeviceChannel.notifyUpdateReady(
+          path: file.path,
+          versionName: info.versionName,
+        );
+        if (!mounted) return;
+        setState(() {
+          _downloading = false;
+          _minimized = false;
+          _readyToInstall = true;
+        });
+        return;
+      }
+
+      await DeviceChannel.stopUpdateDownload();
       final installed = await service.install(file);
       if (!mounted) return;
       if (!installed) {
@@ -188,14 +277,35 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
         });
         return;
       }
-      setState(() => _downloading = false);
+      setState(() {
+        _downloading = false;
+        _minimized = false;
+      });
     } catch (_) {
+      if (_inForeground) {
+        await DeviceChannel.stopUpdateDownload();
+      } else {
+        await DeviceChannel.notifyUpdateFailed();
+      }
       if (!mounted) return;
       setState(() {
         _downloading = false;
+        _minimized = false;
         _error = 'No se pudo descargar la actualización. Revisa tu conexión.';
       });
     }
+  }
+
+  /// Envía el progreso a la notificación solo cuando cambia el porcentaje
+  /// (o el texto), para no mandar cientos de mensajes por segundo.
+  void _reportProgress(int? percent, {bool force = false}) {
+    if (!Platform.isAndroid) return;
+    if (!force && percent == _notifiedPercent) return;
+    _notifiedPercent = percent;
+    DeviceChannel.updateDownloadProgress(
+      percent: percent,
+      text: _notifiedStatus,
+    );
   }
 
   @override
@@ -212,7 +322,18 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
             right: 0,
             child: _UpdateBanner(info: info),
           ),
-        if (_downloading || _error != null)
+        if (_downloading && _minimized)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _DownloadPill(
+              progress: _progress,
+              status: _status,
+              onTap: () => setState(() => _minimized = false),
+            ),
+          )
+        else if (_downloading || _error != null)
           _DownloadOverlay(
             progress: _progress,
             status: _status,
@@ -223,6 +344,9 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker> {
               _downloadAndInstall();
             },
             onCloseError: () => setState(() => _error = null),
+            onMinimize: _downloading
+                ? () => setState(() => _minimized = true)
+                : null,
           ),
       ],
     );
@@ -487,6 +611,7 @@ class _DownloadOverlay extends StatelessWidget {
     this.canRetryInstall = false,
     this.onRetryInstall,
     this.onCloseError,
+    this.onMinimize,
   });
 
   final double? progress;
@@ -495,6 +620,9 @@ class _DownloadOverlay extends StatelessWidget {
   final bool canRetryInstall;
   final VoidCallback? onRetryInstall;
   final VoidCallback? onCloseError;
+
+  /// Pliega el aviso y deja la descarga en segundo plano.
+  final VoidCallback? onMinimize;
 
   @override
   Widget build(BuildContext context) {
@@ -527,7 +655,9 @@ class _DownloadOverlay extends StatelessWidget {
                     Expanded(
                       child: Text(
                         error != null
-                            ? 'No se completó la actualización'
+                            ? (canRetryInstall
+                                  ? 'Actualización lista para instalar'
+                                  : 'No se completó la actualización')
                             : status ?? 'Descargando la actualización',
                         style: AppTextStyles.body(
                           fontSize: 13.5,
@@ -559,6 +689,27 @@ class _DownloadOverlay extends StatelessWidget {
                       color: AppColors.textMuted,
                     ),
                   ),
+                  if (onMinimize != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      'Puedes salir de la app: la descarga sigue y te '
+                      'avisamos con una notificación cuando termine.',
+                      style: AppTextStyles.body(
+                        fontSize: 11.5,
+                        color: AppColors.textSecondary,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: onMinimize,
+                        icon: const Icon(Icons.open_in_new, size: 16),
+                        label: const Text('Seguir usando la app'),
+                      ),
+                    ),
+                  ],
                 ] else ...[
                   const SizedBox(height: 12),
                   Text(
@@ -588,6 +739,69 @@ class _DownloadOverlay extends StatelessWidget {
                   ),
                 ],
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Píldora superior con el progreso cuando la descarga está plegada.
+class _DownloadPill extends StatelessWidget {
+  const _DownloadPill({this.progress, this.status, required this.onTap});
+
+  final double? progress;
+  final String? status;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = progress == null
+        ? null
+        : '${(progress! * 100).toStringAsFixed(0)} %';
+    return SafeArea(
+      bottom: false,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Material(
+            color: AppColors.surfaceSecondary,
+            elevation: 8,
+            shape: StadiumBorder(
+              side: BorderSide(color: AppColors.accent.withValues(alpha: 0.7)),
+            ),
+            child: InkWell(
+              onTap: onTap,
+              customBorder: const StadiumBorder(),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 6, 14, 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        value: progress,
+                        strokeWidth: 2,
+                        color: AppColors.accent,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      percent == null
+                          ? 'Actualizando…'
+                          : 'Actualizando · $percent',
+                      style: AppTextStyles.body(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
