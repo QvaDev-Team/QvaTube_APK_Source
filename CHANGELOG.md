@@ -1,5 +1,8 @@
 # Novedades de QvaTube
 
+## 1.2.16
+- La burbuja que marca la sección elegida en la barra de abajo vuelve a quedar centrada sobre su icono.
+
 ## 1.2.15
 - QvaTube ya aparece en la lista de apps de los televisores con Google TV.
 - En la tele todo se maneja con el mando: verás un marco rojo en lo que tienes seleccionado.
