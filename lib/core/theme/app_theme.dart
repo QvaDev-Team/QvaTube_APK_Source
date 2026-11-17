@@ -19,6 +19,9 @@ abstract final class AppTheme {
       dividerColor: AppColors.border,
       primaryColor: AppColors.accent,
       splashFactory: InkSparkle.splashFactory,
+      // Foco del mando (Google TV) o del teclado bien visible sobre el fondo
+      // oscuro; el gris por defecto casi no se ve en la tele.
+      focusColor: AppColors.accent.withValues(alpha: 0.32),
       colorScheme: const ColorScheme.dark(
         primary: AppColors.accent,
         onPrimary: AppColors.accentInk,

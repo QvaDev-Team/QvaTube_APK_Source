@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
+import '../../../../core/widgets/focus_ring.dart';
 
 const double _navBarHeight = 66;
 const double _navLabelGap = 4;
@@ -207,82 +208,84 @@ class _NavButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = isActive ? AppColors.accent : AppColors.textMuted;
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadii.md),
-      child: SizedBox(
-        height: _navBarHeight,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: pillWidth,
-              height: pillHeight,
-              child: Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.center,
-                children: [
-                  AnimatedScale(
-                    scale: isActive ? 1.12 : 1,
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(
-                      isActive ? (item.activeIcon ?? item.icon) : item.icon,
-                      size: 22,
-                      color: color,
-                    ),
-                  ),
-                  if (item.badgeCount > 0)
-                    Positioned(
-                      right: 0,
-                      top: 0,
-                      child: Container(
-                        constraints: const BoxConstraints(minWidth: 13),
-                        height: 13,
-                        padding: const EdgeInsets.symmetric(horizontal: 3),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: AppColors.accent,
-                          borderRadius: BorderRadius.circular(AppRadii.pill),
-                          // Borde del color de fondo para despegarlo del icono.
-                          border: Border.all(
-                            color: AppColors.background,
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Text(
-                          item.badgeCount > 99 ? '99+' : '${item.badgeCount}',
-                          style: AppTextStyles.mono(
-                            fontSize: 8,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.accentInk,
-                          ).copyWith(height: 1),
-                        ),
+    return FocusRing(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadii.md),
+        child: SizedBox(
+          height: _navBarHeight,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: pillWidth,
+                height: pillHeight,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    AnimatedScale(
+                      scale: isActive ? 1.12 : 1,
+                      duration: const Duration(milliseconds: 200),
+                      child: Icon(
+                        isActive ? (item.activeIcon ?? item.icon) : item.icon,
+                        size: 22,
+                        color: color,
                       ),
                     ),
-                ],
+                    if (item.badgeCount > 0)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: Container(
+                          constraints: const BoxConstraints(minWidth: 13),
+                          height: 13,
+                          padding: const EdgeInsets.symmetric(horizontal: 3),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppColors.accent,
+                            borderRadius: BorderRadius.circular(AppRadii.pill),
+                            // Borde del color de fondo para despegarlo del icono.
+                            border: Border.all(
+                              color: AppColors.background,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Text(
+                            item.badgeCount > 99 ? '99+' : '${item.badgeCount}',
+                            style: AppTextStyles.mono(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.accentInk,
+                            ).copyWith(height: 1),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: _navLabelGap),
-            SizedBox(
-              height: _navLabelHeight,
-              child: AnimatedOpacity(
-                opacity: isActive ? 1 : 0,
-                duration: const Duration(milliseconds: 200),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    item.label,
-                    maxLines: 1,
-                    style: AppTextStyles.body(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w600,
-                      color: color,
+              const SizedBox(height: _navLabelGap),
+              SizedBox(
+                height: _navLabelHeight,
+                child: AnimatedOpacity(
+                  opacity: isActive ? 1 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      style: AppTextStyles.body(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                        color: color,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

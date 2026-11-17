@@ -320,7 +320,7 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker>
             top: 0,
             left: 0,
             right: 0,
-            child: _UpdateBanner(info: info),
+            child: _RemoteFocus(child: _UpdateBanner(info: info)),
           ),
         if (_downloading && _minimized)
           Positioned(
@@ -334,7 +334,8 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker>
             ),
           )
         else if (_downloading || _error != null)
-          _DownloadOverlay(
+          _RemoteFocus(
+            child: _DownloadOverlay(
             progress: _progress,
             status: _status,
             error: _error,
@@ -347,9 +348,64 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker>
             onMinimize: _downloading
                 ? () => setState(() => _minimized = true)
                 : null,
+            ),
           ),
       ],
     );
+  }
+}
+
+/// En la tele (Google TV) lleva el foco del mando a [child] al aparecer.
+///
+/// El aviso de actualización está por encima del Navigator, fuera del
+/// ámbito de foco de las pantallas: con las flechas del mando no se podía
+/// llegar a sus botones. Aquí se le da su propio ámbito, se enfoca su botón
+/// principal (`autofocus`) y, al cerrarse, el foco vuelve a donde estaba.
+/// En el móvil no hace nada: no quita el teclado a quien está escribiendo.
+class _RemoteFocus extends StatefulWidget {
+  const _RemoteFocus({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_RemoteFocus> createState() => _RemoteFocusState();
+}
+
+class _RemoteFocusState extends State<_RemoteFocus> {
+  final FocusScopeNode _scope = FocusScopeNode(debugLabel: 'update-remote');
+  FocusNode? _previous;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!DeviceChannel.isTelevision) return;
+    _previous = FocusManager.instance.primaryFocus;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _scope.requestFocus();
+      // Si el botón con `autofocus` aún no lo tomó, el primero que haya.
+      if (_scope.focusedChild == null) _scope.nextFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    final previous = _previous;
+    if (DeviceChannel.isTelevision &&
+        _scope.hasFocus &&
+        previous != null &&
+        previous.context != null &&
+        previous.canRequestFocus) {
+      previous.requestFocus();
+    }
+    _scope.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!DeviceChannel.isTelevision) return widget.child;
+    return FocusScope(node: _scope, child: widget.child);
   }
 }
 
@@ -563,6 +619,7 @@ class _UpdateBanner extends ConsumerWidget {
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
+                      autofocus: true,
                       onPressed: () => _startDownload(context),
                       icon: const Icon(Icons.download, size: 16),
                       label: const Text('Actualizar ahora'),
@@ -704,6 +761,7 @@ class _DownloadOverlay extends StatelessWidget {
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton.icon(
+                        autofocus: true,
                         onPressed: onMinimize,
                         icon: const Icon(Icons.open_in_new, size: 16),
                         label: const Text('Seguir usando la app'),
@@ -724,12 +782,14 @@ class _DownloadOverlay extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton(
+                        autofocus: !canRetryInstall,
                         onPressed: onCloseError,
                         child: const Text('Cerrar'),
                       ),
                       if (canRetryInstall && onRetryInstall != null) ...[
                         const SizedBox(width: 8),
                         ElevatedButton.icon(
+                          autofocus: true,
                           onPressed: onRetryInstall,
                           icon: const Icon(Icons.install_mobile, size: 16),
                           label: const Text('Instalar ahora'),

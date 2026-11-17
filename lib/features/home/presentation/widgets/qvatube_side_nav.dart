@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
+import '../../../../core/widgets/focus_ring.dart';
 import 'badge_count.dart';
 import 'qvatube_bottom_nav.dart';
 
@@ -96,65 +97,67 @@ class _SideNavButtonState extends State<_SideNavButton> {
         : icon;
 
     // InkWell: ratón (cursor de mano y hover) y teclado (Tab + Intro).
-    final button = Material(
-      type: MaterialType.transparency,
-      child: InkWell(
-        onTap: widget.onTap,
-        onHover: (value) => setState(() => _hover = value),
-        onFocusChange: (value) => setState(() => _hover = value),
-        borderRadius: BorderRadius.circular(AppRadii.md),
-        hoverColor: Colors.transparent,
-        focusColor: Colors.transparent,
-        splashColor: AppColors.accent.withValues(alpha: 0.12),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          height: 46,
-          padding: EdgeInsets.symmetric(horizontal: widget.compact ? 0 : 14),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.accentSoft
-                : _hover
-                ? AppColors.surfaceSecondary
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(AppRadii.md),
-            border: Border.all(
+    final button = FocusRing(
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: widget.onTap,
+          onHover: (value) => setState(() => _hover = value),
+          onFocusChange: (value) => setState(() => _hover = value),
+          borderRadius: BorderRadius.circular(AppRadii.md),
+          hoverColor: Colors.transparent,
+          focusColor: Colors.transparent,
+          splashColor: AppColors.accent.withValues(alpha: 0.12),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            height: 46,
+            padding: EdgeInsets.symmetric(horizontal: widget.compact ? 0 : 14),
+            decoration: BoxDecoration(
               color: selected
-                  ? AppColors.accent.withValues(alpha: 0.7)
+                  ? AppColors.accentSoft
+                  : _hover
+                  ? AppColors.surfaceSecondary
                   : Colors.transparent,
+              borderRadius: BorderRadius.circular(AppRadii.md),
+              border: Border.all(
+                color: selected
+                    ? AppColors.accent.withValues(alpha: 0.7)
+                    : Colors.transparent,
+              ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: AppColors.accent.withValues(alpha: 0.25),
+                        blurRadius: 16,
+                      ),
+                    ]
+                  : null,
             ),
-            boxShadow: selected
-                ? [
-                    BoxShadow(
-                      color: AppColors.accent.withValues(alpha: 0.25),
-                      blurRadius: 16,
-                    ),
-                  ]
-                : null,
-          ),
-          child: widget.compact
-              ? Center(child: iconWithBadge)
-              : Row(
-                  children: [
-                    iconWithBadge,
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Text(
-                        item.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.body(
-                          fontSize: 14,
-                          fontWeight: selected
-                              ? FontWeight.w800
-                              : FontWeight.w600,
-                          color: selected || _hover
-                              ? AppColors.textPrimary
-                              : AppColors.textSecondary,
+            child: widget.compact
+                ? Center(child: iconWithBadge)
+                : Row(
+                    children: [
+                      iconWithBadge,
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          item.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.body(
+                            fontSize: 14,
+                            fontWeight: selected
+                                ? FontWeight.w800
+                                : FontWeight.w600,
+                            color: selected || _hover
+                                ? AppColors.textPrimary
+                                : AppColors.textSecondary,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+          ),
         ),
       ),
     );

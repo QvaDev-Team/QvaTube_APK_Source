@@ -193,6 +193,25 @@ abstract final class DeviceChannel {
     }
   }
 
+  /// `true` en un televisor (Google TV / Android TV), que se maneja con el
+  /// mando. Se rellena con [detectTelevision] al arrancar.
+  static bool isTelevision = false;
+
+  /// Pregunta a Android si es un televisor y guarda el resultado en
+  /// [isTelevision].
+  static Future<bool> detectTelevision() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      isTelevision =
+          await _channel.invokeMethod<bool>('isTelevision') ?? false;
+    } on PlatformException {
+      isTelevision = false;
+    } on MissingPluginException {
+      isTelevision = false;
+    }
+    return isTelevision;
+  }
+
   /// `true` en Windows, Linux y macOS.
   static bool get isDesktop =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;

@@ -288,6 +288,14 @@ class MainActivity : FlutterActivity() {
                 // APK instalado (base.apk): punto de partida de los parches
                 // diferenciales. Se puede leer sin permisos especiales.
                 "getInstalledApkPath" -> result.success(applicationInfo.sourceDir)
+                "isTelevision" -> {
+                    // Google TV / Android TV: se maneja con el mando (D-pad).
+                    val uiMode = getSystemService(Context.UI_MODE_SERVICE) as android.app.UiModeManager
+                    result.success(
+                        uiMode.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION ||
+                            packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+                    )
+                }
                 "applyLauncherIcon" -> {
                     try {
                         result.success(applyLauncherIcon(call.argument<String>("season")))

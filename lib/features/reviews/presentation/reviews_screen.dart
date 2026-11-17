@@ -181,9 +181,10 @@ class _ReviewFormState extends ConsumerState<_ReviewForm> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             for (var i = 1; i <= 5; i++)
-              GestureDetector(
+              // InkWell: también se elige con el mando de la tele.
+              InkWell(
                 onTap: _sending ? null : () => setState(() => _rating = i),
-                behavior: HitTestBehavior.opaque,
+                customBorder: const CircleBorder(),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: AnimatedScale(
