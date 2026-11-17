@@ -1,5 +1,10 @@
 # Novedades de QvaTube
 
+## 1.2.13
+- La pantalla ya no se apaga mientras ves una película o serie.
+- La música pasa de una canción a la siguiente sin cortes: la próxima se va cargando mientras escuchas la actual.
+- Los botones que te llevan a Telegram funcionan aunque no tengas un navegador activado.
+
 ## 1.2.12
 - QvaTube ya está disponible para computadoras con Windows y Linux: descárgala desde la página de descargas de QvaTube en GitHub.
 
