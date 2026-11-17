@@ -286,6 +286,52 @@ abstract final class DeviceChannel {
     }
   }
 
+  /// Arranca el servicio en primer plano que mantiene viva la descarga de
+  /// una actualización aunque el usuario salga de la app (con su
+  /// notificación de progreso).
+  static Future<void> startUpdateDownload({String? text}) =>
+      _invokeAndroid('startUpdateDownload', {'text': text});
+
+  /// Progreso de la descarga en la notificación (`percent` 0-100, o `null`
+  /// para la barra indeterminada).
+  static Future<void> updateDownloadProgress({int? percent, String? text}) =>
+      _invokeAndroid('updateDownloadProgress', {
+        'percent': percent ?? -1,
+        'text': text,
+      });
+
+  /// Para el servicio de descarga y quita su notificación.
+  static Future<void> stopUpdateDownload() =>
+      _invokeAndroid('stopUpdateDownload');
+
+  /// Avisa con una notificación de que la actualización ya se descargó; al
+  /// tocarla se abre la app con el instalador.
+  static Future<void> notifyUpdateReady({
+    required String path,
+    String? versionName,
+  }) => _invokeAndroid('notifyUpdateReady', {
+    'path': path,
+    'versionName': versionName,
+  });
+
+  /// Avisa con una notificación de que la descarga falló.
+  static Future<void> notifyUpdateFailed() =>
+      _invokeAndroid('notifyUpdateFailed');
+
+  static Future<void> _invokeAndroid(
+    String method, [
+    Map<String, Object?>? args,
+  ]) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<Object?>(method, args);
+    } on PlatformException {
+      // La notificación es un extra: la descarga sigue igual.
+    } on MissingPluginException {
+      // ignorar
+    }
+  }
+
   /// Ruta del APK instalado (`applicationInfo.sourceDir`), base de los
   /// parches de actualización diferencial. `null` si no está disponible.
   static Future<String?> installedApkPath() async {

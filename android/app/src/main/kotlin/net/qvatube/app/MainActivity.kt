@@ -95,6 +95,30 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         registerMediaReceiver()
         ensureGeneralChannel()
+        // App cerrada y el usuario toca "Actualización lista": instalar.
+        handleInstallIntent(intent)
+    }
+
+    /**
+     * Notificación de [UpdateDownloadService] "Actualización lista": la
+     * actividad ya está delante, así que el instalador del sistema se puede
+     * abrir (desde segundo plano Android lo bloquea).
+     */
+    private fun handleInstallIntent(intent: Intent?): Boolean {
+        if (intent == null) return false
+        val path = intent.getStringExtra(UpdateDownloadService.EXTRA_INSTALL_PATH)
+        if (path.isNullOrBlank()) return false
+        intent.removeExtra(UpdateDownloadService.EXTRA_INSTALL_PATH)
+        UpdateDownloadService.cancelReady(this)
+        val file = File(path)
+        if (file.exists()) {
+            installApk(file, null)
+        } else {
+            // El archivo ya no está (se limpió la caché): que Flutter vuelva
+            // a comprobar y enseñe el aviso para descargarla otra vez.
+            methodChannel?.invokeMethod("onUpdateNotificationTap", null)
+        }
+        return true
     }
 
     /** Canal de las notificaciones push (avisos de QvaTube). */
@@ -179,6 +203,7 @@ class MainActivity : FlutterActivity() {
     // Flutter vuelve a comprobar para enseñar el banner.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (handleInstallIntent(intent)) return
         if (intent.getBooleanExtra(UpdateCheckWorker.EXTRA_OPEN_UPDATE, false)) {
             UpdateCheckWorker.cancelNotification(this)
             methodChannel?.invokeMethod("onUpdateNotificationTap", null)
@@ -344,6 +369,49 @@ class MainActivity : FlutterActivity() {
                         installApk(File(path), result)
                     }
                 }
+                "startUpdateDownload" -> {
+                    // Pide el permiso de notificaciones si aún no se pidió:
+                    // sin él no se ve el progreso ni el aviso al terminar.
+                    requestNotificationPermissionOnce()
+                    UpdateDownloadService.start(applicationContext, call.argument<String>("text"))
+                    result.success(true)
+                }
+                "updateDownloadProgress" -> {
+                    UpdateDownloadService.progress(
+                        applicationContext,
+                        call.argument<Int>("percent") ?: -1,
+                        call.argument<String>("text")
+                    )
+                    result.success(true)
+                }
+                "stopUpdateDownload" -> {
+                    UpdateDownloadService.stop(applicationContext)
+                    result.success(true)
+                }
+                "notifyUpdateReady" -> {
+                    val path = call.argument<String>("path")
+                    if (path.isNullOrBlank()) {
+                        result.error("bad_args", "Ruta vacía", null)
+                    } else {
+                        // Guardarlo ya en filesDir/updates para que la
+                        // notificación apunte a un archivo que no se borra.
+                        val persistent = try {
+                            ensurePersistentUpdateFile(File(path))
+                        } catch (_: Exception) {
+                            File(path)
+                        }
+                        UpdateDownloadService.notifyReady(
+                            applicationContext,
+                            persistent.absolutePath,
+                            call.argument<String>("versionName")
+                        )
+                        result.success(true)
+                    }
+                }
+                "notifyUpdateFailed" -> {
+                    UpdateDownloadService.notifyFailed(applicationContext)
+                    result.success(true)
+                }
                 "updateMediaNotification" -> {
                     val title = call.argument<String>("title") ?: "QvaTube"
                     val subtitle = call.argument<String>("subtitle") ?: ""
@@ -397,9 +465,9 @@ class MainActivity : FlutterActivity() {
      * En cuanto el usuario activa "Permitir desde esta fuente" y regresa,
      * se lanza automáticamente el instalador sin pedir descargar ni tocar de nuevo.
      */
-    private fun installApk(file: File, result: MethodChannel.Result) {
+    private fun installApk(file: File, result: MethodChannel.Result?) {
         if (!file.exists()) {
-            result.error("missing_file", "No se encontró el APK descargado", null)
+            result?.error("missing_file", "No se encontró el APK descargado", null)
             return
         }
         try {
@@ -414,6 +482,9 @@ class MainActivity : FlutterActivity() {
             }
             if (!canInstall) {
                 pendingInstallFile = persistentFile
+                // Una instalación anterior que esperaba el permiso queda
+                // sustituida por esta: se le contesta para no dejarla colgada.
+                pendingInstallResult?.success(false)
                 pendingInstallResult = result
                 val settings = Intent(
                     Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
@@ -425,9 +496,9 @@ class MainActivity : FlutterActivity() {
             }
 
             launchSystemPackageInstaller(persistentFile)
-            result.success(true)
+            result?.success(true)
         } catch (e: Exception) {
-            result.error("install", e.message, null)
+            result?.error("install", e.message, null)
         }
     }
 

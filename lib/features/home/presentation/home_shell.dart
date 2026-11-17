@@ -41,6 +41,29 @@ class HomeShell extends ConsumerWidget {
   /// Índice de la pestaña de Inicio (primera a la izquierda).
   static const int homeIndex = 0;
 
+  /// Claves de `GET /api/new-content/counts` de cada pestaña (mismo orden
+  /// que [_definitions]). Se aceptan alias por si el backend usa el nombre
+  /// en plural o en español.
+  static const List<List<String>> _countKeys = [
+    [],
+    ['popular'],
+    ['tv', 'live', 'channels'],
+    ['movie', 'movies', 'peliculas'],
+    ['series'],
+    ['anime'],
+    ['novela', 'novelas'],
+    ['music', 'musica', 'música'],
+    ['book', 'books', 'libros'],
+  ];
+
+  static int _countFor(Map<String, int> counts, List<String> keys) {
+    for (final key in keys) {
+      final value = counts[key];
+      if (value != null && value > 0) return value;
+    }
+    return 0;
+  }
+
   void _onTap(int index) {
     navigationShell.goBranch(
       index,
@@ -54,18 +77,13 @@ class HomeShell extends ConsumerWidget {
     final counts =
         ref.watch(newContentCountsProvider).value ?? const <String, int>{};
     final totalNew = counts.values.fold<int>(0, (sum, value) => sum + value);
-    // Los badges de estrenos van en Inicio (total), Películas, Series y
-    // Anime, que son las categorías con contador en el backend.
+    // Cada pestaña muestra los estrenos de su categoría, igual que la web.
+    // Antes solo Películas, Series y Anime tenían contador, así que una
+    // subida grande de música (p. ej. 81 canciones) salía en el total de
+    // Inicio pero no en la pestaña Música.
     final badges = <int>[
-      totalNew,
-      0,
-      0,
-      counts['movie'] ?? 0,
-      counts['series'] ?? 0,
-      counts['anime'] ?? 0,
-      0,
-      0,
-      0,
+      for (var index = 0; index < _definitions.length; index++)
+        index == homeIndex ? totalNew : _countFor(counts, _countKeys[index]),
     ];
 
     final items = <QvaBottomNavItem>[

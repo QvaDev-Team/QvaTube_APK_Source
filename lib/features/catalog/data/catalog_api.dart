@@ -163,11 +163,25 @@ class CatalogApi {
     final data = _map(response.data);
     final counts = data['counts'];
     if (counts is Map) {
-      return counts.map(
-        (key, value) => MapEntry(key.toString(), (value as num?)?.toInt() ?? 0),
-      );
+      return {
+        for (final entry in counts.entries)
+          entry.key.toString(): _countValue(entry.value),
+      };
     }
     return const {};
+  }
+
+  /// Un contador puede llegar como número, texto (`"81"`) o con detalle
+  /// (`{"count": 81}`); cualquier otro valor cuenta como 0 en vez de romper
+  /// todos los badges.
+  static int _countValue(Object? value) {
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.trim()) ?? 0;
+    if (value is Map) {
+      return _countValue(value['count'] ?? value['total'] ?? value['new']);
+    }
+    if (value is List) return value.length;
+    return 0;
   }
 
   /// GET /api/favorites
@@ -801,9 +815,10 @@ class CatalogApi {
     final data = _map(response.data);
     final counts = data['counts'];
     if (counts is Map) {
-      return counts.map(
-        (key, value) => MapEntry(key.toString(), (value as num?)?.toInt() ?? 0),
-      );
+      return {
+        for (final entry in counts.entries)
+          entry.key.toString(): _countValue(entry.value),
+      };
     }
     return const {};
   }
