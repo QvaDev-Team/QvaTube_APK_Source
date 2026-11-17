@@ -1,5 +1,11 @@
 # Novedades de QvaTube
 
+## 1.2.15
+- QvaTube ya aparece en la lista de apps de los televisores con Google TV.
+- En la tele todo se maneja con el mando: verás un marco rojo en lo que tienes seleccionado.
+- El aviso de nueva versión se puede aceptar con el mando de la tele.
+- En el reproductor, OK muestra los controles, izquierda y derecha saltan 10 segundos y el botón Play/Pausa del mando funciona.
+
 ## 1.2.14
 - La popularidad de cada título se muestra abreviada (1.9K, 2K, 1M) y ya no se sale de la carátula.
 - Todas las secciones (Música, Novelas, Libros y TV) muestran cuántos estrenos nuevos tienen, igual que en la web.
