@@ -1,5 +1,10 @@
 # Novedades de QvaTube
 
+## 1.2.14
+- La popularidad de cada título se muestra abreviada (1.9K, 2K, 1M) y ya no se sale de la carátula.
+- Todas las secciones (Música, Novelas, Libros y TV) muestran cuántos estrenos nuevos tienen, igual que en la web.
+- Las actualizaciones siguen descargándose aunque salgas de la app, y te avisamos con una notificación cuando están listas para instalar.
+
 ## 1.2.13
 - La pantalla ya no se apaga mientras ves una película o serie.
 - La música pasa de una canción a la siguiente sin cortes: la próxima se va cargando mientras escuchas la actual.
