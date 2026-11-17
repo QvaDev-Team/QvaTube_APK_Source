@@ -49,6 +49,11 @@ class _FocusRingState extends State<FocusRing> {
         scale: _focused ? widget.scale : 1,
         duration: const Duration(milliseconds: 140),
         child: Stack(
+          // `passthrough`: el hijo recibe las mismas restricciones que el
+          // marco. Con el `loose` por defecto, un botón que debe llenar su
+          // casilla (navegación inferior) se encogía y quedaba a la
+          // izquierda, descentrado de la burbuja de selección.
+          fit: StackFit.passthrough,
           clipBehavior: Clip.none,
           children: [
             widget.child,
