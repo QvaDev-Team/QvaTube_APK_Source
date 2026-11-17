@@ -11,6 +11,7 @@ import '../../../../core/platform/device_channel.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
 import '../../../../core/widgets/app_cached_image.dart';
+import '../../../../core/widgets/focus_ring.dart';
 import '../../../catalog/application/catalog_providers.dart';
 import '../../../catalog/domain/catalog_models.dart';
 import '../../../../core/layout/responsive.dart';
@@ -371,149 +372,151 @@ class TvChannelCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final viewers = channel.viewers ?? 0;
 
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(AppRadii.md),
-      child: InkWell(
-        onTap: onTap,
+    return FocusRing(
+      child: Material(
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadii.md),
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadii.md),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      color: AppColors.surfaceSecondary,
-                      child: channel.logoUrl.isEmpty
-                          ? Icon(
-                              channel.isRadio ? Icons.radio : Icons.live_tv,
-                              color: AppColors.textMuted,
-                              size: 22,
-                            )
-                          : AppCachedImage(
-                              imageUrl: channel.logoUrl,
-                              fit: BoxFit.cover,
-                              errorWidget: Icon(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadii.md),
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadii.md),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        color: AppColors.surfaceSecondary,
+                        child: channel.logoUrl.isEmpty
+                            ? Icon(
                                 channel.isRadio ? Icons.radio : Icons.live_tv,
                                 color: AppColors.textMuted,
                                 size: 22,
+                              )
+                            : AppCachedImage(
+                                imageUrl: channel.logoUrl,
+                                fit: BoxFit.cover,
+                                errorWidget: Icon(
+                                  channel.isRadio ? Icons.radio : Icons.live_tv,
+                                  color: AppColors.textMuted,
+                                  size: 22,
+                                ),
                               ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            channel.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.body(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              height: 1.2,
                             ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          channel.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.body(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                            height: 1.2,
                           ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          channel.tag?.isNotEmpty == true
-                              ? channel.tag!
-                              : channel.groupTitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.body(
-                            fontSize: 11,
-                            color: AppColors.textMuted,
+                          const SizedBox(height: 3),
+                          Text(
+                            channel.tag?.isNotEmpty == true
+                                ? channel.tag!
+                                : channel.groupTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.body(
+                              fontSize: 11,
+                              color: AppColors.textMuted,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: channel.isRadio
-                          ? const Color(0x263B82F6)
-                          : AppColors.accentSoft,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: channel.isRadio
-                                ? const Color(0xFF3B82F6)
-                                : AppColors.accent,
+                  ],
+                ),
+                const Spacer(),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: channel.isRadio
+                            ? const Color(0x263B82F6)
+                            : AppColors.accentSoft,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: channel.isRadio
+                                  ? const Color(0xFF3B82F6)
+                                  : AppColors.accent,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          channel.isRadio ? 'RADIO' : 'EN VIVO',
-                          style: AppTextStyles.mono(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            color: channel.isRadio
-                                ? const Color(0xFF3B82F6)
-                                : AppColors.accent,
+                          const SizedBox(width: 4),
+                          Text(
+                            channel.isRadio ? 'RADIO' : 'EN VIVO',
+                            style: AppTextStyles.mono(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: channel.isRadio
+                                  ? const Color(0xFF3B82F6)
+                                  : AppColors.accent,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  if (!channel.isRadio && viewers > 0)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.visibility_outlined,
-                          size: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                        const SizedBox(width: 3),
-                        Text(
-                          '$viewers',
-                          style: AppTextStyles.mono(
-                            fontSize: 10.5,
+                    const Spacer(),
+                    if (!channel.isRadio && viewers > 0)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.visibility_outlined,
+                            size: 12,
                             color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w600,
                           ),
-                        ),
-                      ],
-                    )
-                  else
-                    const Icon(
-                      Icons.play_circle_fill,
-                      size: 18,
-                      color: AppColors.accent,
-                    ),
-                ],
-              ),
-            ],
+                          const SizedBox(width: 3),
+                          Text(
+                            '$viewers',
+                            style: AppTextStyles.mono(
+                              fontSize: 10.5,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      const Icon(
+                        Icons.play_circle_fill,
+                        size: 18,
+                        color: AppColors.accent,
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -908,13 +911,59 @@ class _TvFullscreenPageState extends State<_TvFullscreenPage> {
     if (_showControls) _scheduleHide();
   }
 
+  /// Mando de Google TV: OK y Play/Pausa pausan o reanudan; las flechas
+  /// enseñan los controles (para llegar a "Salir"). Si un botón tiene el
+  /// foco, las teclas son suyas.
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    final controller = widget.controller;
+    void togglePlay() {
+      controller.value.isPlaying ? controller.pause() : controller.play();
+      setState(() => _showControls = true);
+      _scheduleHide();
+    }
+
+    if (key == LogicalKeyboardKey.mediaPlayPause ||
+        key == LogicalKeyboardKey.space) {
+      togglePlay();
+      return KeyEventResult.handled;
+    }
+    if (!node.hasPrimaryFocus) {
+      _scheduleHide();
+      return KeyEventResult.ignored;
+    }
+    if (key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter ||
+        key == LogicalKeyboardKey.gameButtonA) {
+      togglePlay();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowRight) {
+      if (!_showControls) {
+        setState(() => _showControls = true);
+        _scheduleHide();
+        return KeyEventResult.handled;
+      }
+      _scheduleHide();
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final playing = controller.value.isPlaying;
     return Scaffold(
       backgroundColor: Colors.black,
-      body: GestureDetector(
+      body: Focus(
+        autofocus: true,
+        onKeyEvent: _onKey,
+        child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _toggleControls,
         child: Stack(
@@ -996,6 +1045,7 @@ class _TvFullscreenPageState extends State<_TvFullscreenPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

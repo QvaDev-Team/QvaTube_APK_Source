@@ -6,6 +6,7 @@ import 'package:video_player_media_kit/video_player_media_kit.dart';
 import 'core/config/app_config.dart';
 import 'core/layout/responsive.dart';
 import 'core/network/api_providers.dart';
+import 'core/platform/device_channel.dart';
 import 'core/push/push_service.dart';
 import 'core/router/router.dart';
 import 'core/storage/app_preferences.dart';
@@ -29,6 +30,13 @@ Future<void> main() async {
   // Arte de temporada: la última que dijo el servidor (GET /api/season) y su
   // logo/icono guardados; sin eso, el arte incluido en el APK.
   await SeasonBranding.init(preferences);
+
+  // En la tele (Google TV) todo se maneja con el mando: el foco se ve
+  // siempre, sin esperar a la primera tecla.
+  if (await DeviceChannel.detectTelevision()) {
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+  }
 
   runApp(
     ProviderScope(

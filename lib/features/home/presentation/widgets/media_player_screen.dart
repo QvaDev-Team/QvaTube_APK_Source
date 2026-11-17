@@ -15,6 +15,7 @@ import '../../../../core/router/router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
 import '../../../../core/widgets/app_cached_image.dart';
+import '../../../../core/widgets/focus_ring.dart';
 import '../../../catalog/application/catalog_providers.dart';
 import '../../../catalog/domain/catalog_models.dart';
 
@@ -759,6 +760,10 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
   final ActiveMediaSession _session = ActiveMediaSession.instance;
   Timer? _hideControlsTimer;
 
+  /// Foco del reproductor para el mando de la tele / teclado.
+  final FocusNode _keyFocus = FocusNode(debugLabel: 'player-keys');
+  final FocusNode _playFocus = FocusNode(debugLabel: 'player-play');
+
   bool _showControls = true;
   bool _isLandscape = false;
   double? _draggingSeconds;
@@ -776,6 +781,8 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
   @override
   void dispose() {
     _hideControlsTimer?.cancel();
+    _keyFocus.dispose();
+    _playFocus.dispose();
     _session.removeListener(_onSessionChanged);
     _session.setScreenOpen(false);
     _restoreSystemUi();
@@ -831,8 +838,66 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
     _hideControlsTimer = Timer(const Duration(seconds: 4), () {
       if (mounted && _session.isPlaying) {
         setState(() => _showControls = false);
+        // El botón enfocado desaparece: el foco vuelve al reproductor para
+        // que el mando siga funcionando.
+        _keyFocus.requestFocus();
       }
     });
+  }
+
+  /// Teclas del mando de Google TV (y del teclado):
+  /// - controles ocultos: OK/arriba/abajo los muestran (con el foco en
+  ///   Play) e izquierda/derecha saltan 10 s;
+  /// - controles visibles: las flechas mueven el foco entre botones;
+  /// - Play/Pausa del mando y la barra espaciadora pausan siempre.
+  KeyEventResult _onPlayerKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.mediaPlayPause ||
+        key == LogicalKeyboardKey.mediaPlay ||
+        key == LogicalKeyboardKey.mediaPause ||
+        key == LogicalKeyboardKey.space) {
+      _playPause();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.mediaFastForward) {
+      _session.seekRelative(10);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.mediaRewind) {
+      _session.seekRelative(-10);
+      return KeyEventResult.handled;
+    }
+    if (_showControls) {
+      // Cualquier tecla mantiene los controles a la vista; la navegación
+      // entre botones la hace Flutter.
+      _scheduleHideControls();
+      return KeyEventResult.ignored;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      _session.seekRelative(-10);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      _session.seekRelative(10);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter ||
+        key == LogicalKeyboardKey.gameButtonA ||
+        key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown) {
+      setState(() => _showControls = true);
+      _scheduleHideControls();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _playFocus.context != null) _playFocus.requestFocus();
+      });
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   void _toggleControls() {
@@ -939,7 +1004,11 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
           bottom: !_isLandscape,
           child: _session.useWebViewFallback
               ? _buildWebViewFallback(item)
-              : GestureDetector(
+              : Focus(
+                  focusNode: _keyFocus,
+                  autofocus: true,
+                  onKeyEvent: _onPlayerKey,
+                  child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: _toggleControls,
                   child: Stack(
@@ -952,6 +1021,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                         _buildControlsOverlay(item),
                     ],
                   ),
+                ),
                 ),
         ),
       ),
@@ -1283,8 +1353,14 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                   icon: const Icon(Icons.replay_10),
                 ),
                 const SizedBox(width: 18),
-                GestureDetector(
+                // InkWell (no GestureDetector): así el botón también se
+                // enfoca y se pulsa con el mando de la tele.
+                FocusRing(
+                  borderRadius: BorderRadius.circular(32),
+                  child: InkWell(
+                  focusNode: _playFocus,
                   onTap: _playPause,
+                  customBorder: const CircleBorder(),
                   child: Container(
                     width: 64,
                     height: 64,
@@ -1309,6 +1385,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                             size: 36,
                           ),
                   ),
+                ),
                 ),
                 const SizedBox(width: 18),
                 IconButton(
