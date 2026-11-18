@@ -182,6 +182,26 @@ abstract final class DeviceChannel {
     }
   }
 
+  /// Progreso de las descargas de Telegram en la notificación (y servicio
+  /// en primer plano para que sigan con la app cerrada). Solo Android.
+  static Future<void> telegramDownloadProgress({
+    required int percent,
+    String? title,
+    String? text,
+  }) => _invokeAndroid('telegramDownloadProgress', {
+    'percent': percent,
+    'title': title,
+    'text': text,
+  });
+
+  /// Quita la notificación de progreso de Telegram.
+  static Future<void> telegramDownloadStop() =>
+      _invokeAndroid('telegramDownloadStop');
+
+  /// Aviso "Descarga lista" de un archivo de Telegram.
+  static Future<void> telegramDownloadDone(String title) =>
+      _invokeAndroid('telegramDownloadDone', {'title': title});
+
   /// Oculta la notificación de reproducción multimedia.
   static Future<void> clearMediaNotification() async {
     try {

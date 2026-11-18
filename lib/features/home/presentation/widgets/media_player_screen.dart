@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -31,6 +32,7 @@ class PlayableMediaItem {
     this.isAudio = false,
     this.isBook = false,
     this.initialPositionSeconds,
+    this.localPath,
   });
 
   final int chatId;
@@ -41,6 +43,15 @@ class PlayableMediaItem {
   final bool isAudio;
   final bool isBook;
   final double? initialPositionSeconds;
+
+  /// Archivo ya descargado en el teléfono (p. ej. desde Telegram): se
+  /// reproduce sin conexión y, si no es del catálogo ([chatId] 0), sin
+  /// guardar progreso en el servidor.
+  final String? localPath;
+
+  /// `true` si no pertenece al catálogo de QvaTube (no hay progreso que
+  /// guardar ni "visto" que marcar).
+  bool get isOutsideCatalog => chatId == 0;
 
   String get streamUrl =>
       absoluteMediaUrl(PlaybackEndpoints.watch(chatId, msgId));
@@ -252,7 +263,9 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
 
     // Pista ya precargada: suena al instante desde el archivo local.
-    final local = item.isAudio
+    final local = item.localPath != null
+        ? File(item.localPath!)
+        : item.isAudio
         ? await _preloader.completedFile(item.chatId, item.msgId)
         : null;
     if (currentItem != item) return;
@@ -270,7 +283,7 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
     try {
       var startSeconds = item.initialPositionSeconds ?? 0;
       final ref = _ref;
-      if (startSeconds <= 0 && ref != null) {
+      if (startSeconds <= 0 && ref != null && !item.isOutsideCatalog) {
         startSeconds = await ref.read(catalogApiProvider).getProgress(
               chatId: item.chatId,
               msgId: item.msgId,
@@ -363,7 +376,10 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
     final pos = ctrl.value.position.inSeconds;
     final dur = ctrl.value.duration.inSeconds;
 
-    if (!_markedWatched && dur > 30 && pos >= dur * 0.9) {
+    if (!_markedWatched &&
+        !item.isOutsideCatalog &&
+        dur > 30 &&
+        pos >= dur * 0.9) {
       _markedWatched = true;
       _ref?.read(catalogApiProvider).markWatched(
             chatId: item.chatId,
@@ -540,7 +556,11 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
     final ctrl = _controller;
     final item = currentItem;
     final ref = _ref;
-    if (ctrl == null || !ctrl.value.isInitialized || item == null || ref == null) {
+    if (ctrl == null ||
+        !ctrl.value.isInitialized ||
+        item == null ||
+        ref == null ||
+        item.isOutsideCatalog) {
       return;
     }
     final pos = ctrl.value.position.inMilliseconds / 1000.0;

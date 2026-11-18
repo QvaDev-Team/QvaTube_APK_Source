@@ -377,6 +377,27 @@ class MainActivity : FlutterActivity() {
                         installApk(File(path), result)
                     }
                 }
+                "telegramDownloadProgress" -> {
+                    requestNotificationPermissionOnce()
+                    TelegramDownloadService.progress(
+                        applicationContext,
+                        call.argument<Int>("percent") ?: -1,
+                        call.argument<String>("title"),
+                        call.argument<String>("text")
+                    )
+                    result.success(true)
+                }
+                "telegramDownloadStop" -> {
+                    TelegramDownloadService.stop(applicationContext)
+                    result.success(true)
+                }
+                "telegramDownloadDone" -> {
+                    TelegramDownloadService.notifyDone(
+                        applicationContext,
+                        call.argument<String>("title") ?: "El archivo"
+                    )
+                    result.success(true)
+                }
                 "startUpdateDownload" -> {
                     // Pide el permiso de notificaciones si aún no se pidió:
                     // sin él no se ve el progreso ni el aviso al terminar.

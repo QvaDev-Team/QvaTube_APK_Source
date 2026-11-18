@@ -5,6 +5,8 @@ import '../../core/storage/app_preferences.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text.dart';
 import 'tdlib/td_library.dart';
+import 'telegram_files.dart';
+import 'telegram_files_list.dart';
 import 'telegram_service.dart';
 
 /// Cuenta → Telegram: conectar la cuenta de Telegram para gestionar desde
@@ -84,7 +86,10 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
         ],
       ),
     );
-    if (ok == true) await _tg.disconnect();
+    if (ok == true) {
+      TelegramFiles.instance.clear();
+      await _tg.disconnect();
+    }
   }
 
   @override
@@ -229,11 +234,8 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
                       '${user.phone.isEmpty ? '' : ' (+${user.phone})'}.',
             color: AppColors.success,
           ),
-          const SizedBox(height: 14),
-          _bullet(
-            'Pronto verás aquí los archivos que te envía el bot para '
-            'descargarlos cuando quieras.',
-          ),
+          const SizedBox(height: 18),
+          const TelegramFilesList(),
           const SizedBox(height: 24),
           OutlinedButton.icon(
             onPressed: _confirmDisconnect,
