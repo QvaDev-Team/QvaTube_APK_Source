@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/layout/responsive.dart';
 import '../../../core/platform/device_channel.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/offline_banner.dart';
 import '../../../core/widgets/remote_focus_zones.dart';
 import '../../catalog/application/catalog_providers.dart';
 import 'widgets/media_player_screen.dart';
@@ -144,6 +145,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           layout: (top, menu, content, mini) => Column(
             children: [
               top,
+              const OfflineBanner(),
               Expanded(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -165,6 +167,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       body: Column(
         children: [
           const QvaTopBar(),
+          const OfflineBanner(),
           Expanded(child: navigationShell),
           const MiniMediaPlayerBar(),
         ],

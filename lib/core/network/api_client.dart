@@ -1,14 +1,23 @@
 import 'package:dio/dio.dart';
 
 import '../config/app_config.dart';
+import 'response_cache.dart';
 
 /// Error de negocio devuelto por la API.
 class ApiException implements Exception {
-  const ApiException(this.message, {this.statusCode, this.details});
+  const ApiException(
+    this.message, {
+    this.statusCode,
+    this.details,
+    this.network = false,
+  });
 
   final String message;
   final int? statusCode;
   final Map<String, dynamic>? details;
+
+  /// `true` si falló por falta de red (sin respuesta del servidor).
+  final bool network;
 
   @override
   String toString() => message;
@@ -17,9 +26,8 @@ class ApiException implements Exception {
 /// Las llamadas remotas están desactivadas mientras no se define el
 /// contenido de cada pantalla.
 class RemoteCallsDisabledException extends ApiException {
-  const RemoteCallsDisabledException([
-    this.operation = 'la operación',
-  ]) : super('Las llamadas al servidor están deshabilitadas para $operation.');
+  const RemoteCallsDisabledException([this.operation = 'la operación'])
+    : super('Las llamadas al servidor están deshabilitadas para $operation.');
 
   final String operation;
 }
@@ -36,8 +44,10 @@ class ApiClient {
     String baseUrl = AppConfig.apiBaseUrl,
     this.remoteCallsEnabled = AppConfig.remoteCallsEnabled,
     void Function(String? cookie)? onSessionCookie,
+    this.responseCache,
   }) {
-    _dio = dio ??
+    _dio =
+        dio ??
         Dio(
           BaseOptions(
             baseUrl: baseUrl,
@@ -54,9 +64,25 @@ class ApiClient {
       onCookie: (cookie) => onSessionCookie?.call(cookie),
     );
     _dio.interceptors.add(_cookieInterceptor);
+    // Sin red ya detectada: no esperar 15 s por cada petición antes de usar
+    // la copia guardada.
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (OfflineStatus.offline.value) {
+            options.connectTimeout = const Duration(seconds: 5);
+          }
+          handler.next(options);
+        },
+      ),
+    );
   }
 
+  /// Copia en disco de las respuestas para usar la app sin conexión.
+  final ResponseCache? responseCache;
+
   late final Dio _dio;
+
   /// Si es `false` ninguna petición sale del dispositivo.
   final bool remoteCallsEnabled;
   late final SessionCookieInterceptor _cookieInterceptor;
@@ -71,16 +97,46 @@ class ApiClient {
     _cookieInterceptor.onCookie?.call(value);
   }
 
+  /// `GET` con respaldo sin conexión: si la red falla y hay una copia
+  /// guardada de esta misma consulta, se devuelve esa copia (con
+  /// `extra['fromCache'] = true`).
   Future<Response<dynamic>> get(
     String path, {
     Map<String, dynamic>? query,
     CancelToken? cancelToken,
     String operation = 'la consulta',
-  }) {
-    return _send(
-      () => _dio.get<dynamic>(path, queryParameters: query, cancelToken: cancelToken),
-      operation: operation,
-    );
+  }) async {
+    final cache = responseCache;
+    final key = cache != null && ResponseCache.isCacheable(path)
+        ? ResponseCache.keyFor(path, query, sessionCookie)
+        : null;
+    try {
+      final response = await _send(
+        () => _dio.get<dynamic>(
+          path,
+          queryParameters: query,
+          cancelToken: cancelToken,
+        ),
+        operation: operation,
+      );
+      OfflineStatus.markOnline();
+      if (key != null && response.statusCode == 200) {
+        // Sin await: guardar no retrasa la pantalla.
+        cache!.store(key, response.data);
+      }
+      return response;
+    } on ApiException catch (error) {
+      if (!error.network) rethrow;
+      OfflineStatus.markOffline();
+      final cached = key == null ? null : await cache!.read(key);
+      if (cached == null) rethrow;
+      return Response<dynamic>(
+        requestOptions: RequestOptions(path: path, queryParameters: query),
+        data: cached,
+        statusCode: 200,
+        extra: const {'fromCache': true},
+      );
+    }
   }
 
   Future<Response<dynamic>> post(
@@ -91,7 +147,12 @@ class ApiClient {
     String operation = 'la operación',
   }) {
     return _send(
-      () => _dio.post<dynamic>(path, data: body, queryParameters: query, cancelToken: cancelToken),
+      () => _dio.post<dynamic>(
+        path,
+        data: body,
+        queryParameters: query,
+        cancelToken: cancelToken,
+      ),
       operation: operation,
     );
   }
@@ -104,7 +165,12 @@ class ApiClient {
     String operation = 'la operación',
   }) {
     return _send(
-      () => _dio.delete<dynamic>(path, data: body, queryParameters: query, cancelToken: cancelToken),
+      () => _dio.delete<dynamic>(
+        path,
+        data: body,
+        queryParameters: query,
+        cancelToken: cancelToken,
+      ),
       operation: operation,
     );
   }
@@ -117,7 +183,12 @@ class ApiClient {
     String operation = 'la operación',
   }) {
     return _send(
-      () => _dio.post<dynamic>(path, data: formData, queryParameters: query, cancelToken: cancelToken),
+      () => _dio.post<dynamic>(
+        path,
+        data: formData,
+        queryParameters: query,
+        cancelToken: cancelToken,
+      ),
       operation: operation,
     );
   }
@@ -138,6 +209,10 @@ class ApiClient {
         details: error.response?.data is Map
             ? Map<String, dynamic>.from(error.response!.data as Map)
             : null,
+        network:
+            error.response == null &&
+            error.type != DioExceptionType.cancel &&
+            error.type != DioExceptionType.badCertificate,
       );
     }
   }
@@ -158,11 +233,11 @@ class ApiClient {
         'La conexión tardó demasiado. Inténtalo de nuevo.',
       DioExceptionType.connectionError =>
         'Sin conexión con el servidor de QvaTube.',
-      DioExceptionType.badCertificate =>
-        'Certificado del servidor no válido.',
-      _ => status == null
-          ? 'No se pudo completar la operación.'
-          : 'Error $status: ${error.message ?? 'operación fallida'}',
+      DioExceptionType.badCertificate => 'Certificado del servidor no válido.',
+      _ =>
+        status == null
+            ? 'No se pudo completar la operación.'
+            : 'Error $status: ${error.message ?? 'operación fallida'}',
     };
   }
 }
@@ -177,7 +252,10 @@ class SessionCookieInterceptor extends Interceptor {
   String? cookie;
 
   @override
-  void onResponse(Response<dynamic> response, ResponseInterceptorHandler handler) {
+  void onResponse(
+    Response<dynamic> response,
+    ResponseInterceptorHandler handler,
+  ) {
     final setCookie = response.headers['set-cookie'];
     if (setCookie != null && setCookie.isNotEmpty) {
       for (final raw in setCookie) {

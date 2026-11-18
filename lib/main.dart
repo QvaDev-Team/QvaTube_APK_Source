@@ -6,6 +6,7 @@ import 'package:video_player_media_kit/video_player_media_kit.dart';
 import 'core/config/app_config.dart';
 import 'core/layout/responsive.dart';
 import 'core/network/api_providers.dart';
+import 'core/network/response_cache.dart';
 import 'core/platform/device_channel.dart';
 import 'core/push/push_service.dart';
 import 'core/router/router.dart';
@@ -68,6 +69,7 @@ class _QvaTubeAppState extends ConsumerState<QvaTubeApp>
       ref.read(authControllerProvider.notifier).restoreSession();
       _showUpdateWelcome();
       _startPush();
+      _warmOfflineCatalog();
     });
   }
 
@@ -94,6 +96,35 @@ class _QvaTubeAppState extends ConsumerState<QvaTubeApp>
   /// Notificaciones push (FCM). Al tocar una se abre Notificaciones (o el
   /// Modo creador si es un aviso `creator_*`); con la app abierta se
   /// refresca la lista y se avisa con un mensaje breve.
+  /// Guarda en segundo plano la primera página de cada sección y los canales
+  /// de TV (unos 100 KB) para poder verlos sin conexión aunque nunca se
+  /// hayan abierto. Una vez por arranque y solo con conexión; espera unos
+  /// segundos para no competir con la carga de Inicio.
+  Future<void> _warmOfflineCatalog() async {
+    await Future<void>.delayed(const Duration(seconds: 8));
+    if (!mounted || OfflineStatus.offline.value) return;
+    final api = ref.read(catalogApiProvider);
+    const sections = [
+      'popular',
+      'movie',
+      'series',
+      'anime',
+      'novela',
+      'music',
+      'book',
+    ];
+    for (final key in sections) {
+      if (!mounted || OfflineStatus.offline.value) return;
+      try {
+        // Los mismos parámetros que la primera carga de CatalogTab.
+        await api.catalog(categoryKey: key, page: 1, limit: 30, sort: 'date');
+      } catch (_) {}
+    }
+    try {
+      await api.tvChannels();
+    } catch (_) {}
+  }
+
   Future<void> _startPush() async {
     // También decide por dónde llega el aviso de versión nueva: push (tema
     // app-updates) o, sin push, la comprobación periódica. Nunca los dos.
