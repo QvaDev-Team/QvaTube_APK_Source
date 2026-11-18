@@ -27,6 +27,7 @@ import '../../features/home/presentation/tabs/home_tab.dart';
 import '../../features/home/presentation/tabs/tv_tab.dart';
 import '../../features/onboarding/presentation/intro_screen.dart';
 import '../../features/reviews/presentation/reviews_screen.dart';
+import '../../features/telegram/telegram_screen.dart';
 
 /// Navigator raíz (se usa también para mostrar diálogos globales, como el
 /// aviso de actualización, desde un contexto que está por encima del
@@ -63,6 +64,7 @@ abstract final class Routes {
     '/cuenta/avatar',
     '/cuenta/plan',
     '/cuenta/descargas',
+    '/cuenta/telegram',
     '/cuenta/favoritos',
     '/cuenta/notificaciones',
     '/cuenta/configuracion',
@@ -351,6 +353,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/cuenta/descargas',
         builder: (context, state) =>
             const DesktopFrame(child: DownloadsScreen()),
+      ),
+      GoRoute(
+        path: '/cuenta/telegram',
+        builder: (context, state) =>
+            const DesktopFrame(child: TelegramScreen()),
       ),
     ],
   );

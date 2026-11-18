@@ -19,6 +19,7 @@ import 'features/auth/presentation/providers/auth_controller.dart';
 import 'features/catalog/application/catalog_providers.dart';
 import 'core/theme/season_branding.dart';
 import 'features/home/presentation/widgets/media_player_screen.dart';
+import 'features/telegram/telegram_service.dart';
 import 'features/update/presentation/update_checker.dart';
 
 Future<void> main() async {
@@ -70,6 +71,8 @@ class _QvaTubeAppState extends ConsumerState<QvaTubeApp>
       _showUpdateWelcome();
       _startPush();
       _warmOfflineCatalog();
+      // Si el usuario conectó Telegram, se retoma su sesión en segundo plano.
+      TelegramService.instance.restore(ref.read(sharedPreferencesProvider));
     });
   }
 

@@ -123,6 +123,11 @@ jobs:
       #    pública) para poder symbolicar los crash.
       # ---------------------------------------------------------------------
       - name: APK de release ARM64 + ARMv7 (minificado y ofuscado)
+        env:
+          # Claves de la aplicación de Telegram (gestor de archivos del bot).
+          # Sin ellas la opción Telegram no aparece en la app.
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
         run: |
           set -euo pipefail
           VERSION_LINE=$(grep -E "^version:" pubspec.yaml | head -1)
@@ -141,7 +146,9 @@ jobs:
             --build-name="$VERSION_NAME" \
             --build-number="$((2000 + BUILD_NUMBER))" \
             --obfuscate \
-            --split-debug-info=build/symbols
+            --split-debug-info=build/symbols \
+            --dart-define=TELEGRAM_API_ID="$TELEGRAM_API_ID" \
+            --dart-define=TELEGRAM_API_HASH="$TELEGRAM_API_HASH"
 
       - name: Recolectar los artefactos
         run: |

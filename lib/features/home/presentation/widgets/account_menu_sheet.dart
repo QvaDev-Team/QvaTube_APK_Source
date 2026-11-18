@@ -12,6 +12,7 @@ import '../../../../core/theme/app_text.dart';
 import '../../../../core/widgets/app_cached_image.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../catalog/domain/catalog_models.dart';
+import '../../../telegram/telegram_service.dart';
 
 /// Menú de cuenta que se despliega al pulsar el avatar (spec §6.1).
 Future<void> showAccountMenuSheet(BuildContext context, WidgetRef ref) {
@@ -161,6 +162,14 @@ class _AccountMenuSheet extends ConsumerWidget {
                   label: 'Mis descargas',
                   onTap: () => _go(context, '/cuenta/descargas'),
                 ),
+                // Gestor de archivos del bot (solo en APK con claves de
+                // Telegram y en teléfonos ARM).
+                if (TelegramService.isAvailable)
+                  _MenuTile(
+                    icon: Icons.send,
+                    label: 'Telegram',
+                    onTap: () => _go(context, '/cuenta/telegram'),
+                  ),
                 _MenuTile(
                   icon: LucideIcons.bookmark,
                   label: 'Favoritos',
