@@ -17,12 +17,17 @@ class QvaSideNav extends StatelessWidget {
     required this.currentIndex,
     required this.onTap,
     this.compact = false,
+    this.focusNodes,
   });
 
   final List<QvaBottomNavItem> items;
   final int currentIndex;
   final ValueChanged<int> onTap;
   final bool compact;
+
+  /// Foco de cada sección (mando de la tele): [HomeShell] lo usa para
+  /// volver al menú desde el contenido.
+  final List<FocusNode>? focusNodes;
 
   @override
   Widget build(BuildContext context) {
@@ -43,6 +48,7 @@ class QvaSideNav extends StatelessWidget {
                 selected: i == currentIndex,
                 compact: compact,
                 onTap: () => onTap(i),
+                focusNode: focusNodes?[i],
               ),
             ),
         ],
@@ -57,12 +63,14 @@ class _SideNavButton extends StatefulWidget {
     required this.selected,
     required this.compact,
     required this.onTap,
+    this.focusNode,
   });
 
   final QvaBottomNavItem item;
   final bool selected;
   final bool compact;
   final VoidCallback onTap;
+  final FocusNode? focusNode;
 
   @override
   State<_SideNavButton> createState() => _SideNavButtonState();
@@ -101,6 +109,7 @@ class _SideNavButtonState extends State<_SideNavButton> {
       child: Material(
         type: MaterialType.transparency,
         child: InkWell(
+          focusNode: widget.focusNode,
           onTap: widget.onTap,
           onHover: (value) => setState(() => _hover = value),
           onFocusChange: (value) => setState(() => _hover = value),

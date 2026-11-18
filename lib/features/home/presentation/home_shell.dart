@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/layout/responsive.dart';
+import '../../../core/platform/device_channel.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/remote_focus_zones.dart';
 import '../../catalog/application/catalog_providers.dart';
 import 'widgets/media_player_screen.dart';
 import 'widgets/qvatube_bottom_nav.dart';
@@ -14,20 +16,16 @@ import 'widgets/qvatube_top_bar.dart';
 ///
 /// - Barra superior fija con logo, buscador y avatar de usuario.
 /// - Barra de navegación inferior con 9 secciones e "Inicio" a la izquierda;
-///   en pantallas anchas (escritorio) pasa a ser un menú lateral.
-class HomeShell extends ConsumerWidget {
+///   en pantallas anchas (escritorio) y en la tele pasa a ser un menú lateral.
+class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
   /// 9 secciones: **Inicio a la izquierda** y el resto a su derecha.
   static const List<({String label, IconData icon, IconData? activeIcon})>
-      _definitions = [
-    (
-      label: 'Inicio',
-      icon: Icons.home_outlined,
-      activeIcon: Icons.home
-    ),
+  _definitions = [
+    (label: 'Inicio', icon: Icons.home_outlined, activeIcon: Icons.home),
     (label: 'Popular', icon: Icons.local_fire_department, activeIcon: null),
     (label: 'TV', icon: Icons.live_tv, activeIcon: null),
     (label: 'Películas', icon: Icons.movie_outlined, activeIcon: null),
@@ -56,6 +54,9 @@ class HomeShell extends ConsumerWidget {
     ['book', 'books', 'libros'],
   ];
 
+  @override
+  ConsumerState<HomeShell> createState() => _HomeShellState();
+
   static int _countFor(Map<String, int> counts, List<String> keys) {
     for (final key in keys) {
       final value = counts[key];
@@ -63,16 +64,32 @@ class HomeShell extends ConsumerWidget {
     }
     return 0;
   }
+}
+
+class _HomeShellState extends ConsumerState<HomeShell> {
+  /// Foco de cada sección del menú lateral (mando de la tele).
+  late final List<FocusNode> _navNodes = [
+    for (var i = 0; i < HomeShell._definitions.length; i++)
+      FocusNode(debugLabel: 'menu-$i'),
+  ];
+
+  StatefulNavigationShell get _shell => widget.navigationShell;
+
+  @override
+  void dispose() {
+    for (final node in _navNodes) {
+      node.dispose();
+    }
+    super.dispose();
+  }
 
   void _onTap(int index) {
-    navigationShell.goBranch(
-      index,
-      initialLocation: index == navigationShell.currentIndex,
-    );
+    _shell.goBranch(index, initialLocation: index == _shell.currentIndex);
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final navigationShell = _shell;
     // Estrenos nuevos por categoría (`GET /api/new-content/counts`).
     final counts =
         ref.watch(newContentCountsProvider).value ?? const <String, int>{};
@@ -82,53 +99,63 @@ class HomeShell extends ConsumerWidget {
     // subida grande de música (p. ej. 81 canciones) salía en el total de
     // Inicio pero no en la pestaña Música.
     final badges = <int>[
-      for (var index = 0; index < _definitions.length; index++)
-        index == homeIndex ? totalNew : _countFor(counts, _countKeys[index]),
+      for (var index = 0; index < HomeShell._definitions.length; index++)
+        index == HomeShell.homeIndex
+            ? totalNew
+            : HomeShell._countFor(counts, HomeShell._countKeys[index]),
     ];
 
     final items = <QvaBottomNavItem>[
-      for (var index = 0; index < _definitions.length; index++)
+      for (var index = 0; index < HomeShell._definitions.length; index++)
         QvaBottomNavItem(
-          label: _definitions[index].label,
-          icon: _definitions[index].icon,
-          activeIcon: _definitions[index].activeIcon,
+          label: HomeShell._definitions[index].label,
+          icon: HomeShell._definitions[index].icon,
+          activeIcon: HomeShell._definitions[index].activeIcon,
           badgeCount: badges[index],
         ),
     ];
 
     final width = MediaQuery.sizeOf(context).width;
-    if (width >= kWideLayoutMinWidth) {
+    if (isWideLayout(context)) {
+      // Con mando o teclado, las flechas pasan entre barra, menú, contenido
+      // y mini reproductor (ver RemoteFocusZones).
       return Scaffold(
         backgroundColor: AppColors.background,
-        body: Column(
-          children: [
-            const QvaTopBar(),
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  QvaSideNav(
-                    items: items,
-                    currentIndex: navigationShell.currentIndex,
-                    onTap: _onTap,
-                    compact: width < 1180,
-                  ),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          maxWidth: kMaxContentWidth,
-                        ),
-                        child: navigationShell,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+        body: RemoteFocusZones(
+          menuNodes: _navNodes,
+          menuIndex: navigationShell.currentIndex,
+          focusMenuOnStart: DeviceChannel.isTelevision,
+          top: const QvaTopBar(),
+          menu: QvaSideNav(
+            items: items,
+            currentIndex: navigationShell.currentIndex,
+            onTap: _onTap,
+            compact: width < 1180,
+            focusNodes: _navNodes,
+          ),
+          content: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: kMaxContentWidth),
+              child: navigationShell,
             ),
-            const MiniMediaPlayerBar(),
-          ],
+          ),
+          mini: const MiniMediaPlayerBar(),
+          layout: (top, menu, content, mini) => Column(
+            children: [
+              top,
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    menu,
+                    Expanded(child: content),
+                  ],
+                ),
+              ),
+              mini,
+            ],
+          ),
         ),
       );
     }

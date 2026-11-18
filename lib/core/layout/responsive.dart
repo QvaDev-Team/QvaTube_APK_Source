@@ -2,6 +2,7 @@ import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 
+import '../platform/device_channel.dart';
 import '../theme/app_colors.dart';
 
 /// Diseño adaptable para escritorio y pantallas anchas.
@@ -20,8 +21,11 @@ const double kFormMaxWidth = 720;
 /// columnas cuanto más ancha es la ventana.
 const double kPosterMaxWidth = 175;
 
-/// `true` si la ventana es ancha (escritorio o tablet apaisada).
+/// `true` si la ventana es ancha (escritorio o tablet apaisada) o si es un
+/// televisor: en la tele siempre va el menú lateral (se maneja con el mando),
+/// aunque su densidad de píxeles dé menos de [kWideLayoutMinWidth].
 bool isWideLayout(BuildContext context) =>
+    DeviceChannel.isTelevision ||
     MediaQuery.sizeOf(context).width >= kWideLayoutMinWidth;
 
 /// Cuadrícula de pósters: [mobileColumns] columnas fijas en el teléfono y,

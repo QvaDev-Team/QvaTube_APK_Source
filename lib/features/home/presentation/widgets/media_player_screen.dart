@@ -10,6 +10,7 @@ import 'package:video_player/video_player.dart';
 import '../../../../core/media/music_preloader.dart';
 import '../../../../core/network/api_providers.dart';
 import '../../../../core/network/endpoints/playback_endpoints.dart';
+import '../../../../core/platform/app_orientation.dart';
 import '../../../../core/platform/device_channel.dart';
 import '../../../../core/router/router.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -63,9 +64,31 @@ enum PlaybackBlock {
 /// Controlador global de reproducción que permite mantener la música o película
 /// activa en segundo plano (al salir de la pantalla del reproductor o minimizar
 /// la app) y sincroniza las acciones con la barra de notificaciones del sistema.
-class ActiveMediaSession extends ChangeNotifier {
+class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
   ActiveMediaSession._() {
     DeviceChannel.setMediaActionListener(_handleSystemMediaAction);
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  /// En la tele no hay barra de notificaciones para parar la reproducción:
+  /// al salir de la app (botón Inicio del mando) se pausa y se guarda el
+  /// progreso. En el teléfono sigue sonando en segundo plano como siempre.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!DeviceChannel.isTelevision) return;
+    if (state != AppLifecycleState.paused &&
+        state != AppLifecycleState.hidden) {
+      return;
+    }
+    final ctrl = _controller;
+    if (ctrl == null || !ctrl.value.isInitialized || !ctrl.value.isPlaying) {
+      return;
+    }
+    ctrl.pause();
+    _saveCurrentProgress();
+    _updateKeepScreenOn();
+    _syncNotification(force: true);
+    notifyListeners();
   }
 
   static final ActiveMediaSession instance = ActiveMediaSession._();
@@ -765,7 +788,8 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
   final FocusNode _playFocus = FocusNode(debugLabel: 'player-play');
 
   bool _showControls = true;
-  bool _isLandscape = false;
+  // En la tele la pantalla ya es horizontal: sin márgenes de teléfono.
+  bool _isLandscape = DeviceChannel.isTelevision;
   double? _draggingSeconds;
 
   @override
@@ -808,7 +832,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
 
   Future<void> _restoreSystemUi() async {
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    await SystemChrome.setPreferredOrientations([
+    await AppOrientation.set([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
@@ -817,13 +841,13 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
   Future<void> _toggleLandscape() async {
     if (_isLandscape) {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-      await SystemChrome.setPreferredOrientations([
+      await AppOrientation.set([
         DeviceOrientation.portraitUp,
       ]);
       if (mounted) setState(() => _isLandscape = false);
     } else {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      await SystemChrome.setPreferredOrientations([
+      await AppOrientation.set([
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
       ]);
@@ -874,6 +898,29 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
       // Cualquier tecla mantiene los controles a la vista; la navegación
       // entre botones la hace Flutter.
       _scheduleHideControls();
+      if (!node.hasPrimaryFocus) return KeyEventResult.ignored;
+      // Controles visibles pero ningún botón enfocado (p. ej. recién abierto
+      // el reproductor): antes OK no hacía nada y la pausa fallaba "a veces".
+      if (key == LogicalKeyboardKey.select ||
+          key == LogicalKeyboardKey.enter ||
+          key == LogicalKeyboardKey.numpadEnter ||
+          key == LogicalKeyboardKey.gameButtonA) {
+        _playPause();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowLeft) {
+        _session.seekRelative(-10);
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowRight) {
+        _session.seekRelative(10);
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowUp ||
+          key == LogicalKeyboardKey.arrowDown) {
+        if (_playFocus.context != null) _playFocus.requestFocus();
+        return KeyEventResult.handled;
+      }
       return KeyEventResult.ignored;
     }
     if (key == LogicalKeyboardKey.arrowLeft) {

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../../core/network/api_client.dart';
+import '../../../../core/platform/app_orientation.dart';
 import '../../../../core/platform/device_channel.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
@@ -878,7 +879,7 @@ class _TvFullscreenPageState extends State<_TvFullscreenPage> {
   void initState() {
     super.initState();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    SystemChrome.setPreferredOrientations([
+    AppOrientation.set([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
@@ -891,7 +892,7 @@ class _TvFullscreenPageState extends State<_TvFullscreenPage> {
     _hideTimer?.cancel();
     widget.controller.removeListener(_onTick);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    AppOrientation.set([DeviceOrientation.portraitUp]);
     super.dispose();
   }
 
