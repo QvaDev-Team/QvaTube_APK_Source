@@ -1,5 +1,10 @@
 # Novedades de QvaTube
 
+## 1.2.17
+- Smart TV: ya puedes llegar con el mando al menú lateral, la búsqueda, tu perfil y el mini reproductor.
+- Smart TV: el reproductor y la app ya no se ven en "modo teléfono" en la tele, y la pausa responde siempre al mando.
+- Smart TV: al salir de la app, lo que estabas viendo se pausa en vez de seguir sonando.
+
 ## 1.2.16
 - La burbuja que marca la sección elegida en la barra de abajo vuelve a quedar centrada sobre su icono.
 
