@@ -284,10 +284,9 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
       var startSeconds = item.initialPositionSeconds ?? 0;
       final ref = _ref;
       if (startSeconds <= 0 && ref != null && !item.isOutsideCatalog) {
-        startSeconds = await ref.read(catalogApiProvider).getProgress(
-              chatId: item.chatId,
-              msgId: item.msgId,
-            );
+        startSeconds = await ref
+            .read(catalogApiProvider)
+            .getProgress(chatId: item.chatId, msgId: item.msgId);
       }
 
       final options = VideoPlayerOptions(allowBackgroundPlayback: true);
@@ -316,22 +315,19 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
       notifyListeners();
       _syncNotification(force: true);
 
-      _progressSaveTimer = Timer.periodic(
-        const Duration(seconds: 15),
-        (_) {
-          _saveCurrentProgress();
-          _syncNotification(force: true);
-        },
-      );
+      _progressSaveTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+        _saveCurrentProgress();
+        _syncNotification(force: true);
+      });
     } catch (e) {
       _loading = false;
       _error = 'No se pudo iniciar la reproducción directa de este formato.';
       _errorDetail = e is PlatformException
           ? [e.code, e.message, e.details]
-              .whereType<Object>()
-              .map((v) => v.toString())
-              .where((v) => v.isNotEmpty)
-              .join(' · ')
+                .whereType<Object>()
+                .map((v) => v.toString())
+                .where((v) => v.isNotEmpty)
+                .join(' · ')
           : e.toString();
       debugPrint('Reproducción fallida (${item.streamUrl}): $_errorDetail');
       notifyListeners();
@@ -346,7 +342,10 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
     final ref = _ref;
     if (ref == null) return null;
     try {
-      final response = await ref.read(apiClientProvider).dio.head<void>(
+      final response = await ref
+          .read(apiClientProvider)
+          .dio
+          .head<void>(
             item.streamUrl,
             options: Options(
               validateStatus: (_) => true,
@@ -356,8 +355,10 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
       switch (response.statusCode) {
         case 403:
           _resetInSeconds =
-              int.tryParse(response.headers.value('x-reset-in-seconds') ?? '') ??
-                  0;
+              int.tryParse(
+                response.headers.value('x-reset-in-seconds') ?? '',
+              ) ??
+              0;
           return PlaybackBlock.limit;
         case 401:
           return PlaybackBlock.auth;
@@ -381,10 +382,9 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
         dur > 30 &&
         pos >= dur * 0.9) {
       _markedWatched = true;
-      _ref?.read(catalogApiProvider).markWatched(
-            chatId: item.chatId,
-            msgId: item.msgId,
-          );
+      _ref
+          ?.read(catalogApiProvider)
+          .markWatched(chatId: item.chatId, msgId: item.msgId);
     }
 
     // Pasar automáticamente al siguiente episodio/pista al terminar.
@@ -422,7 +422,8 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
   void _updateKeepScreenOn() {
     final ctrl = _controller;
     final item = currentItem;
-    final want = ctrl != null &&
+    final want =
+        ctrl != null &&
         ctrl.value.isInitialized &&
         ctrl.value.isPlaying &&
         item != null &&
@@ -436,7 +437,10 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
   void _syncNotification({bool force = false}) {
     final ctrl = _controller;
     final item = currentItem;
-    if (ctrl == null || !ctrl.value.isInitialized || item == null || item.isBook) {
+    if (ctrl == null ||
+        !ctrl.value.isInitialized ||
+        item == null ||
+        item.isBook) {
       return;
     }
 
@@ -525,7 +529,8 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
       if (ctrl.value.isBuffering) return; // aún cargando el punto pedido
       final pos = ctrl.value.position;
       if (target.inSeconds >= 20 && pos < const Duration(seconds: 8)) {
-        _notice = 'Este archivo no permite adelantar ni retroceder: el '
+        _notice =
+            'Este archivo no permite adelantar ni retroceder: el '
             'reproductor vuelve al inicio. Repórtalo desde la ficha para '
             'que lo revisemos.';
         notifyListeners();
@@ -567,7 +572,9 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
     final dur = ctrl.value.duration.inMilliseconds / 1000.0;
     if (pos <= 3) return;
 
-    ref.read(catalogApiProvider).saveProgress(
+    ref
+        .read(catalogApiProvider)
+        .saveProgress(
           chatId: item.chatId,
           msgId: item.msgId,
           positionSeconds: pos,
@@ -613,7 +620,8 @@ Future<void> openMediaPlayer(
   int initialIndex = 0,
 }) async {
   if (playlist.isEmpty) return;
-  final nav = rootNavigatorKey.currentState ??
+  final nav =
+      rootNavigatorKey.currentState ??
       Navigator.of(context, rootNavigator: true);
   await nav.push<void>(
     MaterialPageRoute(
@@ -684,7 +692,8 @@ class MiniMediaPlayerBar extends ConsumerWidget {
                           child: SizedBox(
                             width: 40,
                             height: 40,
-                            child: (item.posterUrl != null &&
+                            child:
+                                (item.posterUrl != null &&
                                     item.posterUrl!.isNotEmpty)
                                 ? AppCachedImage(
                                     imageUrl: item.posterUrl!,
@@ -833,9 +842,19 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
     super.dispose();
   }
 
+  /// `true` desde que la sesión tuvo algo cargando o sonando en esta
+  /// pantalla. Antes de eso, un aviso de la sesión "sin medio" es solo el
+  /// arranque (p. ej. el aviso de `setScreenOpen`, que llega en el siguiente
+  /// frame) y no debe cerrar la pantalla: pasaba al abrir un archivo local
+  /// y el video seguía sonando sin pantalla.
+  bool _hadMedia = false;
+
   void _onSessionChanged() {
     if (!mounted) return;
-    if (!_session.hasActiveMedia && !_session.useWebViewFallback) {
+    final active = _session.hasActiveMedia || _session.useWebViewFallback;
+    if (active) {
+      _hadMedia = true;
+    } else if (_hadMedia) {
       Navigator.of(context).maybePop();
       return;
     }
@@ -861,9 +880,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
   Future<void> _toggleLandscape() async {
     if (_isLandscape) {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-      await AppOrientation.set([
-        DeviceOrientation.portraitUp,
-      ]);
+      await AppOrientation.set([DeviceOrientation.portraitUp]);
       if (mounted) setState(() => _isLandscape = false);
     } else {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -1020,8 +1037,9 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                     s == 1.0 ? 'Normal (1.0x)' : '${s}x',
                     style: AppTextStyles.body(
                       fontSize: 13.5,
-                      fontWeight:
-                          s == currentSpeed ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: s == currentSpeed
+                          ? FontWeight.w700
+                          : FontWeight.w500,
                     ),
                   ),
                   onTap: () => Navigator.of(context).pop(s),
@@ -1055,7 +1073,10 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
   Widget build(BuildContext context) {
     final item =
         _session.currentItem ??
-        widget.playlist[widget.initialIndex.clamp(0, widget.playlist.length - 1)];
+        widget.playlist[widget.initialIndex.clamp(
+          0,
+          widget.playlist.length - 1,
+        )];
 
     return PopScope(
       onPopInvokedWithResult: (didPop, _) {
@@ -1076,19 +1097,19 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                   autofocus: true,
                   onKeyEvent: _onPlayerKey,
                   child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: _toggleControls,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Center(child: _buildMediaSurface(item)),
-                      if (_showControls ||
-                          _session.loading ||
-                          _session.error != null)
-                        _buildControlsOverlay(item),
-                    ],
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _toggleControls,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Center(child: _buildMediaSurface(item)),
+                        if (_showControls ||
+                            _session.loading ||
+                            _session.error != null)
+                          _buildControlsOverlay(item),
+                      ],
+                    ),
                   ),
-                ),
                 ),
         ),
       ),
@@ -1118,10 +1139,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
           const SizedBox(height: 14),
           Text(
             'Cargando reproducción…',
-            style: AppTextStyles.body(
-              fontSize: 13,
-              color: Colors.white70,
-            ),
+            style: AppTextStyles.body(fontSize: 13, color: Colors.white70),
           ),
         ],
       );
@@ -1139,7 +1157,9 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
           final nav = Navigator.of(context);
           await _session.stopAndClose();
           if (mounted) nav.maybePop();
-          router.push(block == PlaybackBlock.auth ? Routes.login : '/cuenta/plan');
+          router.push(
+            block == PlaybackBlock.auth ? Routes.login : '/cuenta/plan',
+          );
         },
       );
     }
@@ -1150,11 +1170,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.error_outline,
-              color: AppColors.danger,
-              size: 44,
-            ),
+            const Icon(Icons.error_outline, color: AppColors.danger, size: 44),
             const SizedBox(height: 12),
             Text(
               _session.error!,
@@ -1268,14 +1284,9 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
       );
     }
 
-    final aspect = ctrl.value.aspectRatio > 0
-        ? ctrl.value.aspectRatio
-        : 16 / 9;
+    final aspect = ctrl.value.aspectRatio > 0 ? ctrl.value.aspectRatio : 16 / 9;
 
-    return AspectRatio(
-      aspectRatio: aspect,
-      child: VideoPlayer(ctrl),
-    );
+    return AspectRatio(aspectRatio: aspect, child: VideoPlayer(ctrl));
   }
 
   Widget _buildControlsOverlay(PlayableMediaItem item) {
@@ -1315,7 +1326,11 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                 IconButton(
                   onPressed: () => Navigator.of(context).maybePop(),
                   tooltip: 'Seguir en segundo plano',
-                  icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 28),
+                  icon: const Icon(
+                    Icons.keyboard_arrow_down,
+                    color: Colors.white,
+                    size: 28,
+                  ),
                 ),
                 const SizedBox(width: 4),
                 Expanded(
@@ -1375,9 +1390,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                     onPressed: _toggleLandscape,
                     tooltip: 'Rotar pantalla',
                     icon: Icon(
-                      _isLandscape
-                          ? Icons.fullscreen_exit
-                          : Icons.fullscreen,
+                      _isLandscape ? Icons.fullscreen_exit : Icons.fullscreen,
                       color: Colors.white,
                     ),
                   ),
@@ -1425,34 +1438,34 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                 FocusRing(
                   borderRadius: BorderRadius.circular(32),
                   child: InkWell(
-                  focusNode: _playFocus,
-                  onTap: _playPause,
-                  customBorder: const CircleBorder(),
-                  child: Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppColors.accent,
-                      boxShadow: AppColors.playGlow,
-                    ),
-                    child: ctrl.value.isBuffering
-                        ? const Padding(
-                            padding: EdgeInsets.all(18),
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
+                    focusNode: _playFocus,
+                    onTap: _playPause,
+                    customBorder: const CircleBorder(),
+                    child: Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.accent,
+                        boxShadow: AppColors.playGlow,
+                      ),
+                      child: ctrl.value.isBuffering
+                          ? const Padding(
+                              padding: EdgeInsets.all(18),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Icon(
+                              ctrl.value.isPlaying
+                                  ? Icons.pause
+                                  : Icons.play_arrow,
                               color: Colors.white,
+                              size: 36,
                             ),
-                          )
-                        : Icon(
-                            ctrl.value.isPlaying
-                                ? Icons.pause
-                                : Icons.play_arrow,
-                            color: Colors.white,
-                            size: 36,
-                          ),
+                    ),
                   ),
-                ),
                 ),
                 const SizedBox(width: 18),
                 IconButton(
@@ -1676,29 +1689,33 @@ class _PlaybackBlockedViewState extends State<_PlaybackBlockedView> {
 
   @override
   Widget build(BuildContext context) {
-    final (IconData icon, String title, String message, String? action) =
-        switch (widget.block) {
+    final (
+      IconData icon,
+      String title,
+      String message,
+      String? action,
+    ) = switch (widget.block) {
       PlaybackBlock.limit => (
-          Icons.lock_clock_outlined,
-          'Límite alcanzado',
-          'Alcanzaste el límite de reproducciones '
-              '${widget.isMusic ? 'de música' : 'online'} de tu plan.\n'
-              'Para aumentar tu límite, adquiere un plan.',
-          'Ver planes',
-        ),
+        Icons.lock_clock_outlined,
+        'Límite alcanzado',
+        'Alcanzaste el límite de reproducciones '
+            '${widget.isMusic ? 'de música' : 'online'} de tu plan.\n'
+            'Para aumentar tu límite, adquiere un plan.',
+        'Ver planes',
+      ),
       PlaybackBlock.auth => (
-          Icons.person_outline,
-          'Inicia sesión',
-          'Tu sesión caducó. Inicia sesión de nuevo para reproducir online.',
-          'Iniciar sesión',
-        ),
+        Icons.person_outline,
+        'Inicia sesión',
+        'Tu sesión caducó. Inicia sesión de nuevo para reproducir online.',
+        'Iniciar sesión',
+      ),
       PlaybackBlock.busy => (
-          Icons.cloud_off_outlined,
-          'Servicio saturado',
-          'El servicio de reproducción online está al máximo de su capacidad. '
-              'Intenta de nuevo en unos segundos.',
-          null,
-        ),
+        Icons.cloud_off_outlined,
+        'Servicio saturado',
+        'El servicio de reproducción online está al máximo de su capacidad. '
+            'Intenta de nuevo en unos segundos.',
+        null,
+      ),
     };
 
     return Padding(
@@ -1723,7 +1740,8 @@ class _PlaybackBlockedViewState extends State<_PlaybackBlockedView> {
             textAlign: TextAlign.center,
             style: AppTextStyles.body(fontSize: 13.5, color: Colors.white70),
           ),
-          if (widget.block == PlaybackBlock.limit && widget.resetInSeconds > 0) ...[
+          if (widget.block == PlaybackBlock.limit &&
+              widget.resetInSeconds > 0) ...[
             const SizedBox(height: 12),
             Text(
               'Se reinicia en ${_countdown(_remaining)}',

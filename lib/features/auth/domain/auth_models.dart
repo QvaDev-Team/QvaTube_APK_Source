@@ -16,6 +16,7 @@ class AuthUser {
     this.planExpiresAt,
     this.referralCode,
     this.telegramLinked = false,
+    this.telegramUserId,
     this.creator,
   });
 
@@ -63,6 +64,12 @@ class AuthUser {
         final String value => value.toLowerCase() == 'true',
         _ => false,
       },
+      telegramUserId: switch (source['telegram_user_id'] ??
+          source['telegramUserId']) {
+        final num value when value != 0 => value.toInt(),
+        final String value => int.tryParse(value),
+        _ => null,
+      },
       creator: source['creator'] is Map
           ? CreatorInfo.fromJson(
               Map<String, dynamic>.from(source['creator'] as Map),
@@ -80,6 +87,12 @@ class AuthUser {
   final String? referralCode;
   final bool telegramLinked;
 
+  /// Id de la cuenta de Telegram verificada (`telegram_user_id` de
+  /// `/api/auth/me`). El gestor de descargas comprueba que sea la misma
+  /// cuenta que el usuario conectó en la app. `null` si el servidor no lo
+  /// manda o la cuenta no está verificada.
+  final int? telegramUserId;
+
   /// Código de creador oficial (`user.creator`). `null` para casi todos los
   /// usuarios y cuando el admin retira el código: decide si hay Modo creador.
   final CreatorInfo? creator;
@@ -94,6 +107,7 @@ class AuthUser {
     'plan_expires_at': planExpiresAt,
     'referral_code': referralCode,
     'telegram_linked': telegramLinked,
+    'telegram_user_id': telegramUserId,
     if (creator != null)
       'creator': {'code': creator!.code, 'rate': creator!.rate},
   };
@@ -128,6 +142,7 @@ class AuthUser {
       planExpiresAt: planExpiresAt ?? this.planExpiresAt,
       referralCode: referralCode,
       telegramLinked: telegramLinked ?? this.telegramLinked,
+      telegramUserId: telegramUserId,
       creator: creator,
     );
   }

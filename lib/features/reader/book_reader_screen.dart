@@ -27,6 +27,7 @@ Future<void> openBookReader(
   required int msgId,
   required String title,
   double? initialPositionSeconds,
+  String? localPath,
 }) {
   return Navigator.of(context, rootNavigator: true).push(
     MaterialPageRoute<void>(
@@ -35,6 +36,7 @@ Future<void> openBookReader(
         msgId: msgId,
         title: title,
         initialPositionSeconds: initialPositionSeconds,
+        localPath: localPath,
       ),
     ),
   );
@@ -81,7 +83,14 @@ class BookReaderScreen extends ConsumerStatefulWidget {
     required this.msgId,
     required this.title,
     this.initialPositionSeconds,
+    this.localPath,
   });
+
+  /// Archivo ya guardado en el teléfono (p. ej. descargado de Telegram):
+  /// se abre sin conexión y no se sincroniza el progreso con el servidor.
+  final String? localPath;
+
+  bool get isLocal => localPath != null && localPath!.isNotEmpty;
 
   final int chatId;
   final int msgId;
@@ -180,51 +189,74 @@ class _BookReaderScreenState extends ConsumerState<BookReaderScreen> {
       );
     } catch (_) {}
 
-    final Response<List<int>> response;
-    try {
-      response = await ref
-          .read(apiClientProvider)
-          .dio
-          .get<List<int>>(
-            absoluteMediaUrl(
-              PlaybackEndpoints.read(widget.chatId, widget.msgId),
-            ),
-            cancelToken: _cancel,
-            options: Options(
-              responseType: ResponseType.bytes,
-              validateStatus: (_) => true,
-              receiveTimeout: const Duration(seconds: 60),
-            ),
-            onReceiveProgress: (received, total) {
-              if (!mounted || total <= 0) return;
-              setState(() => _downloadProgress = received / total);
-            },
-          );
-    } on DioException catch (e) {
-      if (CancelToken.isCancel(e) || !mounted) return;
-      setState(() {
-        _loading = false;
-        _error = 'Error de conexión. Intenta de nuevo.';
-      });
-      return;
-    }
-    if (!mounted) return;
+    final Uint8List bytes;
+    String? formatHeader;
+    if (widget.isLocal) {
+      try {
+        bytes = await File(widget.localPath!).readAsBytes();
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _error =
+              'No se encontró el libro en el teléfono. Descárgalo otra vez.';
+        });
+        return;
+      }
+      if (!mounted) return;
+      if (widget.localPath!.toLowerCase().endsWith('.pdf')) {
+        formatHeader = 'pdf';
+      }
+    } else {
+      final Response<List<int>> response;
+      try {
+        response = await ref
+            .read(apiClientProvider)
+            .dio
+            .get<List<int>>(
+              absoluteMediaUrl(
+                PlaybackEndpoints.read(widget.chatId, widget.msgId),
+              ),
+              cancelToken: _cancel,
+              options: Options(
+                responseType: ResponseType.bytes,
+                validateStatus: (_) => true,
+                receiveTimeout: const Duration(seconds: 60),
+              ),
+              onReceiveProgress: (received, total) {
+                if (!mounted || total <= 0) return;
+                setState(() => _downloadProgress = received / total);
+              },
+            );
+      } on DioException catch (e) {
+        if (CancelToken.isCancel(e) || !mounted) return;
+        setState(() {
+          _loading = false;
+          _error = 'Error de conexión. Intenta de nuevo.';
+        });
+        return;
+      }
+      if (!mounted) return;
 
-    final status = response.statusCode ?? 0;
-    final bytes = Uint8List.fromList(response.data ?? const []);
-    if (status < 200 || status >= 300) {
-      setState(() {
-        _loading = false;
-        _error = _statusMessage(status, bytes);
-      });
-      return;
+      final status = response.statusCode ?? 0;
+      bytes = Uint8List.fromList(response.data ?? const []);
+      if (status < 200 || status >= 300) {
+        setState(() {
+          _loading = false;
+          _error = _statusMessage(status, bytes);
+        });
+        return;
+      }
+      formatHeader =
+          response.headers.value('x-book-format') ??
+          (response.headers.value('content-type')?.contains('pdf') == true
+              ? 'pdf'
+              : null);
     }
 
     final format =
-        response.headers.value('x-book-format') ??
-        (response.headers.value('content-type')?.contains('pdf') == true ||
-                (bytes.length > 4 &&
-                    String.fromCharCodes(bytes.sublist(0, 4)) == '%PDF')
+        formatHeader ??
+        (bytes.length > 4 && String.fromCharCodes(bytes.sublist(0, 4)) == '%PDF'
             ? 'pdf'
             : 'epub');
 
@@ -425,7 +457,7 @@ class _BookReaderScreenState extends ConsumerState<BookReaderScreen> {
   }
 
   void _syncServer() {
-    if (_total <= 0) return;
+    if (_total <= 0 || widget.isLocal) return;
     ref
         .read(catalogApiProvider)
         .saveProgress(

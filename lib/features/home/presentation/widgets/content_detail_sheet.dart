@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_flutter/lucide_flutter.dart';
 
 import '../../../../core/network/api_client.dart';
@@ -8,9 +9,11 @@ import '../../../../core/platform/device_channel.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
 import '../../../../core/widgets/app_cached_image.dart';
+import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../catalog/application/catalog_providers.dart';
 import '../../../catalog/domain/catalog_models.dart';
 import '../../../reader/book_reader_screen.dart';
+import '../../../telegram/telegram_delivery.dart';
 import 'media_player_screen.dart';
 import 'report_content_dialog.dart';
 
@@ -473,6 +476,95 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
     }
   }
 
+  /// Gestor de descargas: si Telegram está conectado en la app con la misma
+  /// cuenta verificada, pide `delivery: "app"` y el bot envía el archivo al
+  /// chat sin abrir Telegram; aparece en Cuenta → Telegram.
+  ///
+  /// Devuelve `false` si no aplica (o el servidor no tiene el modo app
+  /// activo) para que el botón siga con el deep link de siempre.
+  Future<bool> _tryAppDelivery(
+    Future<Map<String, dynamic>> Function() request, {
+    bool showLoading = true,
+    String unit = 'episodio',
+  }) async {
+    if (!canDeliverToApp(ref.read(authControllerProvider).user)) return false;
+    final router = GoRouter.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    void done() {
+      if (showLoading && mounted) setState(() => _loadingAction = false);
+    }
+
+    if (showLoading) setState(() => _loadingAction = true);
+    try {
+      final response = await request();
+      done();
+      if (response['delivery'] != 'app') {
+        // Servidor sin el modo app: devolvió el deep link normal.
+        final url = _downloadLink(response);
+        if (url == null) return false;
+        await _openLink(url);
+        return true;
+      }
+      final queued = (response['queued'] as num?)?.toInt();
+      final title = response['title']?.toString();
+      final String text;
+      if (queued == null) {
+        text =
+            '${title == null || title.isEmpty ? 'El archivo' : title} ya está '
+            'en tus archivos de Telegram.';
+      } else if (queued == 0) {
+        text = 'No hay nada para enviar.';
+      } else {
+        text =
+            'El bot te enviará $queued '
+            '${queued == 1 ? unit : '${unit}s'}. Irán apareciendo en '
+            'tus archivos de Telegram.';
+      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(text),
+          // Con botón de acción Flutter lo deja fijo; aquí tapaba la barra
+          // de "Seleccionar" pistas.
+          persist: false,
+          duration: const Duration(seconds: 5),
+          action: queued == 0
+              ? null
+              : SnackBarAction(
+                  label: 'Ver',
+                  onPressed: () => router.push('/cuenta/telegram'),
+                ),
+        ),
+      );
+      return true;
+    } on ApiException catch (e) {
+      done();
+      switch (e.statusCode) {
+        case 409:
+          // El usuario bloqueó el bot: se abre como siempre (el token sigue
+          // sin usar, no se pierde cupo).
+          final link = e.details?['deep_link']?.toString();
+          if (link == null || link.isEmpty) return false;
+          messenger.showSnackBar(SnackBar(content: Text(e.message)));
+          await _openLink(link);
+          return true;
+        case 503:
+          return false;
+        default:
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                e.network ? 'Sin conexión. Intenta de nuevo.' : e.message,
+              ),
+            ),
+          );
+          return true;
+      }
+    } catch (_) {
+      done();
+      return false;
+    }
+  }
+
   Future<void> _handleDownloadMovie({SameNameFile? file}) async {
     final chatId = file?.chatId ?? widget.item.chatId;
     final msgId = file?.msgId ?? widget.item.msgId;
@@ -487,6 +579,15 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
       );
       return;
     }
+
+    if (await _tryAppDelivery(
+      () => ref
+          .read(catalogApiProvider)
+          .authorizeDownload(chatId: chatId, msgId: msgId, toApp: true),
+    )) {
+      return;
+    }
+    if (!mounted) return;
 
     setState(() => _loadingAction = true);
     try {
@@ -518,6 +619,20 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
     final categoryKey = widget.item.categoryKey;
     final title = _title;
     if (categoryKey == null || categoryKey.isEmpty || title == null) return;
+
+    if (await _tryAppDelivery(
+      () => ref
+          .read(catalogApiProvider)
+          .authorizeSeasonDownload(
+            categoryKey: categoryKey,
+            title: title,
+            season: _selectedSeason,
+            toApp: true,
+          ),
+    )) {
+      return;
+    }
+    if (!mounted) return;
 
     setState(() => _loadingAction = true);
     try {
@@ -619,17 +734,33 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
     }
   }
 
+  /// Lote con el gestor de descargas: el bot los envía al chat sin abrir
+  /// Telegram. `true` si se resolvió así (si no, se sigue con el bot).
+  Future<bool> _tryAppBatch(
+    Future<Map<String, dynamic>> Function() request, {
+    required String unit,
+  }) async {
+    if (_batchLoading) return false;
+    setState(() => _batchLoading = true);
+    try {
+      return await _tryAppDelivery(request, showLoading: false, unit: unit);
+    } finally {
+      if (mounted) setState(() => _batchLoading = false);
+    }
+  }
+
   Future<void> _handleDownloadAlbum() async {
     final item = widget.item;
-    await _runBatchRequest(
-      () => ref
-          .read(catalogApiProvider)
-          .authorizeAlbumDownload(
-            categoryKey: item.categoryKey ?? 'music',
-            artist: item.artist ?? '',
-            album: item.album ?? '',
-          ),
-    );
+    Future<Map<String, dynamic>> request({bool toApp = false}) => ref
+        .read(catalogApiProvider)
+        .authorizeAlbumDownload(
+          categoryKey: item.categoryKey ?? 'music',
+          artist: item.artist ?? '',
+          album: item.album ?? '',
+          toApp: toApp,
+        );
+    if (await _tryAppBatch(() => request(toApp: true), unit: 'pista')) return;
+    await _runBatchRequest(request);
   }
 
   Future<void> _handleDownloadSelectedTracks() async {
@@ -643,9 +774,13 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
           ),
     ];
     if (items.isEmpty) return;
-    final ok = await _runBatchRequest(
-      () => ref.read(catalogApiProvider).authorizeBatchDownload(items),
-    );
+    final api = ref.read(catalogApiProvider);
+    final ok =
+        await _tryAppBatch(
+          () => api.authorizeBatchDownload(items, toApp: true),
+          unit: 'archivo',
+        ) ||
+        await _runBatchRequest(() => api.authorizeBatchDownload(items));
     if (ok && mounted) {
       setState(() {
         _selectingTracks = false;
@@ -659,6 +794,15 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
     final msgId = (episode['msg_id'] as num?)?.toInt() ?? widget.item.msgId;
 
     if (chatId == null || msgId == null) return;
+
+    if (await _tryAppDelivery(
+      () => ref
+          .read(catalogApiProvider)
+          .authorizeDownload(chatId: chatId, msgId: msgId, toApp: true),
+      showLoading: false,
+    )) {
+      return;
+    }
 
     try {
       final response = await ref

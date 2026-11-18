@@ -1,5 +1,10 @@
 # Novedades de QvaTube
 
+## 2.0.0
+- ¡Llegamos a la versión 2.0! Una actualización muy esperada por toda la comunidad: ahora puedes conectar tu cuenta de Telegram y gestionar tus descargas directamente dentro de QvaTube.
+- Tus archivos del bot se organizan por secciones (Películas, Series, Anime, Novelas, Música, Libros y Otros) con buscador, filtro por estado y series agrupadas por episodios.
+- Descarga, pausa, reanuda y reproduce tus películas, series, música o lee tus libros (EPUB y PDF) sin conexión desde la app.
+
 ## 1.2.18
 - Entra a QvaTube aunque no tengas conexión: el catálogo de cada sección se guarda en tu teléfono para que puedas verlo sin internet.
 

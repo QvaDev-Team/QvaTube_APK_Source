@@ -117,4 +117,28 @@ void main() {
     expect(file.localPath, '/data/tdlib/a.mp4');
     expect(file.progress, 1);
   });
+
+  test('título del catálogo con temporada y episodio', () {
+    final file = TgFile(
+      messageId: 1,
+      fileId: 2,
+      name: 'The Midnight Gospel 1x07.mp4',
+      kind: TgFileKind.video,
+      date: DateTime(2026),
+    );
+    expect(file.title, 'The Midnight Gospel 1x07.mp4');
+    file.catalog = TgCatalogInfo.fromJson({
+      'title': 'The Midnight Gospel',
+      'season': 1,
+      'episode': 7,
+      'poster': '/poster/x.jpg',
+    });
+    expect(file.title, 'The Midnight Gospel · T1 · E07');
+    file.catalog = TgCatalogInfo.fromJson({
+      'title': 'Piratas del Caribe',
+      'season': null,
+      'episode': null,
+    });
+    expect(file.title, 'Piratas del Caribe');
+  });
 }

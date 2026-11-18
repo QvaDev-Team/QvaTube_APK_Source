@@ -598,13 +598,24 @@ class CatalogApi {
 
   /// POST /api/download/authorize
   /// Autoriza la descarga de un archivo o episodio y devuelve el deep link de Telegram o URL directa.
+  ///
+  /// Con [toApp] (`delivery: "app"`) el bot envía el archivo directamente al
+  /// chat del usuario y la respuesta es la fila de `/api/telegram-files`
+  /// (`{delivery: "app", id, telegram_message_id, title, ...}`). Errores de
+  /// ese modo: 409 `bot_blocked` (trae `deep_link`), 410 `unavailable`,
+  /// 429 `rate_limited`, 503 no disponible.
   Future<Map<String, dynamic>> authorizeDownload({
     required int chatId,
     required int msgId,
+    bool toApp = false,
   }) async {
     final response = await _client.post(
       Endpoints.downloads.authorize,
-      body: <String, dynamic>{'chat_id': chatId, 'msg_id': msgId},
+      body: <String, dynamic>{
+        'chat_id': chatId,
+        'msg_id': msgId,
+        if (toApp) 'delivery': 'app',
+      },
       operation: 'la autorización de descarga',
     );
     return _map(response.data);
@@ -612,10 +623,14 @@ class CatalogApi {
 
   /// POST /api/download/authorize-season
   /// Autoriza la descarga de una temporada completa y devuelve el deep link.
+  ///
+  /// Con [toApp] el servidor responde 202 `{delivery: "app", queued: n}` y
+  /// el bot va enviando los episodios al chat del usuario.
   Future<Map<String, dynamic>> authorizeSeasonDownload({
     required String categoryKey,
     required String title,
     required int season,
+    bool toApp = false,
   }) async {
     final response = await _client.post(
       Endpoints.downloads.authorizeSeason,
@@ -623,10 +638,22 @@ class CatalogApi {
         'category_key': categoryKey,
         'title': title,
         'season': season,
+        if (toApp) 'delivery': 'app',
       },
       operation: 'la autorización de descarga de temporada',
     );
     return _map(response.data);
+  }
+
+  /// GET /api/telegram-files
+  /// Archivos que el bot envió al chat del usuario con `delivery: "app"`,
+  /// con título, carátula y temporada/episodio del catálogo.
+  Future<List<Map<String, dynamic>>> telegramFiles() async {
+    final response = await _client.get(
+      Endpoints.downloads.telegramFiles,
+      operation: 'tus archivos de Telegram',
+    );
+    return _list(response.data);
   }
 
   /// POST /api/download/authorize-album
@@ -637,6 +664,7 @@ class CatalogApi {
     required String categoryKey,
     required String artist,
     required String album,
+    bool toApp = false,
   }) async {
     final response = await _client.post(
       Endpoints.downloads.authorizeAlbum,
@@ -644,6 +672,7 @@ class CatalogApi {
         'category_key': categoryKey,
         'artist': artist,
         'album': album,
+        if (toApp) 'delivery': 'app',
       },
       operation: 'la autorización de descarga del álbum',
     );
@@ -654,14 +683,16 @@ class CatalogApi {
   /// Autoriza una selección libre de archivos (1–200, solo Ultra), en el orden
   /// en que se ven en pantalla.
   Future<Map<String, dynamic>> authorizeBatchDownload(
-    List<({int chatId, int msgId})> items,
-  ) async {
+    List<({int chatId, int msgId})> items, {
+    bool toApp = false,
+  }) async {
     final response = await _client.post(
       Endpoints.downloads.authorizeBatch,
       body: <String, dynamic>{
         'items': [
           for (final it in items) {'chat_id': it.chatId, 'msg_id': it.msgId},
         ],
+        if (toApp) 'delivery': 'app',
       },
       operation: 'la autorización de descarga en lote',
     );

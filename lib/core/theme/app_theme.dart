@@ -75,9 +75,18 @@ abstract final class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surfaceSecondary,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        hintStyle: AppTextStyles.body(fontSize: 13.5, color: AppColors.textMuted),
-        labelStyle: AppTextStyles.body(fontSize: 13, color: AppColors.textSecondary),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 12,
+        ),
+        hintStyle: AppTextStyles.body(
+          fontSize: 13.5,
+          color: AppColors.textMuted,
+        ),
+        labelStyle: AppTextStyles.body(
+          fontSize: 13,
+          color: AppColors.textSecondary,
+        ),
         prefixIconColor: AppColors.textMuted,
         suffixIconColor: AppColors.textMuted,
         border: _inputBorder(AppColors.border),
@@ -138,7 +147,9 @@ abstract final class AppTheme {
         backgroundColor: AppColors.surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.lg)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadii.lg),
+          ),
         ),
       ),
       dialogTheme: DialogThemeData(
@@ -151,6 +162,9 @@ abstract final class AppTheme {
       snackBarTheme: SnackBarThemeData(
         backgroundColor: AppColors.surfaceSecondary,
         contentTextStyle: AppTextStyles.body(fontSize: 13),
+        // Sin esto el botón de acción ("Ver", "Deshacer"…) sale en un rojo
+        // oscuro que casi no se lee sobre el fondo gris.
+        actionTextColor: AppColors.accent,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadii.md),

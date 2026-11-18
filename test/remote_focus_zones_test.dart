@@ -9,11 +9,8 @@ import 'package:qvatube_apk/core/widgets/remote_focus_zones.dart';
 void main() {
   late Map<String, FocusNode> nodes;
 
-  Widget boton(String id) => TextButton(
-    focusNode: nodes[id],
-    onPressed: () {},
-    child: Text(id),
-  );
+  Widget boton(String id) =>
+      TextButton(focusNode: nodes[id], onPressed: () {}, child: Text(id));
 
   Future<void> montar(WidgetTester tester) async {
     nodes = {
@@ -60,7 +57,10 @@ void main() {
                 Expanded(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [menu, Expanded(child: content)],
+                    children: [
+                      menu,
+                      Expanded(child: content),
+                    ],
                   ),
                 ),
                 mini,
@@ -80,19 +80,20 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('← desde el contenido va a la sección activa del menú y → vuelve', (
-    tester,
-  ) async {
-    await montar(tester);
-    nodes['c1']!.requestFocus();
-    await tester.pumpAndSettle();
+  testWidgets(
+    '← desde el contenido va a la sección activa del menú y → vuelve',
+    (tester) async {
+      await montar(tester);
+      nodes['c1']!.requestFocus();
+      await tester.pumpAndSettle();
 
-    await tecla(tester, LogicalKeyboardKey.arrowLeft);
-    expect(enfocado(), 'menu1');
+      await tecla(tester, LogicalKeyboardKey.arrowLeft);
+      expect(enfocado(), 'menu1');
 
-    await tecla(tester, LogicalKeyboardKey.arrowRight);
-    expect(enfocado(), 'c1', reason: 'vuelve a la última carátula');
-  });
+      await tecla(tester, LogicalKeyboardKey.arrowRight);
+      expect(enfocado(), 'c1', reason: 'vuelve a la última carátula');
+    },
+  );
 
   testWidgets('dentro del contenido las flechas siguen moviendo el foco', (
     tester,
@@ -137,14 +138,15 @@ void main() {
     expect(enfocado(), 'c3');
   });
 
-  testWidgets('→ desde el menú sin foco previo no entra en una sección oculta', (
-    tester,
-  ) async {
-    await montar(tester);
-    nodes['menu1']!.requestFocus();
-    await tester.pumpAndSettle();
+  testWidgets(
+    '→ desde el menú sin foco previo no entra en una sección oculta',
+    (tester) async {
+      await montar(tester);
+      nodes['menu1']!.requestFocus();
+      await tester.pumpAndSettle();
 
-    await tecla(tester, LogicalKeyboardKey.arrowRight);
-    expect(enfocado(), 'c1');
-  });
+      await tecla(tester, LogicalKeyboardKey.arrowRight);
+      expect(enfocado(), 'c1');
+    },
+  );
 }

@@ -84,6 +84,12 @@ class TelegramService extends ChangeNotifier {
   TgUser? get user => _user;
   bool get isReady => stage == TgStage.ready;
 
+  /// `true` cuando TDLib está conectado a los servidores de Telegram
+  /// (`connectionStateReady`). Al abrir la app puede tardar en conectar
+  /// (en algunas redes, minutos): mientras tanto solo sirve lo guardado en
+  /// el teléfono.
+  final ValueNotifier<bool> online = ValueNotifier(false);
+
   /// Cliente de TDLib (solo con sesión iniciada).
   TdClient? get client => isReady ? _client : null;
 
@@ -163,6 +169,11 @@ class TelegramService extends ChangeNotifier {
   }
 
   Future<void> _onUpdate(Map<String, dynamic> update) async {
+    if (update['@type'] == 'updateConnectionState') {
+      online.value =
+          (update['state'] as Map?)?['@type'] == 'connectionStateReady';
+      return;
+    }
     if (update['@type'] != 'updateAuthorizationState') return;
     final state = update['authorization_state'] as Map<String, dynamic>;
     switch (state['@type']) {
@@ -189,6 +200,7 @@ class TelegramService extends ChangeNotifier {
           'Telegram. Inicia sesión allí primero y vuelve a intentarlo.',
         );
       case 'authorizationStateClosed':
+        online.value = false;
         await _sub?.cancel();
         _sub = null;
         _client = null;

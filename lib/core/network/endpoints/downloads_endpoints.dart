@@ -12,4 +12,7 @@ final class DownloadsEndpoints {
 
   /// POST: Authorize a free selection of files, 1–200 (Ultra; returns deep link)
   final String authorizeBatch = '/api/download/authorize-batch';
+
+  /// GET: Files the bot sent straight to the user's chat (`delivery: "app"`)
+  final String telegramFiles = '/api/telegram-files';
 }

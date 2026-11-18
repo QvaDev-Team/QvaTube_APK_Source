@@ -32,7 +32,9 @@ void main() {
 
   test('rechaza un archivo que no es EPUB', () {
     expect(
-      () => EpubBook.parse(File('test/fixtures/bspatch/new.bin').readAsBytesSync()),
+      () => EpubBook.parse(
+        File('test/fixtures/bspatch/new.bin').readAsBytesSync(),
+      ),
       throwsA(isA<EpubException>()),
     );
   });
@@ -59,8 +61,14 @@ void main() {
       ),
     );
     expect(find.text('Capítulo uno'), findsOneWidget);
-    expect(find.textContaining('Hola mundo y más.', findRichText: true), findsOneWidget);
-    expect(find.textContaining('Segunda\nlínea', findRichText: true), findsOneWidget);
+    expect(
+      find.textContaining('Hola mundo y más.', findRichText: true),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Segunda\nlínea', findRichText: true),
+      findsOneWidget,
+    );
     expect(find.byType(Image), findsOneWidget);
     expect(anchors.containsKey('sec'), isTrue);
   });

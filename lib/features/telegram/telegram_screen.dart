@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/storage/app_preferences.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text.dart';
+import '../auth/presentation/providers/auth_controller.dart';
 import 'tdlib/td_library.dart';
+import 'telegram_delivery.dart';
 import 'telegram_files.dart';
 import 'telegram_files_list.dart';
 import 'telegram_service.dart';
@@ -27,6 +29,17 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
   void initState() {
     super.initState();
     _tg.addListener(_onChanged);
+    // `telegram_user_id` llega en /api/auth/me; si la sesión guardada no lo
+    // tiene (verificó hace poco o venía de una versión vieja), se refresca
+    // para poder comparar las cuentas.
+    final user = ref.read(authControllerProvider).user;
+    if (user != null && user.telegramLinked && user.telegramUserId == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref.read(authControllerProvider.notifier).restoreSession();
+        }
+      });
+    }
   }
 
   @override
@@ -225,6 +238,9 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
         );
       case TgStage.ready:
         final user = _tg.user;
+        final match = telegramAccountMatch(
+          ref.watch(authControllerProvider).user,
+        );
         return [
           _info(
             Icons.check_circle,
@@ -234,6 +250,16 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
                       '${user.phone.isEmpty ? '' : ' (+${user.phone})'}.',
             color: AppColors.success,
           ),
+          if (match == TgAccountMatch.different) ...[
+            const SizedBox(height: 12),
+            _info(
+              Icons.warning_amber_rounded,
+              'Esta no es la cuenta de Telegram que verificaste en QvaTube. '
+              'El bot envía tus descargas a la cuenta verificada, así que no '
+              'aparecerán aquí. Desconecta y entra con esa cuenta.',
+              color: AppColors.danger,
+            ),
+          ],
           const SizedBox(height: 18),
           const TelegramFilesList(),
           const SizedBox(height: 24),

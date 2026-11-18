@@ -19,7 +19,13 @@ void main() {
   });
 
   test('imagen de la pantalla de carga', () {
-    expect(SeasonCalendar.splashFor(cuba(2026, 11, 4)), 'assets/icons/icon-512.png');
-    expect(SeasonCalendar.splashFor(cuba(2026, 12, 24)), 'assets/splash/navidad.png');
+    expect(
+      SeasonCalendar.splashFor(cuba(2026, 11, 4)),
+      'assets/icons/icon-512.png',
+    );
+    expect(
+      SeasonCalendar.splashFor(cuba(2026, 12, 24)),
+      'assets/splash/navidad.png',
+    );
   });
 }

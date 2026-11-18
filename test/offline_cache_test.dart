@@ -110,15 +110,18 @@ void main() {
     );
   });
 
-  test('otra página u otro filtro no reutiliza la copia de la primera', () async {
-    await client.get('/api/movies', query: query);
-    await esperarGuardado();
-    servidor.sinRed = true;
-    await expectLater(
-      client.get('/api/movies', query: {...query, 'page': 2}),
-      throwsA(isA<ApiException>()),
-    );
-  });
+  test(
+    'otra página u otro filtro no reutiliza la copia de la primera',
+    () async {
+      await client.get('/api/movies', query: query);
+      await esperarGuardado();
+      servidor.sinRed = true;
+      await expectLater(
+        client.get('/api/movies', query: {...query, 'page': 2}),
+        throwsA(isA<ApiException>()),
+      );
+    },
+  );
 
   test('los datos de una cuenta no se muestran a otra', () async {
     client.sessionCookie = 'cuenta-a';
