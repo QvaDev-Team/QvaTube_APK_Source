@@ -189,7 +189,7 @@ jobs:
           NEW_APK: dist/qvatube.apk
           NEW_CODE: ${{ env.VERSION_CODE }}
           OUT_DIR: dist/patches
-          MAX_SOURCES: '3'
+          MAX_SOURCES: '5'
         run: |
           set -euo pipefail
 
