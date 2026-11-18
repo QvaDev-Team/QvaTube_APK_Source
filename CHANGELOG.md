@@ -1,5 +1,8 @@
 # Novedades de QvaTube
 
+## 1.2.18
+- Entra a QvaTube aunque no tengas conexión: el catálogo de cada sección se guarda en tu teléfono para que puedas verlo sin internet.
+
 ## 1.2.17
 - Smart TV: ya puedes llegar con el mando al menú lateral, la búsqueda, tu perfil y el mini reproductor.
 - Smart TV: el reproductor y la app ya no se ven en "modo teléfono" en la tele, y la pausa responde siempre al mando.
