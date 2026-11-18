@@ -159,6 +159,19 @@ jobs:
           ls -la dist
           df -h / | tail -1
 
+      # El daemon de Gradle (-Xmx8G) y el de Kotlin siguen vivos tras el
+      # build y ocupan la mayor parte de la RAM del runner. bsdiff sobre un
+      # APK de ~40 MB necesita además ~1 GB, y en la 2.0.0 el runner se quedó
+      # sin memoria y se cayó ("runner has received a shutdown signal") en
+      # mitad de los parches: continue-on-error no sirve si muere el runner.
+      - name: Liberar la memoria de Gradle
+        run: |
+          free -m
+          pkill -f 'org.gradle.launcher.daemon' || true
+          pkill -f 'KotlinCompileDaemon' || true
+          sleep 3
+          free -m
+
       # ---------------------------------------------------------------------
       # Parches diferenciales (bsdiff): la app descarga solo los cambios
       # respecto a la versión que tiene instalada y reconstruye el APK nuevo
