@@ -191,6 +191,19 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      # firebase_messaging 17 trae firebase-ios-sdk 13, cuyo Package.swift
+      # pide Swift tools 6.2 (Xcode 26). El Xcode por defecto de la imagen
+      # macos-15 es más viejo y SPM no resuelve las dependencias.
+      - name: Usar Xcode 26
+        run: |
+          ls -d /Applications/Xcode*.app
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)
+          if [ -n "$XCODE" ]; then
+            sudo xcode-select -s "$XCODE/Contents/Developer"
+          else
+            echo "::warning::La imagen no trae Xcode 26: firebase-ios-sdk 13 no compilará."
+          fi
+          xcodebuild -version
       - name: Compilar (Intel y Apple Silicon)
         run: |
           flutter pub get
