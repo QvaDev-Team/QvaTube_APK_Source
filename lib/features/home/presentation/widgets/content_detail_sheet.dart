@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_flutter/lucide_flutter.dart';
 
 import '../../../../core/network/api_client.dart';
+import '../../../../core/network/endpoints/media_endpoints.dart';
 import '../../../../core/platform/device_channel.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text.dart';
@@ -364,15 +365,23 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
 
     final title = _info?.title ?? widget.item.title ?? 'Reproduciendo';
     final subtitle = widget.item.artist ?? _info?.year;
+    final tg = TelegramFiles.instance.fileFor(chatId, msgId);
     final playable = PlayableMediaItem(
       chatId: chatId,
       msgId: msgId,
       title: title,
       subtitle: subtitle,
-      posterUrl: widget.item.posterUrl,
+      posterUrl: _isAudio
+          ? absoluteMediaUrl(MediaEndpoints.cover(chatId, msgId))
+          : widget.item.posterUrl,
+      fallbackPosterUrl: widget.item.posterUrl,
+      thumbnail: tg?.thumbnail,
       isAudio: _isAudio,
       isBook: _isBook,
       initialPositionSeconds: isFront ? widget.item.positionSeconds : null,
+      localPath: (tg != null && tg.completed && tg.localPath.isNotEmpty)
+          ? tg.localPath
+          : null,
     );
 
     await openMediaPlayer(context, playlist: [playable]);
@@ -455,14 +464,20 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
           'Pista ${(i + 1).toString().padLeft(2, '0')}';
       final artist =
           track['artist']?.toString() ?? widget.item.artist ?? albumTitle;
+      final tg = TelegramFiles.instance.fileFor(chatId, msgId);
       playlist.add(
         PlayableMediaItem(
           chatId: chatId,
           msgId: msgId,
           title: trackTitle,
           subtitle: artist,
-          posterUrl: widget.item.posterUrl,
+          posterUrl: absoluteMediaUrl(MediaEndpoints.cover(chatId, msgId)),
+          fallbackPosterUrl: widget.item.posterUrl,
+          thumbnail: tg?.thumbnail,
           isAudio: true,
+          localPath: (tg != null && tg.completed && tg.localPath.isNotEmpty)
+              ? tg.localPath
+              : null,
         ),
       );
     }

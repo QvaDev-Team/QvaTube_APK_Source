@@ -34,6 +34,8 @@ class PlayableMediaItem {
     required this.title,
     this.subtitle,
     this.posterUrl,
+    this.fallbackPosterUrl,
+    this.thumbnail,
     this.isAudio = false,
     this.isBook = false,
     this.initialPositionSeconds,
@@ -45,6 +47,14 @@ class PlayableMediaItem {
   final String title;
   final String? subtitle;
   final String? posterUrl;
+
+  /// Carátula de respaldo (p. ej. la del álbum cuando la pista individual no
+  /// tiene `/cover/{chat}/{msg}`, o el archivo local de TDLib).
+  final String? fallbackPosterUrl;
+
+  /// Miniatura embebida en el mensaje de Telegram (disponible sin conexión).
+  final Uint8List? thumbnail;
+
   final bool isAudio;
   final bool isBook;
   final double? initialPositionSeconds;
@@ -58,16 +68,62 @@ class PlayableMediaItem {
   /// guardar ni "visto" que marcar).
   bool get isOutsideCatalog => chatId == 0;
 
-  /// Imagen para la notificación y la pantalla de bloqueo: el póster o la
-  /// carátula del disco; en música sin carátula, la de la pista
-  /// (`/cover/{chat}/{msg}`).
+  static String _resolveUrl(String? raw) {
+    if (raw == null || raw.isEmpty) return '';
+    if (raw.startsWith('file://')) return raw;
+    return absoluteMediaUrl(raw);
+  }
+
+  /// Imagen para el reproductor, la notificación y la pantalla de bloqueo:
+  /// el póster o la carátula del disco; en música sin carátula, la de la
+  /// pista (`/cover/{chat}/{msg}`).
   String get artworkUrl {
-    final poster = posterUrl;
-    if (poster != null && poster.isNotEmpty) return absoluteMediaUrl(poster);
+    final primary = _resolveUrl(posterUrl);
+    if (primary.isNotEmpty) return primary;
+    final secondary = _resolveUrl(fallbackPosterUrl);
+    if (secondary.isNotEmpty) return secondary;
     if (isAudio && !isOutsideCatalog) {
       return absoluteMediaUrl(MediaEndpoints.cover(chatId, msgId));
     }
     return '';
+  }
+
+  /// Widget de portada con respaldo en cascada: [artworkUrl] →
+  /// [fallbackPosterUrl] → [thumbnail] en memoria → icono.
+  Widget buildArtwork({required double iconSize}) {
+    final iconFallback = ColoredBox(
+      color: AppColors.surface,
+      child: Center(
+        child: Icon(
+          isAudio ? Icons.music_note : Icons.movie_outlined,
+          size: iconSize,
+          color: AppColors.accent,
+        ),
+      ),
+    );
+    final thumb = thumbnail;
+    final local = (thumb != null && thumb.isNotEmpty)
+        ? Image.memory(thumb, fit: BoxFit.cover, gaplessPlayback: true)
+        : iconFallback;
+
+    final primary = artworkUrl;
+    final secondary = _resolveUrl(fallbackPosterUrl);
+    final Widget fallback = (secondary.isNotEmpty && secondary != primary)
+        ? AppCachedImage(
+            imageUrl: secondary,
+            fit: BoxFit.cover,
+            placeholder: local,
+            errorWidget: local,
+          )
+        : local;
+
+    if (primary.isEmpty) return fallback;
+    return AppCachedImage(
+      imageUrl: primary,
+      fit: BoxFit.cover,
+      placeholder: local,
+      errorWidget: fallback,
+    );
   }
 
   String get streamUrl =>
@@ -883,23 +939,7 @@ class MiniMediaPlayerBar extends ConsumerWidget {
                           child: SizedBox(
                             width: 40,
                             height: 40,
-                            child:
-                                (item.posterUrl != null &&
-                                    item.posterUrl!.isNotEmpty)
-                                ? AppCachedImage(
-                                    imageUrl: item.posterUrl!,
-                                    fit: BoxFit.cover,
-                                  )
-                                : ColoredBox(
-                                    color: AppColors.surface,
-                                    child: Icon(
-                                      item.isAudio
-                                          ? Icons.music_note
-                                          : Icons.movie_outlined,
-                                      size: 20,
-                                      color: AppColors.accent,
-                                    ),
-                                  ),
+                            child: item.buildArtwork(iconSize: 20),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -1521,16 +1561,13 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (item.posterUrl != null && item.posterUrl!.isNotEmpty) ...[
+          if (item.artworkUrl.isNotEmpty || item.thumbnail != null) ...[
             ClipRRect(
               borderRadius: BorderRadius.circular(AppRadii.md),
               child: SizedBox(
                 width: item.isAudio ? 160 : 120,
                 height: item.isAudio ? 160 : 180,
-                child: AppCachedImage(
-                  imageUrl: item.posterUrl!,
-                  fit: BoxFit.cover,
-                ),
+                child: item.buildArtwork(iconSize: item.isAudio ? 56 : 44),
               ),
             ),
             const SizedBox(height: 20),
@@ -1642,16 +1679,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(20),
-                child: (item.posterUrl != null && item.posterUrl!.isNotEmpty)
-                    ? AppCachedImage(
-                        imageUrl: item.posterUrl!,
-                        fit: BoxFit.cover,
-                      )
-                    : const Icon(
-                        Icons.music_note,
-                        size: 72,
-                        color: AppColors.accent,
-                      ),
+                child: item.buildArtwork(iconSize: 72),
               ),
             ),
             const SizedBox(height: 24),

@@ -183,6 +183,101 @@ List<TgSeriesGroup> groupSeries(List<TgFile> files) {
   ];
 }
 
+bool _isBlankArtist(String? s) {
+  if (s == null) return true;
+  final v = s.trim().toLowerCase();
+  return v.isEmpty ||
+      v == 'none' ||
+      v == 'null' ||
+      v == 'unknown' ||
+      v == '<unknown>';
+}
+
+/// Intérprete de una canción: el del catálogo, el de las etiquetas de
+/// Telegram o, si no hay, lo que va antes de " - " en el nombre.
+String? artistOf(TgFile f) {
+  final a = !_isBlankArtist(f.catalog?.artist)
+      ? f.catalog!.artist
+      : (!_isBlankArtist(f.performer) ? f.performer : null);
+  if (a != null) return a.trim();
+  final base = f.name.replaceFirst(RegExp(r'\.[^.]+$'), '');
+  final m = RegExp(r'^(.+?)\s+[-–|]\s+.+$').firstMatch(base);
+  final guess = m?.group(1)?.trim();
+  return _isBlankArtist(guess) ? null : guess;
+}
+
+/// Álbum de una canción (solo lo sabe el catálogo; vacío en sencillos).
+String albumOf(TgFile f) => f.catalog?.album?.trim() ?? '';
+
+/// Título de la pista dentro de su álbum.
+String trackTitleOf(TgFile f) {
+  final c = f.catalog?.title;
+  var raw = (c != null && c.isNotEmpty)
+      ? c
+      : (f.trackTitle ?? f.name.replaceFirst(RegExp(r'\.[^.]+$'), ''));
+  final artist = artistOf(f);
+  if (artist != null && artist.isNotEmpty) {
+    final prefix = RegExp(
+      '^${RegExp.escape(artist)}\\s*[-–|]\\s*',
+      caseSensitive: false,
+    );
+    final stripped = raw.replaceFirst(prefix, '').trim();
+    if (stripped.isNotEmpty) raw = stripped;
+  }
+  return raw;
+}
+
+/// Álbum (o sencillos de un artista) con sus pistas.
+@immutable
+class TgAlbumGroup {
+  const TgAlbumGroup({
+    required this.title,
+    required this.artist,
+    required this.album,
+    required this.tracks,
+  });
+
+  /// El álbum o, en sencillos, el artista.
+  final String title;
+  final String? artist;
+  final String album;
+
+  /// En el orden en que llegaron.
+  final List<TgFile> tracks;
+
+  String get key => '${artist ?? 'Artista desconocido'}::$album'.toLowerCase();
+
+  String? get poster => tracks
+      .map((e) => e.catalog?.poster)
+      .firstWhere((p) => p != null && p.isNotEmpty, orElse: () => null);
+
+  int get downloadedCount => tracks.where((e) => e.completed).length;
+}
+
+/// Agrupa canciones por artista + álbum (igual que el catálogo, que
+/// agrupa los sencillos de cada artista con álbum vacío y los que no
+/// tienen etiqueta de artista bajo "Artista desconocido").
+List<TgAlbumGroup> groupAlbums(List<TgFile> files) {
+  final groups = <String, List<TgFile>>{};
+  for (final f in files) {
+    final artist = artistOf(f) ?? 'Artista desconocido';
+    final album = albumOf(f);
+    final key = '${artist.toLowerCase()}::${album.toLowerCase()}';
+    groups.putIfAbsent(key, () => []).add(f);
+  }
+  return [
+    for (final list in groups.values)
+      TgAlbumGroup(
+        title: albumOf(list.first).isNotEmpty
+            ? albumOf(list.first)
+            : (artistOf(list.first) ?? 'Artista desconocido'),
+        artist: artistOf(list.first),
+        album: albumOf(list.first),
+        tracks: list,
+      ),
+  ];
+}
+
 String _fold(String s) => s
     .toLowerCase()
     .replaceAll(RegExp('[áàä]'), 'a')
@@ -211,8 +306,10 @@ List<TgFile> filterFiles(
           status.matches(f))
         if (words.isEmpty ||
             words.every(
-              (w) =>
-                  _fold('${f.title} ${f.name} ${seriesTitleOf(f)}').contains(w),
+              (w) => _fold(
+                '${f.title} ${f.name} ${seriesTitleOf(f)} '
+                '${artistOf(f) ?? ''} ${albumOf(f)}',
+              ).contains(w),
             ))
           f,
   ];

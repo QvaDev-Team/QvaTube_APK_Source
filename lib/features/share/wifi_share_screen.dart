@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_flutter/lucide_flutter.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../core/platform/device_channel.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text.dart';
 import '../auth/presentation/providers/auth_controller.dart';
@@ -12,6 +14,7 @@ import '../telegram/telegram_files.dart';
 import 'received_store.dart';
 import 'wifi_share_client.dart';
 import 'wifi_share_protocol.dart';
+import 'wifi_share_qr_scanner.dart';
 import 'wifi_share_server.dart';
 
 String _size(int bytes) {
@@ -271,35 +274,98 @@ class _SendTabState extends ConsumerState<_SendTab>
   }
 
   Widget _sharing(WifiShareServer server) {
+    final qrData = server.addresses.isEmpty
+        ? null
+        : ShareQrPayload(
+            hosts: server.addresses,
+            port: server.port,
+            pin: server.pin,
+            name: server.deviceName,
+          ).toUriString();
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
       children: [
-        Center(
-          child: Text(
-            'PIN para recibir',
-            style: AppTextStyles.body(
-              fontSize: 13,
-              color: AppColors.textSecondary,
+        if (qrData != null) ...[
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(AppRadii.lg),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: QrImageView(
+                data: qrData,
+                version: QrVersions.auto,
+                size: 200,
+                backgroundColor: Colors.white,
+                eyeStyle: const QrEyeStyle(
+                  eyeShape: QrEyeShape.square,
+                  color: Color(0xFF111317),
+                ),
+                dataModuleStyle: const QrDataModuleStyle(
+                  dataModuleShape: QrDataModuleShape.square,
+                  color: Color(0xFF111317),
+                ),
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 6),
-        Center(
-          child: Text(
-            server.pin.split('').join(' '),
-            style: AppTextStyles.mono(
-              fontSize: 44,
-              fontWeight: FontWeight.w800,
-              color: AppColors.accent,
+          const SizedBox(height: 14),
+          Center(
+            child: Text(
+              'Escanea el QR o usa el PIN',
+              style: AppTextStyles.body(
+                fontSize: 12.5,
+                color: AppColors.textSecondary,
+              ),
             ),
           ),
-        ),
+          const SizedBox(height: 4),
+          Center(
+            child: Text(
+              server.pin.split('').join(' '),
+              style: AppTextStyles.mono(
+                fontSize: 30,
+                fontWeight: FontWeight.w800,
+                color: AppColors.accent,
+              ),
+            ),
+          ),
+        ] else ...[
+          Center(
+            child: Text(
+              'PIN para recibir',
+              style: AppTextStyles.body(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Center(
+            child: Text(
+              server.pin.split('').join(' '),
+              style: AppTextStyles.mono(
+                fontSize: 44,
+                fontWeight: FontWeight.w800,
+                color: AppColors.accent,
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         _hint(
           LucideIcons.smartphone,
           'En el otro teléfono: QvaTube → Gestor de descargas → '
-          'Compartir por Wi-Fi → Recibir. Toca "${server.deviceName}" y '
-          'escribe este PIN.',
+          'Compartir por Wi-Fi → Recibir y escanea este código QR '
+          '(o toca "${server.deviceName}" y escribe el PIN).',
         ),
         const SizedBox(height: 10),
         if (server.addresses.isEmpty)
@@ -445,27 +511,71 @@ class _ReceiveTabState extends State<_ReceiveTab>
   Future<void> _connect(String host, int port, String name) async {
     final pin = await _askPin(name);
     if (pin == null || !mounted) return;
+    await _connectWithPin([host], port, pin, name);
+  }
+
+  Future<void> _connectWithPin(
+    List<String> hosts,
+    int port,
+    String pin,
+    String name, {
+    bool fromQr = false,
+  }) async {
     setState(() => _loading = true);
     try {
-      final m = await _client.manifest(host, port, pin);
-      if (!mounted) return;
-      setState(() {
-        _peer = (host: host, port: port, pin: pin, name: m.name);
-        _items = m.items;
-        _selected
-          ..clear()
-          ..addAll([
-            for (final i in m.items)
-              if (!ReceivedStore.instance.has(i)) i.id,
-          ]);
-      });
+      Object? lastError;
+      for (final host in hosts) {
+        try {
+          final m = await _client.manifest(host, port, pin);
+          if (!mounted) return;
+          setState(() {
+            _peer = (host: host, port: port, pin: pin, name: m.name);
+            _items = m.items;
+            _selected
+              ..clear()
+              ..addAll([
+                for (final i in m.items)
+                  if (!ReceivedStore.instance.has(i)) i.id,
+              ]);
+          });
+          return;
+        } on ShareAuthException {
+          rethrow;
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      if (lastError != null) throw lastError;
     } on ShareAuthException {
-      _snack('PIN incorrecto.');
+      _snack(
+        fromQr
+            ? 'El código QR ya venció. Escanea de nuevo.'
+            : 'PIN incorrecto.',
+      );
     } catch (_) {
-      _snack('No se pudo conectar con $name.');
+      _snack(
+        fromQr
+            ? 'No se pudo conectar con $name. Asegúrate de estar en la misma '
+                  'red Wi-Fi o conectado a su punto de acceso.'
+            : 'No se pudo conectar con $name.',
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _scanQr() async {
+    final payload = await Navigator.of(context).push<ShareQrPayload>(
+      MaterialPageRoute(builder: (_) => const WifiShareQrScannerScreen()),
+    );
+    if (payload == null || !mounted) return;
+    await _connectWithPin(
+      payload.hosts,
+      payload.port,
+      payload.pin,
+      payload.name,
+      fromQr: true,
+    );
   }
 
   void _snack(String text) {
@@ -574,9 +684,23 @@ class _ReceiveTabState extends State<_ReceiveTab>
       children: [
         _hint(
           LucideIcons.radar,
-          'Busca teléfonos que estén compartiendo en tu red Wi-Fi (o en el '
-          'punto de acceso al que estás conectado).',
+          'Escanea el código QR del otro teléfono o elígelo abajo cuando '
+          'aparezca en tu red Wi-Fi (o en el punto de acceso al que estás '
+          'conectado).',
         ),
+        if (!DeviceChannel.isDesktop) ...[
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.accent,
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(50),
+            ),
+            onPressed: _loading ? null : _scanQr,
+            icon: const Icon(LucideIcons.qrCode, size: 20),
+            label: const Text('Escanear código QR'),
+          ),
+        ],
         const SizedBox(height: 18),
         Row(
           children: [

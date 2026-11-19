@@ -1,5 +1,11 @@
 # Novedades de QvaTube
 
+## 2.2.0
+- Compartir por Wi-Fi ahora incluye código QR y escáner con cámara: escanea el QR del otro teléfono y conéctate al instante sin escribir el PIN ni la dirección.
+- En el Gestor de descargas la música ahora se agrupa por álbum y artista, mostrando las portadas reales igual que en el catálogo.
+- Las canciones descargadas y en línea ya muestran siempre su portada en el reproductor.
+- El botón redondo de descargas en la barra superior ahora es más compacto y proporcionado junto al icono de perfil.
+
 ## 2.1.1
 - La música ya cambia de canción al tocar "siguiente" o "anterior" en la notificación, sin tener que abrir la app.
 - Gestor de descargas: desliza un archivo o una serie hacia la izquierda para quitarlo de la lista.

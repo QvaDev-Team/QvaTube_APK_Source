@@ -19,6 +19,64 @@ abstract final class WifiShareProtocol {
   static const String pinHeader = 'x-qva-pin';
 }
 
+/// Datos codificados en el código QR de "Compartir por Wi-Fi" para conectar
+/// sin escribir el PIN ni esperar al descubrimiento UDP.
+///
+/// Formato: `qvatube://share?h=192.168.43.1,192.168.1.5&p=40123&k=4821&n=Roger`
+@immutable
+class ShareQrPayload {
+  const ShareQrPayload({
+    required this.hosts,
+    required this.port,
+    required this.pin,
+    required this.name,
+  });
+
+  final List<String> hosts;
+  final int port;
+  final String pin;
+  final String name;
+
+  String toUriString() => Uri(
+    scheme: 'qvatube',
+    host: 'share',
+    queryParameters: {
+      'h': hosts.join(','),
+      'p': '$port',
+      'k': pin,
+      if (name.isNotEmpty) 'n': name,
+    },
+  ).toString();
+
+  static ShareQrPayload? tryParse(String raw) {
+    final uri = Uri.tryParse(raw.trim());
+    if (uri == null || uri.scheme != 'qvatube' || uri.host != 'share') {
+      return null;
+    }
+    final hosts = (uri.queryParameters['h'] ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    final port = int.tryParse(uri.queryParameters['p'] ?? '');
+    final pin = (uri.queryParameters['k'] ?? '').trim();
+    if (hosts.isEmpty ||
+        port == null ||
+        port <= 0 ||
+        port > 65535 ||
+        pin.isEmpty) {
+      return null;
+    }
+    final name = (uri.queryParameters['n'] ?? '').trim();
+    return ShareQrPayload(
+      hosts: hosts,
+      port: port,
+      pin: pin,
+      name: name.isEmpty ? hosts.first : name,
+    );
+  }
+}
+
 /// Anuncio por UDP de un teléfono que está compartiendo.
 @immutable
 class ShareAnnounce {

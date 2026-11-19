@@ -124,6 +124,37 @@ void main() {
     expect(sectionCounts(files), {TgSection.all: 2, TgSection.movies: 2});
     expect(filterFiles(files, section: TgSection.all).length, 2);
   });
+
+  test('agrupa música por artista y álbum', () {
+    final groups = groupAlbums([
+      _file(
+        'Starset - My Demons.mp3',
+        id: 1,
+        kind: TgFileKind.audio,
+        completed: true,
+      ),
+      _file('STARSET | AD ASTRA.m4a', id: 2, kind: TgFileKind.audio),
+      _file(
+        'INDUSTRY BABY.mp3',
+        id: 3,
+        kind: TgFileKind.audio,
+        catalog: {
+          'title': 'INDUSTRY BABY',
+          'artist': 'Lil Nas X',
+          'album': 'MONTERO',
+          'category_key': 'music',
+        },
+      ),
+    ]);
+    expect(groups.length, 2);
+    expect(groups[0].title, 'Starset');
+    expect(groups[0].tracks.length, 2);
+    expect(groups[0].downloadedCount, 1);
+    expect(trackTitleOf(groups[0].tracks[0]), 'My Demons');
+    expect(trackTitleOf(groups[0].tracks[1]), 'AD ASTRA');
+    expect(groups[1].title, 'MONTERO');
+    expect(groups[1].artist, 'Lil Nas X');
+  });
 }
 
 extension on TgFile {

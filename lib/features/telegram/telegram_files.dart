@@ -24,6 +24,8 @@ class TgCatalogInfo {
     this.categoryKey,
     this.chatId,
     this.msgId,
+    this.artist,
+    this.album,
   });
 
   factory TgCatalogInfo.fromJson(Map<String, dynamic> json) => TgCatalogInfo(
@@ -34,9 +36,20 @@ class TgCatalogInfo {
     categoryKey: json['category_key']?.toString(),
     chatId: (json['chat_id'] as num?)?.toInt(),
     msgId: (json['msg_id'] as num?)?.toInt(),
+    artist: _text(json['artist']),
+    album: _text(json['album']),
   );
 
+  static String? _text(Object? v) {
+    final s = v?.toString().trim() ?? '';
+    return s.isEmpty ? null : s;
+  }
+
   final String title;
+
+  /// Música: intérprete y álbum del catálogo (para agrupar por álbum).
+  final String? artist;
+  final String? album;
 
   /// Ruta del servidor (`/cover/…`) o URL de TMDb.
   final String? poster;
@@ -68,6 +81,9 @@ class TgFile {
     this.caption = '',
     this.thumbnail,
     this.durationSeconds = 0,
+    this.performer,
+    this.trackTitle,
+    this.coverFileId,
   });
 
   final int messageId;
@@ -80,6 +96,17 @@ class TgFile {
   /// Miniatura muy pequeña (JPEG) que viene dentro del propio mensaje.
   final Uint8List? thumbnail;
   final int durationSeconds;
+
+  /// Audio: intérprete y título de la pista según Telegram (etiquetas ID3).
+  final String? performer;
+  final String? trackTitle;
+
+  /// Archivo de TDLib con la carátula del disco / miniatura en buena
+  /// calidad (se baja bajo demanda, ver [TelegramFiles.coverOf]).
+  final int? coverFileId;
+
+  /// Ruta local de la carátula ya descargada de Telegram.
+  String? coverPath;
 
   /// Título, carátula y episodio del catálogo, si el archivo llegó por el
   /// gestor de descargas (si no, solo se conoce el nombre del archivo).
@@ -269,6 +296,13 @@ class TelegramFiles extends ChangeNotifier {
   /// Filas de `GET /api/telegram-files`: (tamaño, hora de envío, datos).
   final List<({int size, DateTime? sentAt, TgCatalogInfo info})> _catalog = [];
 
+  /// Pistas de `GET /api/category-tracks?cat=music`: permite recuperar la
+  /// portada (`/cover/{chat}/{msg}`), el artista y el álbum de canciones que
+  /// llegaron al chat del bot antes del gestor de descargas o por deep-link.
+  final Map<int, List<TgCatalogInfo>> _musicBySize = {};
+  final Map<String, TgCatalogInfo> _musicByTitle = {};
+  final Map<String, TgCatalogInfo> _musicById = {};
+
   /// Aplica la lista de `GET /api/telegram-files` (título, carátula y
   /// temporada/episodio de lo que el bot envió con el gestor de descargas).
   void applyCatalog(List<Map<String, dynamic>> rows) {
@@ -278,6 +312,51 @@ class TelegramFiles extends ChangeNotifier {
     _matchCatalog(_files);
     notifyListeners();
   }
+
+  /// Aplica las pistas de `GET /api/category-tracks?cat=music` para completar
+  /// portada, artista y álbum de la música en el gestor.
+  void applyMusicCatalog(List<Map<String, dynamic>> tracks) {
+    _musicBySize.clear();
+    _musicByTitle.clear();
+    _musicById.clear();
+    for (final t in tracks) {
+      final chatId = (t['chat_id'] as num?)?.toInt();
+      final msgId = (t['msg_id'] as num?)?.toInt();
+      if (chatId == null || msgId == null) continue;
+      final title = t['title']?.toString().trim() ?? '';
+      final artist = _tag(t['artist']);
+      final album = _tag(t['album']);
+      final size = (t['size'] as num?)?.toInt() ?? 0;
+      final info = TgCatalogInfo(
+        title: title,
+        poster: '/cover/$chatId/$msgId',
+        categoryKey: 'music',
+        chatId: chatId,
+        msgId: msgId,
+        artist: artist,
+        album: album,
+      );
+      _musicById['$chatId:$msgId'] = info;
+      if (size > 0) {
+        _musicBySize.putIfAbsent(size, () => []).add(info);
+      }
+      final key = _normKey(title);
+      if (key.isNotEmpty) {
+        _musicByTitle.putIfAbsent(key, () => info);
+        if (artist != null) {
+          _musicByTitle.putIfAbsent('${_normKey(artist)}|$key', () => info);
+        }
+      }
+    }
+    _matchCatalog(_files);
+    notifyListeners();
+  }
+
+  static String _normKey(String s) => s
+      .toLowerCase()
+      .replaceAll(RegExp(r'\.[^.]+$'), '')
+      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+      .trim();
 
   static ({int size, DateTime? sentAt, TgCatalogInfo info}) _row(
     Map<String, dynamic> row,
@@ -337,7 +416,53 @@ class TelegramFiles extends ChangeNotifier {
           f.catalog = row.info;
         }
       }
+      if (f.kind == TgFileKind.audio) {
+        final c = f.catalog;
+        if (c == null) {
+          f.catalog = _findMusicCatalog(f);
+        } else if (c.artist == null ||
+            c.album == null ||
+            (c.poster ?? '').isEmpty) {
+          final m = (c.chatId != null && c.msgId != null)
+              ? _musicById['${c.chatId}:${c.msgId}']
+              : _findMusicCatalog(f);
+          if (m != null) {
+            f.catalog = TgCatalogInfo(
+              title: c.title.isNotEmpty ? c.title : m.title,
+              poster: (c.poster ?? '').isNotEmpty ? c.poster : m.poster,
+              season: c.season,
+              episode: c.episode,
+              categoryKey: c.categoryKey ?? 'music',
+              chatId: c.chatId ?? m.chatId,
+              msgId: c.msgId ?? m.msgId,
+              artist: c.artist ?? m.artist,
+              album: c.album ?? m.album,
+            );
+          }
+        }
+      }
     }
+  }
+
+  TgCatalogInfo? _findMusicCatalog(TgFile f) {
+    if (_musicBySize.isEmpty && _musicByTitle.isEmpty) return null;
+    final bySize = _musicBySize[f.size];
+    if (bySize != null && bySize.isNotEmpty) {
+      if (bySize.length == 1) return bySize.first;
+      final wanted = _normKey(f.trackTitle ?? f.name);
+      for (final m in bySize) {
+        if (_normKey(m.title) == wanted) return m;
+      }
+      return bySize.first;
+    }
+    final titleKey = _normKey(f.trackTitle ?? f.name);
+    if (titleKey.isEmpty) return null;
+    final artist = f.performer;
+    if (artist != null && artist.isNotEmpty) {
+      final exact = _musicByTitle['${_normKey(artist)}|$titleKey'];
+      if (exact != null) return exact;
+    }
+    return _musicByTitle[titleKey];
   }
 
   String? _botUsername;
@@ -637,17 +762,83 @@ class TelegramFiles extends ChangeNotifier {
     if (name.isEmpty && caption.isNotEmpty) name = caption.split('\n').first;
     if (name.isEmpty) name = 'Archivo ${message['id']}';
 
-    final tg = TgFile(
-      messageId: (message['id'] as num).toInt(),
-      fileId: (file['id'] as num).toInt(),
-      name: name,
-      kind: kind,
-      date: date,
-      caption: caption,
-      thumbnail: thumb,
-      durationSeconds: (media['duration'] as num?)?.toInt() ?? 0,
-    )..applyFile(file);
+    final tg =
+        TgFile(
+            messageId: (message['id'] as num).toInt(),
+            fileId: (file['id'] as num).toInt(),
+            name: name,
+            kind: kind,
+            date: date,
+            caption: caption,
+            thumbnail: thumb,
+            durationSeconds: (media['duration'] as num?)?.toInt() ?? 0,
+            performer: kind == TgFileKind.audio
+                ? _tag(media['performer'])
+                : null,
+            trackTitle: kind == TgFileKind.audio ? _tag(media['title']) : null,
+            coverFileId: _coverId(media),
+          )
+          ..coverPath = _coverPath(media)
+          ..applyFile(file);
     return tg;
+  }
+
+  /// Id del archivo de carátula: la del disco en audio, la miniatura en
+  /// video y documentos.
+  static int? _coverId(Map<String, dynamic> media) {
+    final thumb =
+        (media['album_cover_thumbnail'] ?? media['thumbnail']) as Map?;
+    final id = (thumb?['file'] as Map?)?['id'];
+    return id is num ? id.toInt() : null;
+  }
+
+  static String? _coverPath(Map<String, dynamic> media) {
+    final thumb =
+        (media['album_cover_thumbnail'] ?? media['thumbnail']) as Map?;
+    final local = (thumb?['file'] as Map?)?['local'] as Map?;
+    if (local?['is_downloading_completed'] != true) return null;
+    return _tag(local?['path']);
+  }
+
+  static String? _tag(Object? v) {
+    final s = v?.toString().trim() ?? '';
+    return s.isEmpty ? null : s;
+  }
+
+  final Set<int> _coversInFlight = {};
+
+  /// Ruta local de la carátula de [f] que trae el mensaje de Telegram
+  /// (carátula del disco en audio, miniatura en video). La baja la primera
+  /// vez (es pequeña) y la recuerda; `null` si no tiene o no hay conexión.
+  Future<String?> coverOf(TgFile f) async {
+    final cached = f.coverPath;
+    if (cached != null && cached.isNotEmpty) return cached;
+    final id = f.coverFileId, client = _client;
+    if (id == null || client == null || !_coversInFlight.add(id)) return null;
+    try {
+      final res = await client
+          .send({
+            '@type': 'downloadFile',
+            'file_id': id,
+            'priority': 1,
+            'offset': 0,
+            'limit': 0,
+            'synchronous': true,
+          })
+          .timeout(const Duration(seconds: 8));
+      final local = (res['local'] as Map?) ?? const {};
+      if (local['is_downloading_completed'] == true) {
+        final path = local['path']?.toString() ?? '';
+        if (path.isNotEmpty) {
+          f.coverPath = path;
+          notifyListeners();
+        }
+      }
+    } catch (_) {
+    } finally {
+      _coversInFlight.remove(id);
+    }
+    return f.coverPath;
   }
 
   void _onFile(Map<String, dynamic> file) {

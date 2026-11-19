@@ -15,7 +15,7 @@ import '../../../telegram/telegram_service.dart';
 class DownloadsRingButton extends StatelessWidget {
   const DownloadsRingButton({super.key});
 
-  static const double _size = 40;
+  static const double _size = 32;
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +56,7 @@ class DownloadsRingButton extends StatelessWidget {
                     const SizedBox.expand(
                       child: CircularProgressIndicator(
                         value: 1,
-                        strokeWidth: 2.6,
+                        strokeWidth: 2.2,
                         color: AppColors.border,
                       ),
                     ),
@@ -64,7 +64,7 @@ class DownloadsRingButton extends StatelessWidget {
                     SizedBox.expand(
                       child: waiting
                           ? const CircularProgressIndicator(
-                              strokeWidth: 2.6,
+                              strokeWidth: 2.2,
                               color: AppColors.textMuted,
                             )
                           : TweenAnimationBuilder<double>(
@@ -74,7 +74,7 @@ class DownloadsRingButton extends StatelessWidget {
                               builder: (context, v, _) =>
                                   CircularProgressIndicator(
                                     value: v,
-                                    strokeWidth: 2.6,
+                                    strokeWidth: 2.2,
                                     strokeCap: StrokeCap.round,
                                     color: AppColors.accent,
                                   ),
@@ -84,7 +84,7 @@ class DownloadsRingButton extends StatelessWidget {
                     active
                         ? LucideIcons.arrowDown
                         : LucideIcons.arrowDownToLine,
-                    size: active ? 18 : 22,
+                    size: active ? 15 : 20,
                     color: active ? AppColors.accent : AppColors.textSecondary,
                   ),
                   if (p.count > 1)

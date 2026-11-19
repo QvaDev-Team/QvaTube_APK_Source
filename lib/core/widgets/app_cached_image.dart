@@ -36,7 +36,9 @@ abstract final class AppImageCache {
     final clean = url
         .replaceAll(RegExp(r'https?://'), '')
         .replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
-    final suffix = clean.length > 40 ? clean.substring(clean.length - 40) : clean;
+    final suffix = clean.length > 40
+        ? clean.substring(clean.length - 40)
+        : clean;
     return 'img_${hash}_$suffix';
   }
 
@@ -148,6 +150,19 @@ class _AppCachedImageState extends State<AppCachedImage> {
       return;
     }
 
+    if (widget.imageUrl.startsWith('file://')) {
+      final file = File(Uri.parse(widget.imageUrl).toFilePath());
+      final exists = file.existsSync() && file.lengthSync() > 0;
+      if (mounted) {
+        setState(() {
+          _localFile = exists ? file : null;
+          _isLoading = false;
+          _hasError = !exists;
+        });
+      }
+      return;
+    }
+
     if (mounted) {
       setState(() {
         _isLoading = true;
@@ -193,7 +208,8 @@ class _AppCachedImageState extends State<AppCachedImage> {
     Widget content;
 
     if (_isLoading) {
-      content = widget.placeholder ??
+      content =
+          widget.placeholder ??
           Container(
             color: AppColors.surfaceSecondary,
             child: const Center(
@@ -205,11 +221,16 @@ class _AppCachedImageState extends State<AppCachedImage> {
             ),
           );
     } else if (_hasError) {
-      content = widget.errorWidget ??
+      content =
+          widget.errorWidget ??
           Container(
             color: AppColors.surfaceSecondary,
             child: const Center(
-              child: Icon(Icons.broken_image_outlined, color: AppColors.textMuted, size: 24),
+              child: Icon(
+                Icons.broken_image_outlined,
+                color: AppColors.textMuted,
+                size: 24,
+              ),
             ),
           );
     } else if (_localFile != null && _localFile!.existsSync()) {
@@ -223,7 +244,11 @@ class _AppCachedImageState extends State<AppCachedImage> {
             Container(
               color: AppColors.surfaceSecondary,
               child: const Center(
-                child: Icon(Icons.broken_image_outlined, color: AppColors.textMuted, size: 24),
+                child: Icon(
+                  Icons.broken_image_outlined,
+                  color: AppColors.textMuted,
+                  size: 24,
+                ),
               ),
             ),
       );
@@ -239,7 +264,11 @@ class _AppCachedImageState extends State<AppCachedImage> {
             Container(
               color: AppColors.surfaceSecondary,
               child: const Center(
-                child: Icon(Icons.broken_image_outlined, color: AppColors.textMuted, size: 24),
+                child: Icon(
+                  Icons.broken_image_outlined,
+                  color: AppColors.textMuted,
+                  size: 24,
+                ),
               ),
             ),
         loadingBuilder: (context, child, progress) {
@@ -260,10 +289,7 @@ class _AppCachedImageState extends State<AppCachedImage> {
     }
 
     if (widget.borderRadius != null) {
-      content = ClipRRect(
-        borderRadius: widget.borderRadius!,
-        child: content,
-      );
+      content = ClipRRect(borderRadius: widget.borderRadius!, child: content);
     }
 
     if (widget.width != null || widget.height != null) {
@@ -277,4 +303,3 @@ class _AppCachedImageState extends State<AppCachedImage> {
     return content;
   }
 }
-

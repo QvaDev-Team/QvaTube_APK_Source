@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -70,6 +71,13 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
           .then(_files.applyCatalog)
           .catchError((_) {}),
     );
+    unawaited(
+      ref
+          .read(catalogApiProvider)
+          .categoryTracks(categoryKey: 'music')
+          .then(_files.applyMusicCatalog)
+          .catchError((_) {}),
+    );
     final config = await ref
         .read(siteConfigProvider.future)
         .catchError((_) => const SiteConfig());
@@ -78,23 +86,42 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
 
   /// Reproduce [file] y, a continuación, los demás ya descargados de
   /// [queue] (episodios de la misma serie, pistas de la sección…).
-  void _play(TgFile file, [List<TgFile>? queue]) {
+  void _play(TgFile file, [List<TgFile>? queue]) async {
     final items = (queue ?? [file])
         .where((f) => f.completed && f.playable)
         .toList();
     if (!items.contains(file)) items.insert(0, file);
+    // Carátula: la del catálogo (URL absoluta, queda en la caché de imágenes
+    // y se ve sin conexión) y, como respaldo local, la que trae el mensaje
+    // de Telegram en TDLib o su minithumbnail en memoria.
+    final tdCovers = await Future.wait([
+      for (final f in items)
+        _files
+            .coverOf(f)
+            .then((p) => (p != null && p.isNotEmpty) ? 'file://$p' : null),
+    ]);
+    if (!mounted) return;
     openMediaPlayer(
       context,
       initialIndex: items.indexOf(file),
       playlist: [
-        for (final f in items)
+        for (var i = 0; i < items.length; i++)
           PlayableMediaItem(
-            chatId: 0,
-            msgId: f.messageId,
-            title: f.title,
-            isAudio: f.kind == TgFileKind.audio,
-            localPath: f.localPath,
-            posterUrl: f.catalog?.poster,
+            chatId: items[i].catalog?.chatId ?? 0,
+            msgId: items[i].catalog?.msgId ?? items[i].messageId,
+            title: items[i].kind == TgFileKind.audio
+                ? trackTitleOf(items[i])
+                : items[i].title,
+            subtitle: items[i].kind == TgFileKind.audio
+                ? artistOf(items[i])
+                : null,
+            isAudio: items[i].kind == TgFileKind.audio,
+            localPath: items[i].localPath,
+            posterUrl: (items[i].catalog?.poster ?? '').isNotEmpty
+                ? absoluteMediaUrl(items[i].catalog!.poster)
+                : tdCovers[i],
+            fallbackPosterUrl: tdCovers[i],
+            thumbnail: items[i].thumbnail,
           ),
       ],
     );
@@ -326,6 +353,11 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
           _seriesCard(group),
           const SizedBox(height: 10),
         ]
+      else if (section == TgSection.music)
+        for (final group in groupAlbums(visible)) ...[
+          _albumCard(group, queue: visible),
+          const SizedBox(height: 10),
+        ]
       else
         for (final file in visible) ...[
           _tile(file, queue: visible),
@@ -334,14 +366,23 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
     ];
   }
 
-  /// "Todos": películas, música… sueltas y los episodios agrupados en su
-  /// serie, ordenado por la fecha del envío más reciente.
+  /// "Todos": películas, libros… sueltos, los episodios agrupados en su
+  /// serie y las canciones en su álbum, ordenado por el envío más reciente.
   List<Widget> _mixed(List<TgFile> files) {
     final series = <TgFile>[];
+    final music = <TgFile>[];
     final singles = <TgFile>[];
     for (final f in files) {
-      (sectionOf(f).groupsBySeries ? series : singles).add(f);
+      final s = sectionOf(f);
+      (s.groupsBySeries
+              ? series
+              : s == TgSection.music
+              ? music
+              : singles)
+          .add(f);
     }
+    DateTime latest(List<TgFile> l) =>
+        l.map((e) => e.date).reduce((a, b) => a.isAfter(b) ? a : b);
     final entries = <({DateTime date, Widget widget})>[
       for (final f in singles)
         (
@@ -357,12 +398,9 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
           ),
         ),
       for (final g in groupSeries(series))
-        (
-          date: g.episodes
-              .map((e) => e.date)
-              .reduce((a, b) => a.isAfter(b) ? a : b),
-          widget: _seriesCard(g),
-        ),
+        (date: latest(g.episodes), widget: _seriesCard(g)),
+      for (final g in groupAlbums(music))
+        (date: latest(g.tracks), widget: _albumCard(g, queue: music)),
     ]..sort((a, b) => b.date.compareTo(a.date));
     return [for (final e in entries) e.widget];
   }
@@ -481,22 +519,91 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
   /// Tarjeta de una serie: carátula, episodios y cuántos están en el
   /// teléfono; al tocarla se despliegan los episodios.
   Widget _seriesCard(TgSeriesGroup group) {
-    final key = group.title.toLowerCase();
-    final open = _expanded.contains(key) || _query.isNotEmpty;
-    final pending = group.episodes
-        .where((e) => !e.completed && !e.downloading)
-        .toList();
-    final poster = absoluteMediaUrl(group.poster);
-    final placeholder = const ColoredBox(
-      color: AppColors.surface,
-      child: Icon(LucideIcons.tv, color: AppColors.accent, size: 22),
-    );
     final count = group.episodes.length;
+    return _groupCard(
+      key: 'serie:${group.title}',
+      title: group.title,
+      subtitle:
+          '$count ${count == 1 ? 'episodio' : 'episodios'} · '
+          '${group.downloadedCount} en el teléfono',
+      allDownloaded: group.downloadedCount == count,
+      poster: group.poster,
+      icon: LucideIcons.tv,
+      posterHeight: 66,
+      items: group.episodes,
+      itemTitle: _episodeTitle,
+      unit: (n) => n == 1 ? 'episodio' : 'episodios',
+    );
+  }
+
+  /// Tarjeta de un álbum (o de los sencillos de un artista).
+  Widget _albumCard(TgAlbumGroup group, {List<TgFile>? queue}) {
+    final count = group.tracks.length;
+    final who = group.album.isNotEmpty && group.artist != null
+        ? '${group.artist} · '
+        : group.album.isEmpty
+        ? 'Sencillos · '
+        : '';
+    return _groupCard(
+      key: 'album:${group.key}',
+      title: group.title,
+      subtitle:
+          '$who$count ${count == 1 ? 'canción' : 'canciones'} · '
+          '${group.downloadedCount} en el teléfono',
+      allDownloaded: group.downloadedCount == count,
+      poster: group.poster,
+      // Sin carátula del catálogo: la miniatura que trae Telegram.
+      thumbnail: group.tracks
+          .map((t) => t.thumbnail)
+          .firstWhere((t) => t != null, orElse: () => null),
+      icon: LucideIcons.disc3,
+      posterHeight: 46,
+      items: group.tracks,
+      queue: queue,
+      itemTitle: trackTitleOf,
+      unit: (n) => n == 1 ? 'canción' : 'canciones',
+    );
+  }
+
+  /// Tarjeta desplegable de un grupo (serie o álbum).
+  Widget _groupCard({
+    required String key,
+    required String title,
+    required String subtitle,
+    required bool allDownloaded,
+    required String? poster,
+    required IconData icon,
+    required double posterHeight,
+    required List<TgFile> items,
+    required String Function(TgFile) itemTitle,
+    required String Function(int) unit,
+    List<TgFile>? queue,
+    Uint8List? thumbnail,
+  }) {
+    final openKey = key.toLowerCase();
+    final open = _expanded.contains(openKey) || _query.isNotEmpty;
+    final pending = items.where((e) => !e.completed && !e.downloading).toList();
+    final coverTrack = items
+        .where((e) => (e.coverPath ?? '').isNotEmpty || e.coverFileId != null)
+        .firstOrNull;
+    if (coverTrack != null && (coverTrack.coverPath ?? '').isEmpty) {
+      unawaited(_files.coverOf(coverTrack));
+    }
+    final tdCover = coverTrack?.coverPath;
+    final posterUrl = (poster != null && poster.isNotEmpty)
+        ? absoluteMediaUrl(poster)
+        : (tdCover != null && tdCover.isNotEmpty ? 'file://$tdCover' : '');
+    final Widget placeholder = thumbnail != null
+        ? Image.memory(thumbnail, fit: BoxFit.cover, gaplessPlayback: true)
+        : ColoredBox(
+            color: AppColors.surface,
+            child: Icon(icon, color: AppColors.accent, size: 22),
+          );
 
     return _removable(
-      key: 'serie:${group.title}',
-      files: group.episodes,
-      label: group.title,
+      key: key,
+      files: items,
+      label: title,
       child: Container(
         decoration: BoxDecoration(
           color: AppColors.surfaceSecondary,
@@ -508,7 +615,7 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
             InkWell(
               borderRadius: BorderRadius.circular(AppRadii.md),
               onTap: () => setState(() {
-                if (!_expanded.remove(key)) _expanded.add(key);
+                if (!_expanded.remove(openKey)) _expanded.add(openKey);
               }),
               child: Padding(
                 padding: const EdgeInsets.all(10),
@@ -518,11 +625,11 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
                       borderRadius: BorderRadius.circular(6),
                       child: SizedBox(
                         width: 46,
-                        height: 66,
-                        child: poster.isEmpty
+                        height: posterHeight,
+                        child: posterUrl.isEmpty
                             ? placeholder
                             : AppCachedImage(
-                                imageUrl: poster,
+                                imageUrl: posterUrl,
                                 placeholder: placeholder,
                                 errorWidget: placeholder,
                               ),
@@ -534,7 +641,7 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            group.title,
+                            title,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: AppTextStyles.body(
@@ -544,11 +651,10 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '$count ${count == 1 ? 'episodio' : 'episodios'} · '
-                            '${group.downloadedCount} en el teléfono',
+                            subtitle,
                             style: AppTextStyles.body(
                               fontSize: 12,
-                              color: group.downloadedCount == count
+                              color: allDownloaded
                                   ? AppColors.success
                                   : AppColors.textSecondary,
                             ),
@@ -560,7 +666,7 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
                       _RoundAction(
                         icon: LucideIcons.arrowDownToLine,
                         tooltip: 'Descargar los ${pending.length} pendientes',
-                        onTap: () => _confirmDownloadAll(group, pending),
+                        onTap: () => _confirmDownloadAll(title, pending, unit),
                       ),
                     const SizedBox(width: 6),
                     Icon(
@@ -577,8 +683,17 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                 child: Column(
                   children: [
-                    for (final e in group.episodes) ...[
-                      _tile(e, queue: group.episodes, title: _episodeTitle(e)),
+                    for (final e in items) ...[
+                      _tile(
+                        e,
+                        queue: [
+                          ...items,
+                          if (queue != null)
+                            for (final o in queue)
+                              if (!items.contains(o)) o,
+                        ],
+                        title: itemTitle(e),
+                      ),
                       const SizedBox(height: 6),
                     ],
                   ],
@@ -590,20 +705,21 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
     );
   }
 
-  /// Descargar todos los episodios pendientes de una serie: pueden ser
-  /// decenas de GB, así que se confirma con el total antes de empezar.
+  /// Descargar todo lo pendiente de un grupo: pueden ser decenas de GB,
+  /// así que se confirma con el total antes de empezar.
   Future<void> _confirmDownloadAll(
-    TgSeriesGroup group,
+    String title,
     List<TgFile> pending,
+    String Function(int) unit,
   ) async {
     final bytes = pending.fold<int>(0, (s, e) => s + (e.size - e.downloaded));
     final n = pending.length;
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Descargar $n ${n == 1 ? 'episodio' : 'episodios'}'),
+        title: Text('Descargar $n ${unit(n)}'),
         content: Text(
-          'Se descargarán ${_FileTile._size(bytes)} de ${group.title} en tu '
+          'Se descargarán ${_FileTile._size(bytes)} de $title en tu '
           'teléfono. Asegúrate de tener espacio y, si usas datos móviles, '
           'de que te alcancen.',
         ),
@@ -750,10 +866,19 @@ class _FileTile extends StatelessWidget {
       color: AppColors.surface,
       child: Icon(icon, color: AppColors.accent, size: 22),
     );
+    if ((file.coverPath ?? '').isEmpty && file.coverFileId != null) {
+      unawaited(TelegramFiles.instance.coverOf(file));
+    }
     final thumb = file.thumbnail;
-    final local = thumb != null
+    final mem = thumb != null
         ? Image.memory(thumb, fit: BoxFit.cover, gaplessPlayback: true)
         : fallback;
+    final tdCover = (file.coverPath ?? '').isNotEmpty
+        ? 'file://${file.coverPath}'
+        : null;
+    final local = tdCover != null
+        ? AppCachedImage(imageUrl: tdCover, placeholder: mem, errorWidget: mem)
+        : mem;
     final poster = absoluteMediaUrl(file.catalog?.poster);
     if (poster.isEmpty) return local;
     return AppCachedImage(
