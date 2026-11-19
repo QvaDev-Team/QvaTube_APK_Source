@@ -1,5 +1,8 @@
 # Novedades de QvaTube
 
+## 2.2.1
+- Ya puedes poner tu foto de perfil desde la app: antes daba el error "Falta la imagen".
+
 ## 2.2.0
 - Compartir por Wi-Fi ahora incluye código QR y escáner con cámara: escanea el QR del otro teléfono y conéctate al instante sin escribir el PIN ni la dirección.
 - En el Gestor de descargas la música ahora se agrupa por álbum y artista, mostrando las portadas reales igual que en el catálogo.

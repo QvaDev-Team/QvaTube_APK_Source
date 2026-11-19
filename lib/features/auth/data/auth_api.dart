@@ -75,13 +75,15 @@ class AuthApi {
   }
 
   /// POST /api/auth/avatar (multipart/form-data)
-  /// body: `{ avatar: <binary> }` (required)
+  /// body: `{ photo: <binary> }` (required). El servidor lee el campo
+  /// `photo` (web/routes/avatar.py, igual que la web): con otro nombre
+  /// respondía "Falta la imagen".
   Future<Map<String, dynamic>> uploadAvatar({
     required String filePath,
     required String fileName,
   }) async {
     final formData = FormData.fromMap(<String, dynamic>{
-      'avatar': await MultipartFile.fromFile(filePath, filename: fileName),
+      'photo': await MultipartFile.fromFile(filePath, filename: fileName),
     });
     final response = await _client.postForm(
       Endpoints.auth.avatar,
