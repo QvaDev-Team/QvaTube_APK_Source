@@ -1,5 +1,10 @@
 # Novedades de QvaTube
 
+## 2.1.1
+- La música ya cambia de canción al tocar "siguiente" o "anterior" en la notificación, sin tener que abrir la app.
+- Gestor de descargas: desliza un archivo o una serie hacia la izquierda para quitarlo de la lista.
+- La foto de perfil de arriba ya no queda pegada al borde de la pantalla.
+
 ## 2.1.0
 - Nuevo: comparte por Wi-Fi lo que descargaste con otro teléfono que tenga QvaTube, sin gastar datos. Busca el icono de Wi-Fi en el Gestor de descargas.
 - El reproductor ahora te deja cambiar el idioma del audio y activar los subtítulos que traen las películas y series, y recuerda lo que eliges.

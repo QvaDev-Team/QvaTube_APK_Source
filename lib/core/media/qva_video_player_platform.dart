@@ -123,17 +123,34 @@ class QvaVideoPlayerPlatform extends VideoPlayerPlatform {
     );
 
     _players.remove(textureId);
+    _audioOnly.remove(textureId);
     _videoControllers.remove(textureId);
     _streamControllers.remove(textureId);
     _streamSubscriptions.remove(textureId);
   }
 
   /// Creates an instance of a video player and returns its textureId.
+  /// Marca el siguiente [create] como solo audio (música). Así no se crea
+  /// la superficie de video: en Android, media_kit espera a que esa
+  /// superficie exista, y con la app en segundo plano Flutter no dibuja
+  /// frames, así que "siguiente"/"anterior" desde la notificación se
+  /// quedaba colgado hasta volver a abrir la app.
+  static bool audioOnlyNext = false;
+
+  final Set<int> _audioOnly = {};
+
   @override
   Future<int?> create(DataSource dataSource) async {
+    final audioOnly = audioOnlyNext;
+    audioOnlyNext = false;
     final player = Player();
     final completer = Completer();
-    final videoController = VideoController(player);
+    final videoController = audioOnly ? null : VideoController(player);
+    if (audioOnly) {
+      // Sin decodificar la carátula incrustada como pista de video.
+      final platform = player.platform;
+      if (platform is NativePlayer) await platform.setProperty('vid', 'no');
+    }
     // NOTE: [StreamController] without broadcast buffers events.
     final streamController = StreamController<VideoEvent>();
     final streamSubscriptions = <StreamSubscription>[];
@@ -142,7 +159,10 @@ class QvaVideoPlayerPlatform extends VideoPlayerPlatform {
 
     _players[textureId] = player;
     _completers[textureId] = completer;
-    _videoControllers[textureId] = videoController;
+    if (videoController != null) {
+      _videoControllers[textureId] = videoController;
+    }
+    if (audioOnly) _audioOnly.add(textureId);
     _streamControllers[textureId] = streamController;
     _streamSubscriptions[textureId] = streamSubscriptions;
 
@@ -237,6 +257,7 @@ class QvaVideoPlayerPlatform extends VideoPlayerPlatform {
   /// Returns a widget displaying the video with a given textureId.
   @override
   Widget buildView(int textureId) {
+    if (_audioOnly.contains(textureId)) return const SizedBox.shrink();
     if (_videoControllers[textureId] == null) {
       throw StateError(
         'VideoPlayer for textureId $textureId is not found, Check if its disposed.',
@@ -309,6 +330,11 @@ class QvaVideoPlayerPlatform extends VideoPlayerPlatform {
 
       void notify() {
         if (!completer.isCompleted) {
+          // Solo audio: basta con la duración (no hay tamaño de video).
+          if (_audioOnly.contains(textureId) && duration != null) {
+            width ??= 0;
+            height ??= 0;
+          }
           if (width != null && height != null && duration != null) {
             streamController.add(
               VideoEvent(

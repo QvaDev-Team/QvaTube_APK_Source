@@ -303,7 +303,12 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
           ],
         ),
       ),
-      const SizedBox(height: 14),
+      const SizedBox(height: 8),
+      Text(
+        'Desliza un archivo hacia la izquierda para quitarlo del gestor.',
+        style: AppTextStyles.body(fontSize: 11.5, color: AppColors.textMuted),
+      ),
+      const SizedBox(height: 12),
       if (visible.isEmpty)
         _note(
           _query.isNotEmpty
@@ -362,21 +367,116 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
     return [for (final e in entries) e.widget];
   }
 
-  Widget _tile(TgFile file, {List<TgFile>? queue, String? title}) => _FileTile(
-    file: file,
-    title: title,
-    onDownload: () => _files.download(file),
-    onPause: () => _files.pause(file),
-    onPlay: () => _play(file, queue),
-    onRead: () => openBookReader(
-      context,
-      chatId: 0,
-      msgId: file.messageId,
-      title: file.title,
-      localPath: file.localPath,
-    ),
-    onRemove: () => _confirmRemove(file),
+  Widget _tile(TgFile file, {List<TgFile>? queue, String? title}) => _removable(
+    key: 'f:${file.messageId}',
+    files: [file],
+    label: title ?? file.title,
+    child: _fileTile(file, queue: queue, title: title),
   );
+
+  Widget _fileTile(TgFile file, {List<TgFile>? queue, String? title}) =>
+      _FileTile(
+        file: file,
+        title: title,
+        onDownload: () => _files.download(file),
+        onPause: () => _files.pause(file),
+        onPlay: () => _play(file, queue),
+        onRead: () => openBookReader(
+          context,
+          chatId: 0,
+          msgId: file.messageId,
+          title: file.title,
+          localPath: file.localPath,
+        ),
+        onRemove: () => _confirmRemove(file),
+      );
+
+  /// Deslizar a la izquierda = quitar del gestor. Si hay algo en el
+  /// teléfono se confirma (se borra); si no, se puede deshacer.
+  Widget _removable({
+    required String key,
+    required List<TgFile> files,
+    required String label,
+    required Widget child,
+  }) {
+    final local = files.any((f) => f.completed || f.downloaded > 0);
+    final received = files.any((f) => f.fileId < 0);
+    return Dismissible(
+      key: ValueKey(key),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 22),
+        decoration: BoxDecoration(
+          color: AppColors.danger.withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(AppRadii.md),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Quitar',
+              style: AppTextStyles.body(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.danger,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(LucideIcons.eyeOff, color: AppColors.danger, size: 20),
+          ],
+        ),
+      ),
+      confirmDismiss: (_) async {
+        if (!local && !received) return true;
+        return await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Quitar del gestor'),
+                content: Text(
+                  received
+                      ? '$label se borrará de tu teléfono y del gestor. Lo '
+                            'recibiste por Wi-Fi: para tenerlo otra vez '
+                            'tendrás que volver a recibirlo.'
+                      : '$label se quitará del gestor y lo descargado se '
+                            'borrará de tu teléfono. Sigue en el chat del bot.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Cancelar'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: const Text('Quitar'),
+                  ),
+                ],
+              ),
+            ) ??
+            false;
+      },
+      onDismissed: (_) {
+        final messenger = ScaffoldMessenger.of(context);
+        unawaited(_files.hide(files));
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text('Quitado: $label'),
+              persist: false,
+              duration: const Duration(seconds: 4),
+              action: received
+                  ? null
+                  : SnackBarAction(
+                      label: 'Deshacer',
+                      onPressed: () => _files.unhide(files),
+                    ),
+            ),
+          );
+      },
+      child: child,
+    );
+  }
 
   /// Tarjeta de una serie: carátula, episodios y cuántos están en el
   /// teléfono; al tocarla se despliegan los episodios.
@@ -393,94 +493,99 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
     );
     final count = group.episodes.length;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceSecondary,
-        borderRadius: BorderRadius.circular(AppRadii.md),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(AppRadii.md),
-            onTap: () => setState(() {
-              if (!_expanded.remove(key)) _expanded.add(key);
-            }),
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: SizedBox(
-                      width: 46,
-                      height: 66,
-                      child: poster.isEmpty
-                          ? placeholder
-                          : AppCachedImage(
-                              imageUrl: poster,
-                              placeholder: placeholder,
-                              errorWidget: placeholder,
+    return _removable(
+      key: 'serie:${group.title}',
+      files: group.episodes,
+      label: group.title,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surfaceSecondary,
+          borderRadius: BorderRadius.circular(AppRadii.md),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          children: [
+            InkWell(
+              borderRadius: BorderRadius.circular(AppRadii.md),
+              onTap: () => setState(() {
+                if (!_expanded.remove(key)) _expanded.add(key);
+              }),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: SizedBox(
+                        width: 46,
+                        height: 66,
+                        child: poster.isEmpty
+                            ? placeholder
+                            : AppCachedImage(
+                                imageUrl: poster,
+                                placeholder: placeholder,
+                                errorWidget: placeholder,
+                              ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            group.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.body(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
                             ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          group.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.body(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '$count ${count == 1 ? 'episodio' : 'episodios'} · '
-                          '${group.downloadedCount} en el teléfono',
-                          style: AppTextStyles.body(
-                            fontSize: 12,
-                            color: group.downloadedCount == count
-                                ? AppColors.success
-                                : AppColors.textSecondary,
+                          const SizedBox(height: 4),
+                          Text(
+                            '$count ${count == 1 ? 'episodio' : 'episodios'} · '
+                            '${group.downloadedCount} en el teléfono',
+                            style: AppTextStyles.body(
+                              fontSize: 12,
+                              color: group.downloadedCount == count
+                                  ? AppColors.success
+                                  : AppColors.textSecondary,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  if (pending.isNotEmpty)
-                    _RoundAction(
-                      icon: LucideIcons.arrowDownToLine,
-                      tooltip: 'Descargar los ${pending.length} pendientes',
-                      onTap: () => _confirmDownloadAll(group, pending),
+                    if (pending.isNotEmpty)
+                      _RoundAction(
+                        icon: LucideIcons.arrowDownToLine,
+                        tooltip: 'Descargar los ${pending.length} pendientes',
+                        onTap: () => _confirmDownloadAll(group, pending),
+                      ),
+                    const SizedBox(width: 6),
+                    Icon(
+                      open ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                      size: 20,
+                      color: AppColors.textSecondary,
                     ),
-                  const SizedBox(width: 6),
-                  Icon(
-                    open ? LucideIcons.chevronUp : LucideIcons.chevronDown,
-                    size: 20,
-                    color: AppColors.textSecondary,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (open)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-              child: Column(
-                children: [
-                  for (final e in group.episodes) ...[
-                    _tile(e, queue: group.episodes, title: _episodeTitle(e)),
-                    const SizedBox(height: 6),
                   ],
-                ],
+                ),
               ),
             ),
-        ],
+            if (open)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                child: Column(
+                  children: [
+                    for (final e in group.episodes) ...[
+                      _tile(e, queue: group.episodes, title: _episodeTitle(e)),
+                      const SizedBox(height: 6),
+                    ],
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

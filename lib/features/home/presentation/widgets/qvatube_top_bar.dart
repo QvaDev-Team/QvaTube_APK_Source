@@ -49,9 +49,10 @@ class QvaTopBar extends ConsumerWidget {
           child: SafeArea(
             bottom: false,
             child: Padding(
-              // Mismo margen a los dos lados: el avatar no queda pegado a
-              // la esquina.
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              // El dibujo del logo empieza ~25 dp del borde (16 de margen +
+              // el espacio transparente de la imagen): el avatar queda a la
+              // misma distancia del borde derecho.
+              padding: const EdgeInsets.fromLTRB(16, 8, 25, 8),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [

@@ -135,6 +135,56 @@ class TelegramFiles extends ChangeNotifier {
   TelegramFiles._() {
     // Lo recibido por Wi-Fi aparece en el gestor junto a lo del bot.
     ReceivedStore.instance.addListener(notifyListeners);
+    unawaited(_loadHidden());
+  }
+
+  // ── Quitados del gestor ───────────────────────────────────────────────
+
+  static const String _hiddenKey = 'qvatube.telegram_hidden';
+
+  /// Mensajes del chat del bot que el usuario quitó del gestor (siguen en
+  /// Telegram; solo dejan de verse aquí).
+  final Set<int> _hidden = {};
+
+  Future<void> _loadHidden() async {
+    final prefs = await SharedPreferences.getInstance();
+    _hidden.addAll(
+      (prefs.getStringList(_hiddenKey) ?? const [])
+          .map(int.tryParse)
+          .whereType<int>(),
+    );
+    if (_hidden.isNotEmpty) notifyListeners();
+  }
+
+  Future<void> _saveHidden() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_hiddenKey, [for (final id in _hidden) '$id']);
+  }
+
+  /// Quita archivos del gestor. Lo descargado se borra del teléfono; lo
+  /// recibido por Wi-Fi se borra del todo (no está en el chat del bot).
+  Future<void> hide(Iterable<TgFile> files) async {
+    for (final f in files.toList()) {
+      if (f.fileId < 0) {
+        await ReceivedStore.instance.delete(f);
+        continue;
+      }
+      if (f.downloading) await pause(f);
+      if (f.downloaded > 0 || f.completed) await remove(f);
+      _hidden.add(f.messageId);
+    }
+    await _saveHidden();
+    notifyListeners();
+  }
+
+  /// Deshace [hide] (solo lo del bot; lo borrado del teléfono se puede
+  /// volver a descargar).
+  Future<void> unhide(Iterable<TgFile> files) async {
+    for (final f in files) {
+      _hidden.remove(f.messageId);
+    }
+    await _saveHidden();
+    notifyListeners();
   }
 
   static final TelegramFiles instance = TelegramFiles._();
@@ -152,8 +202,11 @@ class TelegramFiles extends ChangeNotifier {
   String? _error;
   int? _botChatId;
 
-  List<TgFile> get files =>
-      List.unmodifiable([..._files, ...ReceivedStore.instance.asTgFiles]);
+  List<TgFile> get files => List.unmodifiable([
+    for (final f in _files)
+      if (!_hidden.contains(f.messageId)) f,
+    ...ReceivedStore.instance.asTgFiles,
+  ]);
   bool get loading => _loading;
   String? get error => _error;
 

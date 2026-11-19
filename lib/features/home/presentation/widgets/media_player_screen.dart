@@ -476,6 +476,7 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
       }
 
       final options = VideoPlayerOptions(allowBackgroundPlayback: true);
+      QvaVideoPlayerPlatform.audioOnlyNext = item.isAudio;
       final controller = local != null
           ? VideoPlayerController.file(local, videoPlayerOptions: options)
           : VideoPlayerController.networkUrl(
