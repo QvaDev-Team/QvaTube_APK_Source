@@ -6,9 +6,12 @@ name: Escritorio (Windows, Linux, macOS)
 #
 # Cuándo corre (el repo es privado: los minutos de macOS cuentan x10 y los
 # de Windows x2, así que NO se compila en cada push como el APK):
-#   - push a main que cambia pubspec.yaml (al subir la versión) → compila y
-#     publica.
+#   - push a main que cambia pubspec.yaml (al subir la versión) → compila
+#     Windows y Linux y publica.
 #   - a mano (Actions → "Run workflow") → compila y publica si es main.
+#     macOS SOLO se compila a mano, marcando "macos" (cada build de Mac son
+#     ~20 min x10 = ~200 min de cuota). Al publicar sin Mac se conserva el
+#     .dmg que ya estaba en la release.
 #   - push a otra rama que toca la parte de escritorio → solo compila, para
 #     probar sin publicar.
 on:
@@ -22,6 +25,11 @@ on:
       - tool/escritorio/**
       - .github/workflows/escritorio.yml
   workflow_dispatch:
+    inputs:
+      macos:
+        description: 'Compilar también macOS (.dmg) — gasta ~200 min de cuota'
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -178,6 +186,8 @@ jobs:
   macos:
     name: macOS (.dmg)
     needs: version
+    # Solo a mano y con la casilla "macos" marcada (minutos x10).
+    if: github.event_name == 'workflow_dispatch' && inputs.macos
     # Mac Intel: los Apple Silicon (macos-latest) suelen no tener capacidad
     # y el job se cancela sin empezar. El build de release de Flutter es
     # universal igual (Intel + Apple Silicon).
@@ -254,10 +264,17 @@ jobs:
           # Sumas de verificación para comprobar que una descarga llegó entera.
           (cd dist && sha256sum QvaTube-* > SHA256SUMS.txt && cat SHA256SUMS.txt)
           MAC_ROW=""
+          KEEP_DMG=""
           if ls dist/*.dmg >/dev/null 2>&1; then
             MAC_ROW="| **macOS** 12+ (Intel y Apple Silicon) | \`QvaTube-$VERSION-macos.dmg\` |"
           else
-            echo "::warning::Sin build de macOS: se publica solo Windows y Linux."
+            # Sin build de Mac en esta versión: se deja el .dmg anterior.
+            KEEP_DMG=$(gh release view "$RELEASE_TAG" --repo "$DIST_REPO" --json assets \
+              --jq '.assets[].name | select(endswith(".dmg"))' 2>/dev/null | head -1 || true)
+            if [ -n "$KEEP_DMG" ]; then
+              MAC_ROW="| **macOS** 12+ (Intel y Apple Silicon) | \`$KEEP_DMG\` (versión anterior) |"
+            fi
+            echo "::notice::Sin build de macOS: se publica Windows y Linux${KEEP_DMG:+ y se conserva $KEEP_DMG}."
           fi
           NOTES=$(cat <<EOF
           ## QvaTube $VERSION para escritorio
@@ -281,6 +298,7 @@ jobs:
             # Se borran los instaladores anteriores y se suben los nuevos.
             gh release view "$RELEASE_TAG" --repo "$DIST_REPO" --json assets --jq '.assets[].name' \
               | while read -r name; do
+                  [ -n "$KEEP_DMG" ] && [ "$name" = "$KEEP_DMG" ] && continue
                   gh release delete-asset "$RELEASE_TAG" "$name" --repo "$DIST_REPO" --yes
                 done
             gh release edit "$RELEASE_TAG" --repo "$DIST_REPO" \
