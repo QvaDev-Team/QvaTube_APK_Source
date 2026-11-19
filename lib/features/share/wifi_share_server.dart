@@ -27,6 +27,13 @@ class WifiShareServer extends ChangeNotifier {
   final Set<String> peers = {};
 
   String pin = '';
+
+  /// Red del punto de acceso local creado al compartir (o null).
+  String? hotspotSsid;
+  String? hotspotPassword;
+
+  /// Por qué no se pudo crear (`permission`, `location_off`…).
+  String? hotspotError;
   List<String> addresses = const [];
 
   bool get running => _server != null;
@@ -45,6 +52,28 @@ class WifiShareServer extends ChangeNotifier {
       _items[id] = (item: ShareItem.fromTgFile(id, f), path: f.localPath);
     }
     pin = (Random.secure().nextInt(9000) + 1000).toString();
+    // Punto de acceso local: el otro teléfono se conecta a él al escanear
+    // el QR, sin necesitar un router ni ir a los ajustes de Wi-Fi.
+    hotspotSsid = null;
+    hotspotPassword = null;
+    hotspotError = null;
+    if (Platform.isAndroid) {
+      if (await DeviceChannel.shareHotspotPermission()) {
+        final hs = await DeviceChannel.startShareHotspot();
+        hotspotError = hs.error;
+        if (hs.error == null && (hs.ssid ?? '').isNotEmpty) {
+          hotspotSsid = hs.ssid;
+          hotspotPassword = hs.password;
+          // La interfaz del punto de acceso tarda un momento en tener IP.
+          for (var i = 0; i < 10; i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 300));
+            if ((await localAddresses()).isNotEmpty) break;
+          }
+        }
+      } else {
+        hotspotError = 'permission';
+      }
+    }
     addresses = await localAddresses();
 
     final server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
@@ -60,6 +89,7 @@ class WifiShareServer extends ChangeNotifier {
       (_) => _announce(),
     );
     await DeviceChannel.setKeepScreenOn(true);
+    await _updateNotification();
     notifyListeners();
   }
 
@@ -71,6 +101,10 @@ class WifiShareServer extends ChangeNotifier {
     final s = _server;
     _server = null;
     await s?.close(force: true);
+    if (hotspotSsid != null) await DeviceChannel.stopShareHotspot();
+    await DeviceChannel.shareNotification(on: false);
+    hotspotSsid = null;
+    hotspotPassword = null;
     await DeviceChannel.setKeepScreenOn(false);
     notifyListeners();
   }
@@ -115,7 +149,10 @@ class WifiShareServer extends ChangeNotifier {
         return;
       }
       final peer = req.connectionInfo?.remoteAddress.address;
-      if (peer != null && peers.add(peer)) notifyListeners();
+      if (peer != null && peers.add(peer)) {
+        notifyListeners();
+        unawaited(_updateNotification());
+      }
 
       final segments = req.uri.pathSegments;
       if (segments.length == 1 && segments.first == 'manifest') {
@@ -181,6 +218,22 @@ class WifiShareServer extends ChangeNotifier {
     );
     await res.close();
     notifyListeners();
+  }
+
+  /// Notificación fija: red creada, PIN y si ya hay alguien conectado.
+  Future<void> _updateNotification() async {
+    final n = _items.length;
+    final what = n == 1 ? '1 archivo' : '$n archivos';
+    final who = peers.isEmpty
+        ? 'PIN $pin · esperando al otro teléfono'
+        : peers.length == 1
+        ? 'Un teléfono conectado'
+        : '${peers.length} teléfonos conectados';
+    await DeviceChannel.shareNotification(
+      on: true,
+      network: hotspotSsid,
+      text: '$what · $who',
+    );
   }
 
   /// IPs locales (IPv4) de Wi-Fi o punto de acceso.

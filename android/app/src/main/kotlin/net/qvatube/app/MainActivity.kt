@@ -74,6 +74,182 @@ class MainActivity : FlutterActivity() {
     private var mediaSession: MediaSession? = null
     private var multicastLock: android.net.wifi.WifiManager.MulticastLock? = null
 
+    // ── Compartir por Wi-Fi: punto de acceso local y conexión por QR ──────
+    private val shareHotspotPermissionCode = 4327
+    private var pendingSharePermission: MethodChannel.Result? = null
+    private var hotspotReservation: android.net.wifi.WifiManager.LocalOnlyHotspotReservation? = null
+    private var shareNetworkCallback: android.net.ConnectivityManager.NetworkCallback? = null
+
+    private fun shareHotspotPermissions(): Array<String> =
+        if (Build.VERSION.SDK_INT >= 33) {
+            arrayOf(android.Manifest.permission.NEARBY_WIFI_DEVICES)
+        } else {
+            arrayOf(
+                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+        }
+
+    private fun hasShareHotspotPermission(): Boolean =
+        shareHotspotPermissions().all {
+            checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
+        }
+
+    /** Pide el permiso para crear el punto de acceso local (ubicación hasta
+     *  Android 12, "Dispositivos cercanos" desde Android 13). */
+    private fun requestShareHotspotPermission(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || hasShareHotspotPermission()) {
+            result.success(true)
+            return
+        }
+        pendingSharePermission?.success(false)
+        pendingSharePermission = result
+        requestPermissions(shareHotspotPermissions(), shareHotspotPermissionCode)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == shareHotspotPermissionCode) {
+            pendingSharePermission?.success(hasShareHotspotPermission())
+            pendingSharePermission = null
+        }
+    }
+
+    /** Crea el punto de acceso local de Android (red propia con nombre y
+     *  contraseña aleatorios, sin internet) y devuelve sus datos. */
+    @SuppressLint("MissingPermission")
+    private fun startShareHotspot(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            result.success(mapOf("error" to "unsupported"))
+            return
+        }
+        if (!hasShareHotspotPermission()) {
+            result.success(mapOf("error" to "permission"))
+            return
+        }
+        stopShareHotspot()
+        val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+        var answered = false
+        fun answer(value: Map<String, Any?>) {
+            if (answered) return
+            answered = true
+            runOnUiThread { result.success(value) }
+        }
+        try {
+            wm.startLocalOnlyHotspot(object : android.net.wifi.WifiManager.LocalOnlyHotspotCallback() {
+                override fun onStarted(reservation: android.net.wifi.WifiManager.LocalOnlyHotspotReservation) {
+                    hotspotReservation = reservation
+                    var ssid = ""
+                    var password = ""
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        val c = reservation.softApConfiguration
+                        @Suppress("DEPRECATION")
+                        ssid = if (Build.VERSION.SDK_INT >= 33) {
+                            c.wifiSsid?.toString()?.trim('"') ?: ""
+                        } else {
+                            c.ssid ?: ""
+                        }
+                        password = c.passphrase ?: ""
+                    } else {
+                        @Suppress("DEPRECATION")
+                        val c = reservation.wifiConfiguration
+                        @Suppress("DEPRECATION")
+                        ssid = c?.SSID?.trim('"') ?: ""
+                        @Suppress("DEPRECATION")
+                        password = c?.preSharedKey?.trim('"') ?: ""
+                    }
+                    answer(mapOf("ssid" to ssid, "password" to password))
+                }
+
+                override fun onFailed(reason: Int) {
+                    answer(mapOf("error" to "failed_$reason"))
+                }
+
+                override fun onStopped() {
+                    hotspotReservation = null
+                }
+            }, android.os.Handler(mainLooper))
+        } catch (e: SecurityException) {
+            // Hasta Android 12 exige la ubicación activada.
+            answer(mapOf("error" to "location_off"))
+        } catch (e: Exception) {
+            answer(mapOf("error" to (e.message ?: "error")))
+        }
+    }
+
+    private fun stopShareHotspot() {
+        try {
+            hotspotReservation?.close()
+        } catch (_: Exception) {
+        }
+        hotspotReservation = null
+    }
+
+    /** Se conecta a la red del QR (Android 10+). Android muestra una
+     *  confirmación; al aceptar, el tráfico de la app va por esa red. */
+    private fun connectShareWifi(ssid: String, password: String, result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || ssid.isBlank()) {
+            result.success("unsupported")
+            return
+        }
+        disconnectShareWifi()
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val specifier = android.net.wifi.WifiNetworkSpecifier.Builder()
+            .setSsid(ssid)
+            .apply { if (password.isNotEmpty()) setWpa2Passphrase(password) }
+            .build()
+        val request = android.net.NetworkRequest.Builder()
+            .addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI)
+            .removeCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .setNetworkSpecifier(specifier)
+            .build()
+        var answered = false
+        fun answer(value: String) {
+            if (answered) return
+            answered = true
+            runOnUiThread { result.success(value) }
+        }
+        val callback = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) {
+                cm.bindProcessToNetwork(network)
+                answer("connected")
+            }
+
+            override fun onUnavailable() {
+                answer("unavailable")
+            }
+
+            override fun onLost(network: android.net.Network) {
+                cm.bindProcessToNetwork(null)
+            }
+        }
+        shareNetworkCallback = callback
+        try {
+            cm.requestNetwork(request, callback, 60_000)
+        } catch (e: Exception) {
+            answer("error")
+        }
+    }
+
+    private fun disconnectShareWifi() {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        try {
+            cm.bindProcessToNetwork(null)
+        } catch (_: Exception) {
+        }
+        shareNetworkCallback?.let {
+            try {
+                cm.unregisterNetworkCallback(it)
+            } catch (_: Exception) {
+            }
+        }
+        shareNetworkCallback = null
+    }
+
     // Carátula de la notificación multimedia (póster, carátula del disco…).
     // Se descarga una vez por URL en segundo plano; mientras tanto la
     // notificación sale sin imagen y se vuelve a publicar al llegar.
@@ -98,6 +274,10 @@ class MainActivity : FlutterActivity() {
                 actionNext -> "next"
                 actionPrev -> "previous"
                 actionStop -> "stop"
+                ShareService.ACTION_STOP_SHARE -> {
+                    methodChannel?.invokeMethod("onShareStop", null)
+                    return
+                }
                 else -> return
             }
             methodChannel?.invokeMethod("onMediaAction", mapOf("action" to cmd))
@@ -224,6 +404,9 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        ShareService.stop(applicationContext)
+        stopShareHotspot()
+        disconnectShareWifi()
         pdfExecutor.execute { PdfPages.close() }
         clearMediaNotification()
         unregisterMediaReceiver()
@@ -252,6 +435,33 @@ class MainActivity : FlutterActivity() {
                     } else {
                         result.error("open_url", "Ninguna app puede abrir $url", null)
                     }
+                }
+                "shareHotspotPermission" -> requestShareHotspotPermission(result)
+                "startShareHotspot" -> startShareHotspot(result)
+                "stopShareHotspot" -> {
+                    stopShareHotspot()
+                    result.success(true)
+                }
+                "shareNotification" -> {
+                    if (call.argument<Boolean>("on") == true) {
+                        ShareService.start(
+                            applicationContext,
+                            call.argument<String>("network"),
+                            call.argument<String>("text")
+                        )
+                    } else {
+                        ShareService.stop(applicationContext)
+                    }
+                    result.success(true)
+                }
+                "connectShareWifi" -> {
+                    val ssid = call.argument<String>("ssid") ?: ""
+                    val password = call.argument<String>("password") ?: ""
+                    connectShareWifi(ssid, password, result)
+                }
+                "disconnectShareWifi" -> {
+                    disconnectShareWifi()
+                    result.success(true)
                 }
                 "wifiMulticastLock" -> {
                     // Compartir por Wi-Fi: sin este bloqueo muchos Android
@@ -626,6 +836,7 @@ class MainActivity : FlutterActivity() {
             addAction(actionNext)
             addAction(actionPrev)
             addAction(actionStop)
+            addAction(ShareService.ACTION_STOP_SHARE)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(mediaActionReceiver, filter, Context.RECEIVER_NOT_EXPORTED)

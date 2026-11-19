@@ -23,6 +23,8 @@ abstract final class WifiShareProtocol {
 /// sin escribir el PIN ni esperar al descubrimiento UDP.
 ///
 /// Formato: `qvatube://share?h=192.168.43.1,192.168.1.5&p=40123&k=4821&n=Roger`
+/// `&s=<red>&w=<clave>` si el que envía creó su punto de acceso local: el
+/// que recibe se conecta a esa red solo, sin ir a los ajustes de Wi-Fi.
 @immutable
 class ShareQrPayload {
   const ShareQrPayload({
@@ -30,7 +32,13 @@ class ShareQrPayload {
     required this.port,
     required this.pin,
     required this.name,
+    this.ssid,
+    this.password,
   });
+
+  /// Red Wi-Fi del punto de acceso del que envía (si lo creó).
+  final String? ssid;
+  final String? password;
 
   final List<String> hosts;
   final int port;
@@ -45,6 +53,8 @@ class ShareQrPayload {
       'p': '$port',
       'k': pin,
       if (name.isNotEmpty) 'n': name,
+      if (ssid != null && ssid!.isNotEmpty) 's': ssid!,
+      if (password != null && password!.isNotEmpty) 'w': password!,
     },
   ).toString();
 
@@ -73,6 +83,8 @@ class ShareQrPayload {
       port: port,
       pin: pin,
       name: name.isEmpty ? hosts.first : name,
+      ssid: uri.queryParameters['s'],
+      password: uri.queryParameters['w'],
     );
   }
 }

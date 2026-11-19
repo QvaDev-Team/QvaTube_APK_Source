@@ -1,5 +1,9 @@
 # Novedades de QvaTube
 
+## 2.2.2
+- Compartir por Wi-Fi sin router: tu teléfono crea su propia red y el otro se conecta solo al escanear el código QR (Android le pide confirmar).
+- Mientras compartes verás una notificación con la red y el PIN, con el botón "Dejar de compartir".
+
 ## 2.2.1
 - Ya puedes poner tu foto de perfil desde la app: antes daba el error "Falta la imagen".
 

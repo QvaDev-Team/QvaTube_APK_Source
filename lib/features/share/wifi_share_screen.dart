@@ -109,6 +109,7 @@ class _SendTabState extends ConsumerState<_SendTab>
 
   @override
   void dispose() {
+    DeviceChannel.setShareStopListener(null);
     _server?.dispose();
     super.dispose();
   }
@@ -135,9 +136,14 @@ class _SendTabState extends ConsumerState<_SendTab>
       return;
     }
     setState(() => _server = server);
+    // "Dejar de compartir" desde la notificación.
+    DeviceChannel.setShareStopListener(() {
+      if (mounted) unawaited(_stop());
+    });
   }
 
   Future<void> _stop() async {
+    DeviceChannel.setShareStopListener(null);
     final s = _server;
     setState(() => _server = null);
     await s?.stop();
@@ -281,6 +287,8 @@ class _SendTabState extends ConsumerState<_SendTab>
             port: server.port,
             pin: server.pin,
             name: server.deviceName,
+            ssid: server.hotspotSsid,
+            password: server.hotspotPassword,
           ).toUriString();
 
     return ListView(
@@ -368,6 +376,29 @@ class _SendTabState extends ConsumerState<_SendTab>
           '(o toca "${server.deviceName}" y escribe el PIN).',
         ),
         const SizedBox(height: 10),
+        if (server.hotspotSsid != null) ...[
+          _hint(
+            LucideIcons.wifi,
+            'Tu teléfono creó la red "${server.hotspotSsid}". El otro se '
+            'conecta solo al escanear el QR (Android le pide confirmar).',
+          ),
+          const SizedBox(height: 10),
+        ] else if (server.hotspotError == 'permission') ...[
+          _hint(
+            LucideIcons.triangleAlert,
+            'Sin el permiso de dispositivos cercanos / ubicación no se puede '
+            'crear la red para que el otro se conecte solo. Estén en la misma '
+            'red Wi-Fi o activa tu punto de acceso.',
+          ),
+          const SizedBox(height: 10),
+        ] else if (server.hotspotError == 'location_off') ...[
+          _hint(
+            LucideIcons.triangleAlert,
+            'Activa la ubicación del teléfono y vuelve a compartir para que el '
+            'otro se conecte solo al escanear el QR.',
+          ),
+          const SizedBox(height: 10),
+        ],
         if (server.addresses.isEmpty)
           _hint(
             LucideIcons.triangleAlert,
@@ -505,8 +536,12 @@ class _ReceiveTabState extends State<_ReceiveTab>
   void dispose() {
     _client.removeListener(_changed);
     _client.dispose();
+    // Se suelta la red del punto de acceso del otro teléfono.
+    if (_joinedHotspot) unawaited(DeviceChannel.disconnectShareWifi());
     super.dispose();
   }
+
+  bool _joinedHotspot = false;
 
   Future<void> _connect(String host, int port, String name) async {
     final pin = await _askPin(name);
@@ -564,11 +599,49 @@ class _ReceiveTabState extends State<_ReceiveTab>
     }
   }
 
+  /// `true` si alguna IP del QR está en la misma red que este teléfono.
+  static Future<bool> _sameNetwork(List<String> hosts) async {
+    String prefix(String ip) => ip.replaceFirst(RegExp(r'\.\d+$'), '');
+    final mine = (await WifiShareServer.localAddresses()).map(prefix).toSet();
+    return hosts.any((h) => mine.contains(prefix(h)));
+  }
+
   Future<void> _scanQr() async {
     final payload = await Navigator.of(context).push<ShareQrPayload>(
       MaterialPageRoute(builder: (_) => const WifiShareQrScannerScreen()),
     );
     if (payload == null || !mounted) return;
+    // Si el que envía creó su punto de acceso y no estamos ya en su red,
+    // nos conectamos solos (Android pide una confirmación).
+    final ssid = payload.ssid;
+    if (ssid != null && ssid.isNotEmpty && !await _sameNetwork(payload.hosts)) {
+      if (!mounted) return;
+      setState(() => _loading = true);
+      _snack('Conectando a la red de ${payload.name}…');
+      final r = await DeviceChannel.connectShareWifi(
+        ssid,
+        payload.password ?? '',
+      );
+      if (!mounted) return;
+      setState(() => _loading = false);
+      if (r == 'connected') {
+        _joinedHotspot = true;
+        // Unos segundos hasta tener IP en la red nueva.
+        await Future<void>.delayed(const Duration(seconds: 2));
+      } else if (r == 'unsupported') {
+        _snack(
+          'Tu Android no permite conectarse solo. Conéctate a la red Wi-Fi '
+          '"$ssid" en los ajustes y vuelve a escanear.',
+        );
+        return;
+      } else {
+        _snack(
+          'No se conectó a la red de ${payload.name}. Vuelve a intentarlo.',
+        );
+        return;
+      }
+    }
+    if (!mounted) return;
     await _connectWithPin(
       payload.hosts,
       payload.port,

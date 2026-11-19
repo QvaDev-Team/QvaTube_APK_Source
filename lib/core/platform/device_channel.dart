@@ -38,12 +38,42 @@ abstract final class DeviceChannel {
     _ensureHandler();
   }
 
+  static void Function()? _shareStopListener;
+
+  /// "Dejar de compartir" desde la notificación de Compartir por Wi-Fi.
+  static void setShareStopListener(void Function()? listener) {
+    _shareStopListener = listener;
+    _ensureHandler();
+  }
+
+  /// Notificación fija mientras se comparte por Wi-Fi ([on] false la quita).
+  static Future<void> shareNotification({
+    required bool on,
+    String? network,
+    String? text,
+  }) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('shareNotification', {
+        'on': on,
+        'network': network,
+        'text': text,
+      });
+    } on PlatformException {
+      // ignorar
+    } on MissingPluginException {
+      // ignorar
+    }
+  }
+
   static void _ensureHandler() {
     if (!_handlerInitialized) {
       _handlerInitialized = true;
       _channel.setMethodCallHandler((call) async {
         if (call.method == 'onUpdateNotificationTap') {
           _updateTapListener?.call();
+        } else if (call.method == 'onShareStop') {
+          _shareStopListener?.call();
         } else if (call.method == 'onMediaAction') {
           final args = call.arguments;
           if (args is Map) {
@@ -175,6 +205,84 @@ abstract final class DeviceChannel {
   /// devuelve el comportamiento normal (`false`). Solo Android.
   /// Compartir por Wi-Fi: deja pasar los anuncios UDP de la red. Solo
   /// Android.
+  // ── Compartir por Wi-Fi: punto de acceso local + conexión por QR ──────
+
+  /// Pide el permiso para crear el punto de acceso (ubicación hasta
+  /// Android 12, "Dispositivos cercanos" desde Android 13).
+  static Future<bool> shareHotspotPermission() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _channel.invokeMethod<bool>('shareHotspotPermission') ??
+          false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  /// Crea el punto de acceso local. `ssid`/`password` o `error`
+  /// (`permission`, `location_off`, `unsupported`, `failed_N`).
+  static Future<({String? ssid, String? password, String? error})>
+  startShareHotspot() async {
+    if (!Platform.isAndroid) {
+      return (ssid: null, password: null, error: 'unsupported');
+    }
+    try {
+      final r = await _channel.invokeMapMethod<String, dynamic>(
+        'startShareHotspot',
+      );
+      return (
+        ssid: r?['ssid'] as String?,
+        password: r?['password'] as String?,
+        error: r?['error'] as String?,
+      );
+    } on PlatformException catch (e) {
+      return (ssid: null, password: null, error: e.message ?? 'error');
+    } on MissingPluginException {
+      return (ssid: null, password: null, error: 'unsupported');
+    }
+  }
+
+  static Future<void> stopShareHotspot() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('stopShareHotspot');
+    } on PlatformException {
+      // ignorar
+    } on MissingPluginException {
+      // ignorar
+    }
+  }
+
+  /// Se conecta a la red Wi-Fi del QR. `connected`, `unavailable`
+  /// (el usuario no aceptó o no está cerca), `unsupported` (< Android 10).
+  static Future<String> connectShareWifi(String ssid, String password) async {
+    if (!Platform.isAndroid) return 'unsupported';
+    try {
+      return await _channel.invokeMethod<String>('connectShareWifi', {
+            'ssid': ssid,
+            'password': password,
+          }) ??
+          'error';
+    } on PlatformException {
+      return 'error';
+    } on MissingPluginException {
+      return 'unsupported';
+    }
+  }
+
+  static Future<void> disconnectShareWifi() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('disconnectShareWifi');
+    } on PlatformException {
+      // ignorar
+    } on MissingPluginException {
+      // ignorar
+    }
+  }
+
   static Future<void> wifiMulticastLock(bool on) async {
     if (!Platform.isAndroid) return;
     try {

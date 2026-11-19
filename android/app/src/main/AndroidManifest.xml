@@ -13,6 +13,14 @@
     <!-- Compartir por Wi-Fi: encontrar otros teléfonos con QvaTube en la red. -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
+    <!-- Compartir por Wi-Fi: el que envía crea un punto de acceso local y el
+         que recibe se conecta a él al escanear el QR. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="32"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="32"/>
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation"/>
     <!-- Compartir por Wi-Fi: escanear código QR sin escribir PIN ni IP. -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
@@ -122,6 +130,11 @@
         <!-- Descarga de actualizaciones en segundo plano (UpdateDownloadService). -->
         <service
             android:name=".UpdateDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+        <!-- Compartir por Wi-Fi: notificación fija mientras se comparte. -->
+        <service
+            android:name=".ShareService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
         <!-- Descargas de archivos de Telegram (TDLib) en segundo plano. -->
