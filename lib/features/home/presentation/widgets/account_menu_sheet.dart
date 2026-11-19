@@ -164,7 +164,9 @@ class _AccountMenuSheet extends ConsumerWidget {
                 ),
                 // Gestor de archivos del bot (solo en APK con claves de
                 // Telegram y en teléfonos ARM).
-                if (TelegramService.isAvailable)
+                // En escritorio también: ahí no hay Telegram (aún), pero sí
+                // Compartir por Wi-Fi y lo recibido de otros teléfonos.
+                if (TelegramService.isAvailable || DeviceChannel.isDesktop)
                   _MenuTile(
                     icon: Icons.download_for_offline_outlined,
                     label: 'Gestor de descargas',

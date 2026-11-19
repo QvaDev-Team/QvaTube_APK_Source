@@ -245,7 +245,14 @@ class WifiShareServer extends ChangeNotifier {
       final out = <String>[];
       for (final i in ifaces) {
         // rmnet/ccmni = datos móviles: no sirven para compartir.
-        if (RegExp(r'^(rmnet|ccmni|dummy|lo)').hasMatch(i.name)) continue;
+        // rmnet/ccmni = datos móviles; tun/wg/proton/tailscale/ppp = VPN:
+        // por ahí el otro teléfono no puede llegar.
+        if (RegExp(
+          r'^(rmnet|ccmni|dummy|lo|tun|tap|wg|proton|tailscale|utun|ppp|ipsec|zt|docker|veth|br-|virbr)',
+          caseSensitive: false,
+        ).hasMatch(i.name)) {
+          continue;
+        }
         for (final a in i.addresses) {
           if (!a.isLoopback) out.add(a.address);
         }

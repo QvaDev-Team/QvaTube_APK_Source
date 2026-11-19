@@ -506,8 +506,47 @@ abstract final class DeviceChannel {
     }
   }
 
+  /// Carpeta de datos de la app en escritorio (no la temporal: ahí van la
+  /// sesión de Telegram, las descargas y lo recibido por Wi-Fi, que el
+  /// sistema podría borrar).
+  ///   Windows: %APPDATA%\QvaTube · Linux: ~/.local/share/QvaTube
+  ///   macOS: ~/Library/Application Support/QvaTube
+  static String? _desktopDataDir;
+
+  static String? desktopDataDirectory() {
+    if (!isDesktop) return null;
+    final cached = _desktopDataDir;
+    if (cached != null) return cached;
+    final env = Platform.environment;
+    String? base;
+    if (Platform.isWindows) {
+      base = env['APPDATA'] ?? env['LOCALAPPDATA'];
+      if (base != null) base = '$base\\QvaTube';
+    } else if (Platform.isMacOS) {
+      final home = env['HOME'];
+      if (home != null) base = '$home/Library/Application Support/QvaTube';
+    } else {
+      final xdg = env['XDG_DATA_HOME'];
+      final home = env['HOME'];
+      if (xdg != null && xdg.isNotEmpty) {
+        base = '$xdg/QvaTube';
+      } else if (home != null) {
+        base = '$home/.local/share/QvaTube';
+      }
+    }
+    if (base == null) return null;
+    try {
+      Directory(base).createSync(recursive: true);
+    } catch (_) {
+      return null;
+    }
+    return _desktopDataDir = base;
+  }
+
   /// Carpeta de caché de la app (donde se descargan las actualizaciones).
   static Future<String> cacheDirectory() async {
+    final desktop = desktopDataDirectory();
+    if (desktop != null) return desktop;
     try {
       final path = await _channel.invokeMethod<String>('cacheDirectory');
       if (path != null && path.isNotEmpty) return path;

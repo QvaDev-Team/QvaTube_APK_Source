@@ -297,16 +297,28 @@ jobs:
       # "latest" del repositorio. Así el APK más reciente se descarga
       # siempre desde el mismo enlace y aparece en la portada del repo.
       # ---------------------------------------------------------------------
-      # latest.json de la release que se va a reemplazar (para saber si
-      # cambió la versión y hay que avisar por push). El repo es público.
-      - name: Guardar el manifiesto de la versión anterior
+      # latest.json de la release que se va a reemplazar: solo se publica
+      # cuando cambia `version_name` en pubspec.yaml (evita avisos de
+      # actualización repetidos al subir cambios de CI o sin bump de versión).
+      - name: Comprobar si subió la versión
+        id: release_check
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
+          set -euo pipefail
           curl -sfL "https://github.com/$DIST_REPO/releases/download/latest/latest.json" \
             -o dist/previous-latest.json || rm -f dist/previous-latest.json
+          CURR=$(jq -r '.version_name // ""' dist/latest.json)
+          PREV=$( [ -f dist/previous-latest.json ] && jq -r '.version_name // ""' dist/previous-latest.json || echo "" )
+          if [ "$CURR" != "$PREV" ]; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo ">> Nueva versión detectada: $PREV -> $CURR (se publicará)."
+          else
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo ">> Misma versión ($CURR): se omite la publicación y el aviso de actualización."
+          fi
 
       - name: Publicar la release "latest" en el repo público
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.release_check.outputs.should_publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.DIST_REPO_TOKEN }}
           TAG: latest
@@ -362,7 +374,7 @@ jobs:
       # comprobación periódica de la app. Si falla, la release ya está
       # publicada igual.
       - name: Avisar de la nueva versión por push
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.release_check.outputs.should_publish == 'true'
         continue-on-error: true
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
@@ -377,7 +389,7 @@ jobs:
       # para poder generar parches desde él en los próximos builds. Se
       # conservan solo los 5 más recientes.
       - name: Archivar el APK para futuros parches
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.release_check.outputs.should_publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.DIST_REPO_TOKEN }}
           ARCHIVE_TAG: apk-archive

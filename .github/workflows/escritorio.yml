@@ -97,7 +97,9 @@ jobs:
           flutter pub get
           flutter build linux --release \
             --build-name="$VERSION" \
-            --build-number="${{ needs.version.outputs.code }}"
+            --build-number="${{ needs.version.outputs.code }}" \
+            --dart-define=TELEGRAM_API_ID="${{ secrets.TELEGRAM_API_ID }}" \
+            --dart-define=TELEGRAM_API_HASH="${{ secrets.TELEGRAM_API_HASH }}"
       - name: Empaquetar (AppImage y .tar.gz)
         run: |
           curl -sSL -o linuxdeploy-x86_64.AppImage \
@@ -135,13 +137,21 @@ jobs:
       - name: Compilar
         run: |
           flutter pub get
-          flutter build windows --release --build-name="$env:VERSION" --build-number="${{ needs.version.outputs.code }}"
+          # Claves de Telegram (gestor de descargas): igual que el APK.
+          flutter build windows --release --build-name="$env:VERSION" --build-number="${{ needs.version.outputs.code }}" `
+            --dart-define=TELEGRAM_API_ID="${{ secrets.TELEGRAM_API_ID }}" `
+            --dart-define=TELEGRAM_API_HASH="${{ secrets.TELEGRAM_API_HASH }}"
       - name: Empaquetar (instalador y .zip portable)
         run: |
           $ErrorActionPreference = 'Stop'
           $src = "$env:GITHUB_WORKSPACE\build\windows\x64\runner\Release"
           $out = "$env:GITHUB_WORKSPACE\dist"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
+          # Runtime de Visual C++ junto al .exe: lo necesitan la app y TDLib
+          # (tdjson.dll, gestor de descargas) en PCs que no lo tengan instalado.
+          foreach ($dll in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
+            if (-not (Test-Path "$src\$dll")) { Copy-Item "$env:WINDIR\System32\$dll" "$src\$dll" }
+          }
           Compress-Archive -Path "$src\*" -DestinationPath "$out\QvaTube-$env:VERSION-windows-x64-portable.zip"
           if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) {
             choco install innosetup -y --no-progress | Out-Null

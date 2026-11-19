@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_flutter/lucide_flutter.dart';
 
+import '../../core/platform/device_channel.dart';
 import '../../core/storage/app_preferences.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text.dart';
@@ -32,6 +33,8 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
   void initState() {
     super.initState();
     _tg.addListener(_onChanged);
+    // Lo recibido por Wi-Fi aparece al momento (también sin Telegram).
+    ReceivedStore.instance.addListener(_onChanged);
     // `telegram_user_id` llega en /api/auth/me; si la sesión guardada no lo
     // tiene (verificó hace poco o venía de una versión vieja), se refresca
     // para poder comparar las cuentas.
@@ -48,6 +51,7 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
   @override
   void dispose() {
     _tg.removeListener(_onChanged);
+    ReceivedStore.instance.removeListener(_onChanged);
     _input.dispose();
     super.dispose();
   }
@@ -319,9 +323,29 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
         return [
           _info(
             LucideIcons.info,
-            'Telegram en la app no está disponible en este dispositivo. '
-            'Puedes seguir recibiendo tus descargas en el bot de Telegram '
-            'como siempre.',
+            DeviceChannel.isDesktop
+                ? 'En la computadora, tus descargas siguen llegando al bot de '
+                      'Telegram. Aquí puedes recibir películas, series y '
+                      'música desde un teléfono con QvaTube por Wi-Fi, y verlas '
+                      'sin conexión.'
+                : 'Telegram en la app no está disponible en este dispositivo. '
+                      'Puedes seguir recibiendo tus descargas en el bot de '
+                      'Telegram como siempre.',
+          ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.accent,
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(50),
+            ),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const WifiShareScreen(initialTab: 1),
+              ),
+            ),
+            icon: const Icon(LucideIcons.wifi, size: 20),
+            label: const Text('Compartir por Wi-Fi'),
           ),
         ];
       case TgStage.disconnected:

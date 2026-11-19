@@ -16,9 +16,13 @@ class TdBinary {
     required this.gzSha256,
     required this.soSha256,
     required this.gzBytes,
+    this.ext = 'so',
   });
 
   final String abi;
+
+  /// Extensión de la librería: `so` (Android, Linux) o `dll` (Windows).
+  final String ext;
   final String url;
 
   /// SHA-256 del `.so.gz` descargado (descarta descargas incompletas).
@@ -61,10 +65,31 @@ abstract final class TdLibrary {
           'bf154402a5e29768571349c044a9976256bf7a18fb740f1e9cfb92f7905e359c',
       gzBytes: 9776825,
     ),
+    // Escritorio: compilados en el CI (.github/workflows/tdlib-escritorio.yml)
+    // desde tdlib/td a8f21f52 (1.8.65).
+    Abi.linuxX64: TdBinary(
+      abi: 'linux-x64',
+      url: '$_base/libtdjson-linux-x64.so.gz',
+      gzSha256:
+          '01fb56f21ab60828bac5c5e951f858b6064854362379b088712ce5991c26ebc4',
+      soSha256:
+          '4f055018876f4f15dabe85429884f9b53a2fc9e6603275f8aebfca1dce51b46e',
+      gzBytes: 14817708,
+    ),
+    Abi.windowsX64: TdBinary(
+      abi: 'windows-x64',
+      url: '$_base/tdjson-windows-x64.dll.gz',
+      gzSha256:
+          '2f2ec374b051cdd8f44c6d8059a292153b3f4777f6a3dc89a4cb7c214a79d81c',
+      soSha256:
+          '3993afd34f5aec721eaf62d04baefa9e860481df637fed4af0809f6dc9106b8e',
+      gzBytes: 12081465,
+      ext: 'dll',
+    ),
   };
 
-  /// Binario para este teléfono, o `null` si la arquitectura no está
-  /// soportada (emuladores x86, escritorio).
+  /// Binario para este equipo, o `null` si la arquitectura no está
+  /// soportada (emuladores x86, macOS, Linux/Windows ARM).
   static TdBinary? get current => binaries[Abi.current()];
 
   static bool get isSupported => current != null;
@@ -76,7 +101,7 @@ abstract final class TdLibrary {
   }
 
   static Future<File> _soFile(TdBinary bin) async =>
-      File('${(await _dir()).path}/libtdjson-${bin.abi}-$version.so');
+      File('${(await _dir()).path}/libtdjson-${bin.abi}-$version.${bin.ext}');
 
   /// `true` si la librería ya está descargada y verificada.
   static Future<bool> isInstalled() async {
@@ -107,7 +132,7 @@ abstract final class TdLibrary {
     }
 
     final dir = await _dir();
-    final gz = File('${dir.path}/libtdjson-${bin.abi}.so.gz.part');
+    final gz = File('${dir.path}/libtdjson-${bin.abi}.${bin.ext}.gz.part');
     await Dio().download(
       bin.url,
       gz.path,
@@ -133,7 +158,10 @@ abstract final class TdLibrary {
     await tmp.rename(so.path);
     // Borra versiones anteriores de la librería.
     await for (final f in dir.list()) {
-      if (f is File && f.path.endsWith('.so') && f.path != so.path) {
+      if (f is File &&
+          f.path.contains('libtdjson') &&
+          f.path.endsWith('.${bin.ext}') &&
+          f.path != so.path) {
         await f.delete();
       }
     }

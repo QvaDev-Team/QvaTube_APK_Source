@@ -44,9 +44,23 @@ class WifiShareClient extends ChangeNotifier {
   bool receiving = false;
   bool _cancel = false;
 
-  List<SharePeer> get peers =>
-      _peers.values.toList()
-        ..sort((a, b) => a.announce.name.compareTo(b.announce.name));
+  /// Un mismo teléfono puede anunciarse por dos redes (Wi-Fi y VPN, por
+  /// ejemplo): se muestra una vez, preferiendo la dirección de una red
+  /// privada típica de Wi-Fi.
+  List<SharePeer> get peers {
+    int prioridad(String h) =>
+        h.startsWith('192.168.') ? 0 : (h.startsWith('172.') ? 1 : 2);
+    final unicos = <String, SharePeer>{};
+    for (final p in _peers.values) {
+      final k = '${p.announce.name}|${p.announce.port}';
+      final prev = unicos[k];
+      if (prev == null || prioridad(p.host) < prioridad(prev.host)) {
+        unicos[k] = p;
+      }
+    }
+    return unicos.values.toList()
+      ..sort((a, b) => a.announce.name.compareTo(b.announce.name));
+  }
 
   Future<void> startDiscovery() async {
     await DeviceChannel.wifiMulticastLock(true);
