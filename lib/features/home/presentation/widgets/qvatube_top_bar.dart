@@ -13,12 +13,13 @@ import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../catalog/application/catalog_providers.dart';
 import '../../../catalog/domain/catalog_models.dart';
 import 'account_menu_sheet.dart';
+import 'downloads_ring_button.dart';
 import 'live_stats_bar.dart';
 
 /// Barra superior de la app (spec §6.1).
 ///
-/// Logo de QvaTube a la izquierda, buscador y avatar del usuario a la derecha.
-/// El avatar despliega el menú de cuenta.
+/// Logo de QvaTube a la izquierda; a la derecha buscador, descargas (con
+/// aro de progreso) y avatar del usuario, que despliega el menú de cuenta.
 class QvaTopBar extends ConsumerWidget {
   const QvaTopBar({super.key, this.showSearch = true});
 
@@ -48,7 +49,9 @@ class QvaTopBar extends ConsumerWidget {
           child: SafeArea(
             bottom: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+              // Mismo margen a los dos lados: el avatar no queda pegado a
+              // la esquina.
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -65,7 +68,9 @@ class QvaTopBar extends ConsumerWidget {
                             foregroundColor: AppColors.textSecondary,
                           ),
                         ),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 6),
+                      const DownloadsRingButton(),
+                      const SizedBox(width: 12),
                       _UserAvatar(
                         label: user?.initials ?? 'Q',
                         imageUrl: absoluteMediaUrl(user?.avatarUrl),
@@ -77,7 +82,7 @@ class QvaTopBar extends ConsumerWidget {
                   const SizedBox(height: 6),
                   const Center(
                     child: Padding(
-                      padding: EdgeInsets.only(right: 8),
+                      padding: EdgeInsets.zero,
                       child: LiveStatsBar(),
                     ),
                   ),

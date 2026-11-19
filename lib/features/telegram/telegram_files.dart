@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/platform/device_channel.dart';
+import '../share/received_store.dart';
 import 'tdlib/td_client.dart';
 import 'telegram_service.dart';
 
@@ -21,6 +22,8 @@ class TgCatalogInfo {
     this.season,
     this.episode,
     this.categoryKey,
+    this.chatId,
+    this.msgId,
   });
 
   factory TgCatalogInfo.fromJson(Map<String, dynamic> json) => TgCatalogInfo(
@@ -29,6 +32,8 @@ class TgCatalogInfo {
     season: (json['season'] as num?)?.toInt(),
     episode: (json['episode'] as num?)?.toInt(),
     categoryKey: json['category_key']?.toString(),
+    chatId: (json['chat_id'] as num?)?.toInt(),
+    msgId: (json['msg_id'] as num?)?.toInt(),
   );
 
   final String title;
@@ -38,6 +43,11 @@ class TgCatalogInfo {
   final int? season;
   final int? episode;
   final String? categoryKey;
+
+  /// Contenido del catálogo de origen (`chat_id` / `msg_id`): sirve para
+  /// saber si algo ya se pidió al gestor y no pedirlo dos veces.
+  final int? chatId;
+  final int? msgId;
 
   /// "T1 · E07" para episodios; vacío si no aplica.
   String get episodeLabel {
@@ -122,12 +132,17 @@ class TgFile {
 /// progreso, pausa y reanudación. Las descargas siguen con la app cerrada
 /// gracias al servicio en primer plano de Android.
 class TelegramFiles extends ChangeNotifier {
-  TelegramFiles._();
+  TelegramFiles._() {
+    // Lo recibido por Wi-Fi aparece en el gestor junto a lo del bot.
+    ReceivedStore.instance.addListener(notifyListeners);
+  }
 
   static final TelegramFiles instance = TelegramFiles._();
 
-  /// Mensajes del chat del bot que se revisan como máximo.
-  static const int _maxMessages = 400;
+  /// Mensajes del chat del bot que se revisan como máximo. Con 400 se
+  /// perdían los archivos más antiguos de quien usa mucho el bot (el bot
+  /// también manda textos, así que hay más mensajes que archivos).
+  static const int _maxMessages = 5000;
 
   final List<TgFile> _files = [];
   final Map<int, TgFile> _byFileId = {};
@@ -137,7 +152,8 @@ class TelegramFiles extends ChangeNotifier {
   String? _error;
   int? _botChatId;
 
-  List<TgFile> get files => List.unmodifiable(_files);
+  List<TgFile> get files =>
+      List.unmodifiable([..._files, ...ReceivedStore.instance.asTgFiles]);
   bool get loading => _loading;
   String? get error => _error;
 
@@ -153,6 +169,42 @@ class TelegramFiles extends ChangeNotifier {
         _onFile(update['file'] as Map<String, dynamic>);
       }
     });
+    // La notificación cambia de "Esperando conexión" a "Descargando" al
+    // conectar (y al revés si se cae la red).
+    TelegramService.instance.online
+      ..removeListener(_syncNotification)
+      ..addListener(_syncNotification);
+  }
+
+  /// Al abrir la app: en cuanto la sesión de Telegram esté lista, lee la
+  /// lista (primero la copia del teléfono) y retoma las descargas que
+  /// estaban en marcha, sin esperar a que el usuario abra Cuenta →
+  /// Telegram.
+  void preloadInBackground(
+    Future<String> Function() botUsername, {
+    Future<List<Map<String, dynamic>>> Function()? catalog,
+  }) {
+    final tg = TelegramService.instance;
+    Future<void> start() async {
+      if (_files.isNotEmpty || _loading) return;
+      final rows = catalog;
+      if (rows != null) {
+        unawaited(rows().then(applyCatalog).catchError((_) {}));
+      }
+      await load(await botUsername());
+    }
+
+    if (tg.isReady) {
+      unawaited(start());
+      return;
+    }
+    void listener() {
+      if (!tg.isReady) return;
+      tg.removeListener(listener);
+      unawaited(start());
+    }
+
+    tg.addListener(listener);
   }
 
   /// Id del chat del bot guardado en el teléfono: al abrir la app TDLib
@@ -169,16 +221,44 @@ class TelegramFiles extends ChangeNotifier {
   void applyCatalog(List<Map<String, dynamic>> rows) {
     _catalog
       ..clear()
-      ..addAll([
-        for (final row in rows)
-          (
-            size: (row['size'] as num?)?.toInt() ?? 0,
-            sentAt: DateTime.tryParse('${row['sent_at'] ?? ''}Z'),
-            info: TgCatalogInfo.fromJson(row),
-          ),
-      ]);
+      ..addAll(rows.map(_row));
     _matchCatalog(_files);
     notifyListeners();
+  }
+
+  static ({int size, DateTime? sentAt, TgCatalogInfo info}) _row(
+    Map<String, dynamic> row,
+  ) => (
+    size: (row['size'] as num?)?.toInt() ?? 0,
+    sentAt: DateTime.tryParse('${row['sent_at'] ?? ''}Z'),
+    info: TgCatalogInfo.fromJson(row),
+  );
+
+  /// Fila recién devuelta por `authorize` con `delivery: "app"`: se apunta
+  /// ya para que un segundo toque en "Descargar" no la vuelva a pedir.
+  void addCatalogRow(Map<String, dynamic> row) {
+    _catalog.insert(0, _row(row));
+    _matchCatalog(_files);
+    notifyListeners();
+    // El bot ya lo mandó: se relee el chat para que aparezca en la lista
+    // (y un segundo "Descargar" lo encuentre y lo baje sin pedirlo otra vez).
+    Future<void>.delayed(const Duration(seconds: 3), () {
+      if (TelegramService.instance.online.value) unawaited(_syncFromServer());
+    });
+  }
+
+  /// `true` si ese contenido del catálogo ya se envió al gestor.
+  bool wasDelivered(int chatId, int msgId) =>
+      _catalog.any((r) => r.info.chatId == chatId && r.info.msgId == msgId);
+
+  /// Archivo del chat que corresponde a ese contenido del catálogo, si ya
+  /// llegó y está en la lista.
+  TgFile? fileFor(int chatId, int msgId) {
+    for (final f in _files) {
+      final c = f.catalog;
+      if (c?.chatId == chatId && c?.msgId == msgId) return f;
+    }
+    return null;
   }
 
   /// Une cada archivo del chat con su fila del servidor.
@@ -212,6 +292,19 @@ class TelegramFiles extends ChangeNotifier {
 
   /// Actualizando la lista desde los servidores de Telegram.
   bool get syncing => _syncing;
+
+  /// Progreso conjunto de las descargas en marcha (para el aro del botón
+  /// de descargas de la barra superior); `count == 0` si no hay ninguna.
+  ({int count, int done, int total}) get activeProgress {
+    var count = 0, done = 0, total = 0;
+    for (final f in _files) {
+      if (!f.downloading || f.completed) continue;
+      count++;
+      done += f.downloaded;
+      total += f.size;
+    }
+    return (count: count, done: done, total: total);
+  }
 
   /// Sin nada guardado en el teléfono y esperando a que Telegram conecte.
   bool get waitingForConnection =>
@@ -307,9 +400,20 @@ class TelegramFiles extends ChangeNotifier {
   }) async {
     final found = <TgFile>[];
     final seenIds = <int>{};
+    // Si el mismo archivo se pidió varias veces, el chat lo tiene repetido
+    // y TDLib usa el mismo file_id para todas las copias: se muestra una
+    // sola (la más reciente; el historial llega de nuevo a viejo).
+    final seenFiles = <int>{};
     var fromId = 0;
     var emptyRounds = 0;
-    while (seenIds.length < _maxMessages && emptyRounds < 2) {
+    // Con el servidor, TDLib a veces devuelve solo el mensaje frontera
+    // mientras trae la página siguiente: se insiste antes de dar el
+    // historial por terminado.
+    final maxEmpty = onlyLocal ? 2 : 4;
+    while (seenIds.length < _maxMessages && emptyRounds < maxEmpty) {
+      if (emptyRounds > 0 && !onlyLocal) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      }
       final page = await client.send({
         '@type': 'getChatHistory',
         'chat_id': chatId,
@@ -332,7 +436,7 @@ class TelegramFiles extends ChangeNotifier {
         nuevos++;
         if (m['is_outgoing'] == true) continue;
         final file = parseMessage(m);
-        if (file != null) found.add(file);
+        if (file != null && seenFiles.add(file.fileId)) found.add(file);
       }
       emptyRounds = nuevos == 0 ? emptyRounds + 1 : 0;
     }
@@ -347,6 +451,45 @@ class TelegramFiles extends ChangeNotifier {
     _byFileId
       ..clear()
       ..addEntries(found.map((f) => MapEntry(f.fileId, f)));
+    unawaited(_resumePending());
+  }
+
+  /// Descargas que el usuario dejó en marcha (TDLib no las recuerda al
+  /// cerrar la app). Se guardan por file_id, que TDLib mantiene entre
+  /// sesiones gracias a su base de datos de archivos.
+  static const String _activeKey = 'qvatube.telegram_active_downloads';
+
+  Future<Set<int>> _activeIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getStringList(_activeKey) ?? const [])
+        .map(int.tryParse)
+        .whereType<int>()
+        .toSet();
+  }
+
+  Future<void> _setActive(int fileId, bool active) async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = await _activeIds();
+    final changed = active ? ids.add(fileId) : ids.remove(fileId);
+    if (changed) {
+      await prefs.setStringList(_activeKey, [for (final id in ids) '$id']);
+    }
+  }
+
+  /// Al abrir la app vuelve a poner en cola las descargas que estaban en
+  /// marcha: arrancan solas en cuanto Telegram conecta, sin tocar nada.
+  Future<void> _resumePending() async {
+    final ids = await _activeIds();
+    if (ids.isEmpty) return;
+    for (final id in ids) {
+      final f = _byFileId[id];
+      if (f == null) continue;
+      if (f.completed) {
+        await _setActive(id, false);
+      } else if (!f.downloading) {
+        await download(f);
+      }
+    }
   }
 
   /// Actualiza desde el servidor ya, o en cuanto Telegram conecte.
@@ -462,6 +605,7 @@ class TelegramFiles extends ChangeNotifier {
     tg.applyFile(file);
     if (tg.completed && !wasCompleted) {
       DeviceChannel.telegramDownloadDone(tg.title);
+      unawaited(_setActive(tg.fileId, false));
     }
     _syncNotification();
     notifyListeners();
@@ -473,6 +617,7 @@ class TelegramFiles extends ChangeNotifier {
     if (client == null) return;
     _listen();
     file.downloading = true;
+    unawaited(_setActive(file.fileId, true));
     notifyListeners();
     try {
       final res = await client.send({
@@ -493,6 +638,7 @@ class TelegramFiles extends ChangeNotifier {
 
   /// Pausa la descarga (lo ya bajado se conserva).
   Future<void> pause(TgFile file) async {
+    unawaited(_setActive(file.fileId, false));
     await _client?.send({
       '@type': 'cancelDownloadFile',
       'file_id': file.fileId,
@@ -505,6 +651,9 @@ class TelegramFiles extends ChangeNotifier {
 
   /// Borra el archivo del teléfono (sigue en el chat del bot).
   Future<void> remove(TgFile file) async {
+    // Recibido por Wi-Fi (no es de TDLib).
+    if (file.fileId < 0) return ReceivedStore.instance.delete(file);
+    unawaited(_setActive(file.fileId, false));
     await _client?.send({'@type': 'deleteFile', 'file_id': file.fileId});
     file
       ..downloaded = 0
@@ -527,9 +676,12 @@ class TelegramFiles extends ChangeNotifier {
     }
     final total = active.fold<int>(0, (s, f) => s + f.size);
     final done = active.fold<int>(0, (s, f) => s + f.downloaded);
+    final waiting = !TelegramService.instance.online.value;
     DeviceChannel.telegramDownloadProgress(
       percent: total > 0 ? (done * 100 ~/ total) : -1,
-      title: active.length == 1
+      title: waiting
+          ? 'Esperando conexión con Telegram'
+          : active.length == 1
           ? 'Descargando de Telegram'
           : 'Descargando ${active.length} archivos de Telegram',
       text: active.length == 1 ? active.first.title : null,
@@ -545,7 +697,10 @@ class TelegramFiles extends ChangeNotifier {
     }
     _botChatId = null;
     _catalog.clear();
-    SharedPreferences.getInstance().then((p) => p.remove(_botChatKey));
+    SharedPreferences.getInstance().then((p) {
+      p.remove(_botChatKey);
+      p.remove(_activeKey);
+    });
     _sub?.cancel();
     _sub = null;
     _listening = null;

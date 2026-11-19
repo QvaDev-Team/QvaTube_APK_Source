@@ -151,9 +151,11 @@ abstract final class DeviceChannel {
     bool hasPrevious = false,
     int positionMs = 0,
     int durationMs = 0,
+    String? artworkUrl,
   }) async {
     try {
       await _channel.invokeMethod<bool>('updateMediaNotification', {
+        'artworkUrl': artworkUrl ?? '',
         'title': title,
         'subtitle': subtitle ?? '',
         'isPlaying': isPlaying,
@@ -171,6 +173,19 @@ abstract final class DeviceChannel {
 
   /// Mantiene la pantalla encendida (`true`) mientras se ve un video, o
   /// devuelve el comportamiento normal (`false`). Solo Android.
+  /// Compartir por Wi-Fi: deja pasar los anuncios UDP de la red. Solo
+  /// Android.
+  static Future<void> wifiMulticastLock(bool on) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('wifiMulticastLock', {'on': on});
+    } on PlatformException {
+      // ignorar
+    } on MissingPluginException {
+      // ignorar
+    }
+  }
+
   static Future<void> setKeepScreenOn(bool on) async {
     if (!Platform.isAndroid) return;
     try {
@@ -222,8 +237,7 @@ abstract final class DeviceChannel {
   static Future<bool> detectTelevision() async {
     if (!Platform.isAndroid) return false;
     try {
-      isTelevision =
-          await _channel.invokeMethod<bool>('isTelevision') ?? false;
+      isTelevision = await _channel.invokeMethod<bool>('isTelevision') ?? false;
     } on PlatformException {
       isTelevision = false;
     } on MissingPluginException {

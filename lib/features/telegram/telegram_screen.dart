@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_flutter/lucide_flutter.dart';
 
 import '../../core/storage/app_preferences.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text.dart';
 import '../auth/presentation/providers/auth_controller.dart';
+import '../share/received_store.dart';
+import '../share/wifi_share_screen.dart';
 import 'tdlib/td_library.dart';
 import 'telegram_delivery.dart';
 import 'telegram_files.dart';
@@ -78,32 +81,166 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
     if (mounted) setState(() => _sending = false);
   }
 
-  Future<void> _confirmDisconnect() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Desconectar Telegram'),
-        content: const Text(
-          'Se cerrará la sesión de Telegram en QvaTube. Los archivos que ya '
-          'descargaste siguen en tu teléfono.',
+  /// Panel "Cuenta de Telegram": con qué cuenta está conectada la app y
+  /// si coincide con la verificada en QvaTube.
+  void _showAccountSheet() {
+    final user = _tg.user;
+    final match = telegramAccountMatch(ref.read(authControllerProvider).user);
+    _sheet(
+      icon: LucideIcons.circleUser,
+      iconColor: match == TgAccountMatch.different
+          ? AppColors.danger
+          : AppColors.success,
+      title: 'Cuenta de Telegram',
+      children: [
+        _sheetRow(
+          'Conectado como',
+          user == null || user.name.isEmpty ? 'Telegram' : user.name,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
+        if (user != null && user.phone.isNotEmpty)
+          _sheetRow('Teléfono', '+${user.phone}'),
+        _sheetRow(
+          'Cuenta verificada en QvaTube',
+          switch (match) {
+            TgAccountMatch.same => 'Sí, es la misma',
+            TgAccountMatch.different => 'No, es otra cuenta',
+            _ => 'Comprobando…',
+          },
+          color: switch (match) {
+            TgAccountMatch.same => AppColors.success,
+            TgAccountMatch.different => AppColors.danger,
+            _ => AppColors.textSecondary,
+          },
+        ),
+        const SizedBox(height: 12),
+        Text(
+          match == TgAccountMatch.different
+              ? 'El bot envía tus descargas a la cuenta que verificaste en '
+                    'QvaTube. Desconecta y entra con esa cuenta para verlas '
+                    'aquí.'
+              : 'QvaTube solo lee el chat del bot de QvaTube. La sesión '
+                    'aparece en Telegram → Ajustes → Dispositivos y la puedes '
+                    'cerrar desde ahí cuando quieras.',
+          style: AppTextStyles.body(
+            fontSize: 13,
+            color: AppColors.textSecondary,
+            height: 1.45,
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Desconectar'),
+        ),
+      ],
+    );
+  }
+
+  /// Panel "Desconectar Telegram" con la confirmación dentro.
+  void _showDisconnectSheet() {
+    _sheet(
+      icon: LucideIcons.unlink,
+      iconColor: AppColors.danger,
+      title: 'Desconectar Telegram',
+      children: [
+        Text(
+          'Se cerrará la sesión de Telegram en QvaTube y se pausarán las '
+          'descargas en curso. Lo que ya descargaste sigue en tu teléfono '
+          'y tus archivos siguen en el chat del bot.',
+          style: AppTextStyles.body(
+            fontSize: 13.5,
+            color: AppColors.textSecondary,
+            height: 1.45,
           ),
-        ],
+        ),
+        const SizedBox(height: 18),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.danger,
+            foregroundColor: Colors.white,
+            minimumSize: const Size.fromHeight(48),
+          ),
+          onPressed: () async {
+            Navigator.of(context).pop();
+            TelegramFiles.instance.clear();
+            await _tg.disconnect();
+          },
+          icon: const Icon(LucideIcons.unlink, size: 18),
+          label: const Text('Desconectar'),
+        ),
+        const SizedBox(height: 8),
+        TextButton(
+          style: TextButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+      ],
+    );
+  }
+
+  void _sheet({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required List<Widget> children,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surfaceSecondary,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, color: iconColor, size: 26),
+                  const SizedBox(width: 10),
+                  Text(
+                    title,
+                    style: AppTextStyles.body(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              ...children,
+            ],
+          ),
+        ),
       ),
     );
-    if (ok == true) {
-      TelegramFiles.instance.clear();
-      await _tg.disconnect();
-    }
   }
+
+  Widget _sheetRow(String label, String value, {Color? color}) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: AppTextStyles.body(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: AppTextStyles.body(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w700,
+              color: color ?? AppColors.textPrimary,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -112,13 +249,54 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
       appBar: AppBar(
         leading: IconButton(
           onPressed: () => Navigator.of(context).maybePop(),
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(LucideIcons.arrowLeft),
         ),
-        title: const Text('Telegram'),
+        title: const Text('Gestor de descargas'),
+        // Con Telegram conectado, la cuenta y "Desconectar" van en dos
+        // botones arriba a la derecha (cada uno abre su panel) para dejar
+        // todo el espacio a los archivos.
+        actions: [
+          // Compartir por Wi-Fi: también sin Telegram conectado (para
+          // recibir de otro teléfono).
+          IconButton(
+            tooltip: 'Compartir por Wi-Fi',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const WifiShareScreen()),
+            ),
+            icon: const Icon(LucideIcons.wifi, size: 21),
+          ),
+          if (_tg.stage == TgStage.ready) ...[
+            IconButton(
+              tooltip: 'Cuenta de Telegram',
+              onPressed: _showAccountSheet,
+              icon: _AccountIcon(
+                warning:
+                    telegramAccountMatch(
+                      ref.watch(authControllerProvider).user,
+                    ) ==
+                    TgAccountMatch.different,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Desconectar Telegram',
+              onPressed: _showDisconnectSheet,
+              icon: const Icon(LucideIcons.unlink, size: 21),
+            ),
+          ],
+          const SizedBox(width: 6),
+        ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-        children: [..._body()],
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+        children: [
+          ..._body(),
+          // Sin Telegram conectado, lo recibido por Wi-Fi se ve igual.
+          if (_tg.stage != TgStage.ready &&
+              ReceivedStore.instance.files.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            const TelegramFilesList(),
+          ],
+        ],
       ),
     );
   }
@@ -140,7 +318,7 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
       case TgStage.unavailable:
         return [
           _info(
-            Icons.info_outline,
+            LucideIcons.info,
             'Telegram en la app no está disponible en este dispositivo. '
             'Puedes seguir recibiendo tus descargas en el bot de Telegram '
             'como siempre.',
@@ -151,7 +329,7 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
         final mb = (TdLibrary.current?.gzBytes ?? 10000000) / 1048576;
         return [
           _info(
-            Icons.send,
+            LucideIcons.send,
             'Conecta tu cuenta de Telegram para ver y descargar desde QvaTube '
             'los archivos que te envía el bot, sin abrir Telegram.',
           ),
@@ -168,7 +346,7 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
           const SizedBox(height: 20),
           ElevatedButton.icon(
             onPressed: () => _tg.connect(ref.read(sharedPreferencesProvider)),
-            icon: const Icon(Icons.link),
+            icon: const Icon(LucideIcons.link, size: 18),
             label: const Text('Conectar Telegram'),
           ),
           ?errorText,
@@ -176,7 +354,7 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
       case TgStage.installing:
         final mb = (TdLibrary.current?.gzBytes ?? 0) / 1048576;
         return [
-          _info(Icons.download, 'Descargando el componente de Telegram…'),
+          _info(LucideIcons.download, 'Descargando el componente de Telegram…'),
           const SizedBox(height: 16),
           LinearProgressIndicator(
             value: _tg.progress,
@@ -237,37 +415,23 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
           errorText: errorText,
         );
       case TgStage.ready:
-        final user = _tg.user;
         final match = telegramAccountMatch(
           ref.watch(authControllerProvider).user,
         );
         return [
-          _info(
-            Icons.check_circle,
-            user == null
-                ? 'Telegram conectado.'
-                : 'Conectado como ${user.name}'
-                      '${user.phone.isEmpty ? '' : ' (+${user.phone})'}.',
-            color: AppColors.success,
-          ),
+          // Este aviso sí se queda a la vista: con otra cuenta los archivos
+          // no llegarían aquí.
           if (match == TgAccountMatch.different) ...[
-            const SizedBox(height: 12),
             _info(
-              Icons.warning_amber_rounded,
+              LucideIcons.triangleAlert,
               'Esta no es la cuenta de Telegram que verificaste en QvaTube. '
               'El bot envía tus descargas a la cuenta verificada, así que no '
               'aparecerán aquí. Desconecta y entra con esa cuenta.',
               color: AppColors.danger,
             ),
+            const SizedBox(height: 14),
           ],
-          const SizedBox(height: 18),
           const TelegramFilesList(),
-          const SizedBox(height: 24),
-          OutlinedButton.icon(
-            onPressed: _confirmDisconnect,
-            icon: const Icon(Icons.link_off),
-            label: const Text('Desconectar Telegram'),
-          ),
         ];
     }
   }
@@ -355,4 +519,34 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
       ],
     ),
   );
+}
+
+/// Icono de la cuenta con un punto verde (conectada) o rojo (otra cuenta).
+class _AccountIcon extends StatelessWidget {
+  const _AccountIcon({required this.warning});
+
+  final bool warning;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        const Icon(LucideIcons.circleUser, size: 22),
+        Positioned(
+          right: -1,
+          bottom: -1,
+          child: Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: warning ? AppColors.danger : AppColors.success,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.surface, width: 2),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

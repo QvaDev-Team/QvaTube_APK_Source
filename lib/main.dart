@@ -1,10 +1,14 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:video_player_media_kit/video_player_media_kit.dart';
+import 'package:media_kit/media_kit.dart';
 
 import 'core/config/app_config.dart';
 import 'core/layout/responsive.dart';
+import 'core/media/qva_video_player_platform.dart';
 import 'core/network/api_providers.dart';
 import 'core/network/response_cache.dart';
 import 'core/platform/device_channel.dart';
@@ -19,14 +23,21 @@ import 'features/auth/presentation/providers/auth_controller.dart';
 import 'features/catalog/application/catalog_providers.dart';
 import 'core/theme/season_branding.dart';
 import 'features/home/presentation/widgets/media_player_screen.dart';
+import 'features/catalog/domain/catalog_models.dart';
+import 'features/share/received_store.dart';
+import 'features/telegram/telegram_files.dart';
 import 'features/telegram/telegram_service.dart';
 import 'features/update/presentation/update_checker.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // video_player no reproduce en Windows ni Linux: ahí lo sustituye
-  // media_kit (libmpv). Android y macOS siguen con su reproductor nativo.
-  VideoPlayerMediaKit.ensureInitialized(windows: true, linux: true);
+  // Reproductor: media_kit (libmpv) detrás de la API de video_player en
+  // Android, Windows y Linux. En Android sustituye a ExoPlayer para poder
+  // elegir pistas de audio y subtítulos internos (MKV/MP4) y dibujarlos.
+  if (Platform.isAndroid || Platform.isWindows || Platform.isLinux) {
+    MediaKit.ensureInitialized();
+    QvaVideoPlayerPlatform.registerWith();
+  }
   final preferences = await SharedPreferences.getInstance();
 
   // Arte de temporada: la última que dijo el servidor (GET /api/season) y su
@@ -72,7 +83,16 @@ class _QvaTubeAppState extends ConsumerState<QvaTubeApp>
       _startPush();
       _warmOfflineCatalog();
       // Si el usuario conectó Telegram, se retoma su sesión en segundo plano.
+      unawaited(ReceivedStore.instance.load());
       TelegramService.instance.restore(ref.read(sharedPreferencesProvider));
+      // …y se carga la lista de archivos del bot en segundo plano para
+      // retomar las descargas que quedaron en marcha.
+      TelegramFiles.instance.preloadInBackground(() async {
+        final config = await ref
+            .read(siteConfigProvider.future)
+            .catchError((_) => const SiteConfig());
+        return config.botUsername ?? 'qvatube_bot';
+      }, catalog: () => ref.read(catalogApiProvider).telegramFiles());
     });
   }
 
@@ -142,8 +162,12 @@ class _QvaTubeAppState extends ConsumerState<QvaTubeApp>
           return;
         }
         ref.invalidate(notificationsProvider);
-        ref.read(routerProvider).push(
-              type.startsWith('creator_') ? '/cuenta/creador' : '/cuenta/notificaciones',
+        ref
+            .read(routerProvider)
+            .push(
+              type.startsWith('creator_')
+                  ? '/cuenta/creador'
+                  : '/cuenta/notificaciones',
             );
       },
       onForeground: (message) {

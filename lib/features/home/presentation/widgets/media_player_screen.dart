@@ -6,10 +6,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_flutter/lucide_flutter.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../../core/media/music_preloader.dart';
+import '../../../../core/media/qva_video_player_platform.dart';
 import '../../../../core/network/api_providers.dart';
+import '../../../../core/network/endpoints/media_endpoints.dart';
 import '../../../../core/network/endpoints/playback_endpoints.dart';
 import '../../../../core/platform/app_orientation.dart';
 import '../../../../core/platform/device_channel.dart';
@@ -52,6 +57,18 @@ class PlayableMediaItem {
   /// `true` si no pertenece al catálogo de QvaTube (no hay progreso que
   /// guardar ni "visto" que marcar).
   bool get isOutsideCatalog => chatId == 0;
+
+  /// Imagen para la notificación y la pantalla de bloqueo: el póster o la
+  /// carátula del disco; en música sin carátula, la de la pista
+  /// (`/cover/{chat}/{msg}`).
+  String get artworkUrl {
+    final poster = posterUrl;
+    if (poster != null && poster.isNotEmpty) return absoluteMediaUrl(poster);
+    if (isAudio && !isOutsideCatalog) {
+      return absoluteMediaUrl(MediaEndpoints.cover(chatId, msgId));
+    }
+    return '';
+  }
 
   String get streamUrl =>
       absoluteMediaUrl(PlaybackEndpoints.watch(chatId, msgId));
@@ -159,6 +176,171 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
   bool get useWebViewFallback => _useWebViewFallback;
   bool get isScreenOpen => _screenOpen;
 
+  // ── Pistas de audio (películas y series con doble audio) ─────────────
+
+  static const String _audioLanguageKey = 'qvatube.audio_language';
+
+  List<VideoAudioTrack> _audioTracks = const [];
+
+  /// Pistas de audio del video actual. Vacía si el formato o la plataforma
+  /// no lo permiten; el selector solo se muestra con 2 o más.
+  List<VideoAudioTrack> get audioTracks => _audioTracks;
+
+  static const String _subtitleKey = 'qvatube.subtitle_language';
+
+  List<SubtitleTrack> _subtitleTracks = const [];
+  String _subtitleId = 'no';
+  StreamSubscription<Tracks>? _tracksSub;
+  bool _audioPrefApplied = false;
+  bool _subtitlePrefApplied = false;
+
+  /// Subtítulos internos del video (MKV/MP4). Vacía si no trae.
+  List<SubtitleTrack> get subtitleTracks => _subtitleTracks;
+
+  /// Id de la pista de subtítulos activa (`no` = desactivados).
+  String get subtitleId => _subtitleId;
+
+  /// `Player` de media_kit del video actual (null con otro backend).
+  Player? get _mkPlayer {
+    final ctrl = _controller;
+    if (ctrl == null) return null;
+    // `playerId` es el id que devolvió nuestro QvaVideoPlayerPlatform al
+    // crear el reproductor: es la única forma de llegar a su Player.
+    // ignore: invalid_use_of_visible_for_testing_member
+    return QvaVideoPlayerPlatform.current?.playerOf(ctrl.playerId);
+  }
+
+  static bool _realTrack(String id) => id != 'auto' && id != 'no';
+
+  /// Lee las pistas de audio y subtítulos (en streaming pueden llegar un
+  /// poco después de empezar) y aplica las preferencias guardadas: el
+  /// idioma de audio elegido antes ("Latino"…) y los subtítulos.
+  Future<void> _watchTracks(VideoPlayerController controller) async {
+    _audioTracks = const [];
+    _subtitleTracks = const [];
+    _subtitleId = 'no';
+    _audioPrefApplied = false;
+    _subtitlePrefApplied = false;
+    await _tracksSub?.cancel();
+    _tracksSub = null;
+    final player = _mkPlayer;
+    if (player != null) {
+      _tracksSub = player.stream.tracks.listen(
+        (_) => unawaited(_refreshTracks(controller)),
+      );
+    }
+    await _refreshTracks(controller);
+  }
+
+  Future<void> _refreshTracks(VideoPlayerController controller) async {
+    if (!identical(controller, _controller)) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      var audio = controller.isAudioTrackSupportAvailable()
+          ? await controller.getAudioTracks()
+          : const <VideoAudioTrack>[];
+      if (!_audioPrefApplied && audio.length > 1) {
+        _audioPrefApplied = true;
+        final wanted = prefs.getString(_audioLanguageKey);
+        final match = wanted == null
+            ? null
+            : audio.where((t) => audioTrackKey(t) == wanted).firstOrNull;
+        if (match != null && !match.isSelected) {
+          await controller.selectAudioTrack(match.id);
+          audio = await controller.getAudioTracks();
+        }
+      }
+
+      final player = _mkPlayer;
+      var subs = const <SubtitleTrack>[];
+      if (player != null) {
+        subs = [
+          for (final t in player.state.tracks.subtitle)
+            if (_realTrack(t.id)) t,
+        ];
+        if (!_subtitlePrefApplied && subs.isNotEmpty) {
+          _subtitlePrefApplied = true;
+          final wanted = prefs.getString(_subtitleKey);
+          if (wanted == 'off') {
+            await player.setSubtitleTrack(SubtitleTrack.no());
+          } else if (wanted != null) {
+            final match = subs
+                .where((t) => (t.language ?? '').toLowerCase() == wanted)
+                .firstOrNull;
+            if (match != null) await player.setSubtitleTrack(match);
+          }
+        }
+        _subtitleId = _resolveSubtitle(player, subs);
+      }
+
+      if (!identical(controller, _controller)) return;
+      _audioTracks = audio;
+      _subtitleTracks = subs;
+      notifyListeners();
+    } catch (_) {
+      // Formato sin información de pistas: no hay selector.
+    }
+  }
+
+  /// Pista de subtítulos que se está viendo. Con "auto", mpv muestra la
+  /// marcada por defecto (o ninguna).
+  static String _resolveSubtitle(Player player, List<SubtitleTrack> subs) {
+    final id = player.state.track.subtitle.id;
+    if (id != 'auto') return id;
+    return subs.where((t) => t.isDefault == true).firstOrNull?.id ?? 'no';
+  }
+
+  /// Activa unos subtítulos ([track] null = desactivarlos) y lo recuerda.
+  Future<void> selectSubtitle(SubtitleTrack? track) async {
+    final player = _mkPlayer;
+    if (player == null) return;
+    await player.setSubtitleTrack(track ?? SubtitleTrack.no());
+    _subtitleId = track?.id ?? 'no';
+    final prefs = await SharedPreferences.getInstance();
+    final lang = (track?.language ?? '').toLowerCase();
+    if (track == null) {
+      await prefs.setString(_subtitleKey, 'off');
+    } else if (lang.isNotEmpty && lang != 'und') {
+      await prefs.setString(_subtitleKey, lang);
+    }
+    notifyListeners();
+  }
+
+  /// Cambia de pista y la recuerda para los próximos videos.
+  Future<void> selectAudioTrack(VideoAudioTrack track) async {
+    final ctrl = _controller;
+    if (ctrl == null) return;
+    try {
+      await ctrl.selectAudioTrack(track.id);
+      final prefs = await SharedPreferences.getInstance();
+      final key = audioTrackKey(track);
+      // Sin idioma ni nombre útil no hay nada que recordar.
+      if (key == null) {
+        await prefs.remove(_audioLanguageKey);
+      } else {
+        await prefs.setString(_audioLanguageKey, key);
+      }
+      _audioTracks = await ctrl.getAudioTracks();
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  /// Clave con la que se recuerda la preferencia: el idioma o, si la pista
+  /// no lo trae, su nombre.
+  static String? audioTrackKey(VideoAudioTrack t) {
+    final lang = t.language?.toLowerCase() ?? '';
+    if (lang.isNotEmpty && lang != 'und') return 'lang:$lang';
+    final label = (t.label ?? '').trim().toLowerCase();
+    if (label.isEmpty || isGenericAudioLabel(label)) return null;
+    return 'label:$label';
+  }
+
+  /// Etiquetas que ExoPlayer pone sin decir el idioma ("Stereo", "5.1").
+  static bool isGenericAudioLabel(String label) => RegExp(
+    r'^(stereo|mono|surround|audio|[0-9.]+ ?(ch|channels?)?)( [0-9.]+)?$',
+    caseSensitive: false,
+  ).hasMatch(label.trim());
+
   bool get hasActiveMedia =>
       _playlist.isNotEmpty && (_controller != null || _loading);
 
@@ -237,10 +419,14 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
     _seekTarget = null;
     _markedWatched = false;
     _useWebViewFallback = false;
+    _audioTracks = const [];
+    _subtitleTracks = const [];
 
     final prev = _controller;
     _controller = null;
     prev?.removeListener(_onControllerUpdate);
+    unawaited(_tracksSub?.cancel());
+    _tracksSub = null;
     await prev?.dispose();
 
     final item = currentItem;
@@ -314,6 +500,7 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
       _loading = false;
       notifyListeners();
       _syncNotification(force: true);
+      if (!item.isAudio) unawaited(_watchTracks(controller));
 
       _progressSaveTimer = Timer.periodic(const Duration(seconds: 15), (_) {
         _saveCurrentProgress();
@@ -462,6 +649,7 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
       hasPrevious: hasPrevious,
       positionMs: ctrl.value.position.inMilliseconds,
       durationMs: ctrl.value.duration.inMilliseconds,
+      artworkUrl: item.artworkUrl,
     );
   }
 
@@ -606,6 +794,8 @@ class ActiveMediaSession extends ChangeNotifier with WidgetsBindingObserver {
     _lastNotifiedIndex = null;
 
     prev?.removeListener(_onControllerUpdate);
+    unawaited(_tracksSub?.cancel());
+    _tracksSub = null;
     await prev?.dispose();
     _updateKeepScreenOn();
     await DeviceChannel.clearMediaNotification();
@@ -1000,6 +1190,215 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
     }
   }
 
+  /// Nombres en español de los códigos de idioma de las pistas.
+  static const Map<String, String> _languageNames = {
+    'es': 'Español',
+    'spa': 'Español',
+    'en': 'Inglés',
+    'eng': 'Inglés',
+    'ja': 'Japonés',
+    'jpn': 'Japonés',
+    'pt': 'Portugués',
+    'por': 'Portugués',
+    'fr': 'Francés',
+    'fre': 'Francés',
+    'fra': 'Francés',
+    'it': 'Italiano',
+    'ita': 'Italiano',
+    'de': 'Alemán',
+    'ger': 'Alemán',
+    'deu': 'Alemán',
+    'ko': 'Coreano',
+    'kor': 'Coreano',
+    'zh': 'Chino',
+    'chi': 'Chino',
+    'zho': 'Chino',
+    'ru': 'Ruso',
+    'rus': 'Ruso',
+  };
+
+  /// Nombre legible de una pista: su etiqueta ("Latino", "English") o el
+  /// idioma, más los canales (5.1, estéreo).
+  static String _trackName(VideoAudioTrack t, int index) {
+    const names = _languageNames;
+    // ExoPlayer pone a veces etiquetas genéricas ("Stereo", "Surround
+    // 5.1") que no dicen el idioma: se ignoran.
+    var label = t.label?.trim() ?? '';
+    if (ActiveMediaSession.isGenericAudioLabel(label)) label = '';
+    final lang = names[(t.language ?? '').toLowerCase().split('-').first];
+    final base = label.isNotEmpty
+        ? (lang != null && !label.toLowerCase().contains(lang.toLowerCase())
+              ? '$label ($lang)'
+              : label)
+        : lang ?? 'Pista ${index + 1}';
+    final ch = t.channelCount;
+    final channels = ch == null
+        ? ''
+        : ch >= 6
+        ? ' · 5.1'
+        : ch == 2
+        ? ' · Estéreo'
+        : ch == 1
+        ? ' · Mono'
+        : '';
+    return '$base$channels';
+  }
+
+  /// Nombre legible de unos subtítulos: título de la pista o idioma, con
+  /// "(forzados)" si solo traducen carteles.
+  static String _subtitleName(SubtitleTrack t, int index) {
+    final lang =
+        _languageNames[(t.language ?? '').toLowerCase().split('-').first];
+    final title = t.title?.trim() ?? '';
+    final base = title.isNotEmpty
+        ? (lang != null && !title.toLowerCase().contains(lang.toLowerCase())
+              ? '$title ($lang)'
+              : title)
+        : lang ?? 'Subtítulos ${index + 1}';
+    final extra = <String>[
+      if (t.isDefault == true) 'por defecto',
+      if (RegExp(r'forced|forzad', caseSensitive: false).hasMatch(title))
+        'solo carteles',
+      if (RegExp(r'sdh|cc\b', caseSensitive: false).hasMatch(title))
+        'para sordos',
+      if ((t.codec ?? '').contains('pgs')) 'imagen',
+    ];
+    return extra.isEmpty ? base : '$base (${extra.join(', ')})';
+  }
+
+  /// Si hay nombres repetidos ("Inglés", "Inglés") los numera.
+  static List<String> _uniqueNames(List<String> names) {
+    final total = <String, int>{};
+    for (final n in names) {
+      total[n] = (total[n] ?? 0) + 1;
+    }
+    final seen = <String, int>{};
+    return [
+      for (final n in names)
+        if ((total[n] ?? 0) > 1) '$n ${seen[n] = (seen[n] ?? 0) + 1}' else n,
+    ];
+  }
+
+  /// Panel "Audio y subtítulos": idioma del audio (si hay más de uno) y
+  /// subtítulos internos del archivo (o desactivarlos).
+  Future<void> _pickTracks() async {
+    final audio = _session.audioTracks;
+    final subs = _session.subtitleTracks;
+    final currentSub = _session.subtitleId;
+    final audioNames = _uniqueNames([
+      for (final (i, t) in audio.indexed) _trackName(t, i),
+    ]);
+    final subNames = _uniqueNames([
+      for (final (i, t) in subs.indexed) _subtitleName(t, i),
+    ]);
+    Widget header(String text) => Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+      child: Text(
+        text.toUpperCase(),
+        style: AppTextStyles.body(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w800,
+          color: AppColors.textMuted,
+        ),
+      ),
+    );
+    Widget option({
+      required String label,
+      required bool selected,
+      required Object value,
+      required BuildContext context,
+    }) => ListTile(
+      dense: true,
+      leading: Icon(
+        selected ? Icons.radio_button_checked : Icons.radio_button_off,
+        color: selected ? AppColors.accent : AppColors.textMuted,
+        size: 20,
+      ),
+      title: Text(
+        label,
+        style: AppTextStyles.body(
+          fontSize: 13.5,
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+        ),
+      ),
+      onTap: () => Navigator.of(context).pop(value),
+    );
+
+    final chosen = await showModalBottomSheet<Object>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.lg)),
+      ),
+      builder: (context) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.75,
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+                child: Text(
+                  'Audio y subtítulos',
+                  style: Theme.of(context).textTheme.displaySmall,
+                ),
+              ),
+              if (audio.length > 1) ...[
+                header('Audio'),
+                for (final (i, t) in audio.indexed)
+                  option(
+                    label: audioNames[i],
+                    selected: t.isSelected,
+                    value: t,
+                    context: context,
+                  ),
+              ],
+              if (subs.isNotEmpty) ...[
+                // (nombres calculados abajo para distinguir repetidos)
+                header('Subtítulos'),
+                option(
+                  label: 'Desactivados',
+                  selected: currentSub == 'no',
+                  value: 'off',
+                  context: context,
+                ),
+                for (final (i, t) in subs.indexed)
+                  option(
+                    label: subNames[i],
+                    selected: t.id == currentSub,
+                    value: t,
+                    context: context,
+                  ),
+              ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                child: Text(
+                  'Se recordará para los próximos videos.',
+                  style: AppTextStyles.body(
+                    fontSize: 11.5,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    switch (chosen) {
+      case VideoAudioTrack t when !t.isSelected:
+        await _session.selectAudioTrack(t);
+      case SubtitleTrack t:
+        await _session.selectSubtitle(t);
+      case 'off':
+        await _session.selectSubtitle(null);
+    }
+  }
+
   Future<void> _pickSpeed() async {
     const speeds = [0.75, 1.0, 1.25, 1.5, 2.0];
     final currentSpeed = _session.playbackSpeed;
@@ -1360,6 +1759,20 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                     ],
                   ),
                 ),
+                if (initialized &&
+                    (_session.audioTracks.length > 1 ||
+                        _session.subtitleTracks.isNotEmpty))
+                  IconButton(
+                    onPressed: _pickTracks,
+                    tooltip: 'Audio y subtítulos',
+                    icon: Icon(
+                      _session.subtitleTracks.isNotEmpty
+                          ? LucideIcons.captions
+                          : LucideIcons.languages,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
                 if (initialized) ...[
                   TextButton(
                     onPressed: _pickSpeed,

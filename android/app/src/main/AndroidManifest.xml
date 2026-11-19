@@ -10,6 +10,9 @@
     <!-- Mantener la descarga de una actualización al salir de la app. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- Compartir por Wi-Fi: encontrar otros teléfonos con QvaTube en la red. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <!-- Google TV / Android TV: la misma APK se instala en televisores, que
          no tienen pantalla táctil; sin esto Play y el sistema la tratan como
          app solo de móvil. -->

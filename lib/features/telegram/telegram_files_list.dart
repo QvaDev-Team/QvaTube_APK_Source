@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_flutter/lucide_flutter.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text.dart';
@@ -12,6 +13,7 @@ import '../home/presentation/widgets/media_player_screen.dart';
 import '../reader/book_reader_screen.dart';
 import 'telegram_files.dart';
 import 'telegram_library.dart';
+import 'telegram_service.dart';
 
 /// "Mis archivos de Telegram": lo que el bot de QvaTube envió al chat del
 /// usuario, para descargarlo cuando quiera y verlo sin conexión.
@@ -41,12 +43,14 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
   void initState() {
     super.initState();
     _files.addListener(_onChanged);
+    TelegramService.instance.online.addListener(_onChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _reload());
   }
 
   @override
   void dispose() {
     _files.removeListener(_onChanged);
+    TelegramService.instance.online.removeListener(_onChanged);
     _search.dispose();
     super.dispose();
   }
@@ -90,6 +94,7 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
             title: f.title,
             isAudio: f.kind == TgFileKind.audio,
             localPath: f.localPath,
+            posterUrl: f.catalog?.poster,
           ),
       ],
     );
@@ -101,8 +106,14 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
       builder: (context) => AlertDialog(
         title: const Text('Borrar del teléfono'),
         content: Text(
-          '${file.title} se borrará de tu teléfono para liberar espacio. '
-          'Sigue en el chat del bot por si lo quieres descargar otra vez.',
+          file.fileId < 0
+              // Recibido por Wi-Fi: no está en el chat del bot.
+              ? '${file.title} se borrará de tu teléfono. Lo recibiste por '
+                    'Wi-Fi: para tenerlo otra vez tendrás que volver a '
+                    'recibirlo o descargarlo.'
+              : '${file.title} se borrará de tu teléfono para liberar '
+                    'espacio. Sigue en el chat del bot por si lo quieres '
+                    'descargar otra vez.',
         ),
         actions: [
           TextButton(
@@ -139,7 +150,7 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
             IconButton(
               tooltip: 'Actualizar',
               onPressed: _files.loading || _files.syncing ? null : _reload,
-              icon: const Icon(Icons.refresh),
+              icon: const Icon(LucideIcons.refreshCw, size: 20),
             ),
           ],
         ),
@@ -249,12 +260,12 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
         style: AppTextStyles.body(fontSize: 14),
         decoration: InputDecoration(
           hintText: 'Buscar en ${section.label}',
-          prefixIcon: const Icon(Icons.search, size: 20),
+          prefixIcon: const Icon(LucideIcons.search, size: 18),
           suffixIcon: _query.isEmpty
               ? null
               : IconButton(
                   tooltip: 'Borrar búsqueda',
-                  icon: const Icon(Icons.close, size: 18),
+                  icon: const Icon(LucideIcons.x, size: 18),
                   onPressed: () => setState(() {
                     _search.clear();
                     _query = '';
@@ -299,6 +310,12 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
               ? 'Nada en ${section.label} coincide con "$_query".'
               : 'No hay archivos en ${section.label} con este filtro.',
         )
+      else if (section == TgSection.all)
+        // Todo junto, lo más reciente arriba: los episodios en su serie.
+        for (final entry in _mixed(visible)) ...[
+          entry,
+          const SizedBox(height: 10),
+        ]
       else if (section.groupsBySeries)
         for (final group in groupSeries(visible)) ...[
           _seriesCard(group),
@@ -310,6 +327,39 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
           const SizedBox(height: 10),
         ],
     ];
+  }
+
+  /// "Todos": películas, música… sueltas y los episodios agrupados en su
+  /// serie, ordenado por la fecha del envío más reciente.
+  List<Widget> _mixed(List<TgFile> files) {
+    final series = <TgFile>[];
+    final singles = <TgFile>[];
+    for (final f in files) {
+      (sectionOf(f).groupsBySeries ? series : singles).add(f);
+    }
+    final entries = <({DateTime date, Widget widget})>[
+      for (final f in singles)
+        (
+          date: f.date,
+          // La cola sigue con archivos de la misma sección (después de una
+          // película no debe sonar una canción).
+          widget: _tile(
+            f,
+            queue: [
+              for (final o in singles)
+                if (sectionOf(o) == sectionOf(f)) o,
+            ],
+          ),
+        ),
+      for (final g in groupSeries(series))
+        (
+          date: g.episodes
+              .map((e) => e.date)
+              .reduce((a, b) => a.isAfter(b) ? a : b),
+          widget: _seriesCard(g),
+        ),
+    ]..sort((a, b) => b.date.compareTo(a.date));
+    return [for (final e in entries) e.widget];
   }
 
   Widget _tile(TgFile file, {List<TgFile>? queue, String? title}) => _FileTile(
@@ -339,7 +389,7 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
     final poster = absoluteMediaUrl(group.poster);
     final placeholder = const ColoredBox(
       color: AppColors.surface,
-      child: Icon(Icons.live_tv, color: AppColors.accent, size: 22),
+      child: Icon(LucideIcons.tv, color: AppColors.accent, size: 22),
     );
     final count = group.episodes.length;
 
@@ -403,21 +453,15 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
                     ),
                   ),
                   if (pending.isNotEmpty)
-                    IconButton(
+                    _RoundAction(
+                      icon: LucideIcons.arrowDownToLine,
                       tooltip: 'Descargar los ${pending.length} pendientes',
-                      onPressed: () {
-                        for (final e in pending) {
-                          _files.download(e);
-                        }
-                      },
-                      icon: const Icon(
-                        Icons.download_for_offline_outlined,
-                        color: AppColors.accent,
-                        size: 28,
-                      ),
+                      onTap: () => _confirmDownloadAll(group, pending),
                     ),
+                  const SizedBox(width: 6),
                   Icon(
-                    open ? Icons.expand_less : Icons.expand_more,
+                    open ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                    size: 20,
                     color: AppColors.textSecondary,
                   ),
                 ],
@@ -439,6 +483,41 @@ class _TelegramFilesListState extends ConsumerState<TelegramFilesList> {
         ],
       ),
     );
+  }
+
+  /// Descargar todos los episodios pendientes de una serie: pueden ser
+  /// decenas de GB, así que se confirma con el total antes de empezar.
+  Future<void> _confirmDownloadAll(
+    TgSeriesGroup group,
+    List<TgFile> pending,
+  ) async {
+    final bytes = pending.fold<int>(0, (s, e) => s + (e.size - e.downloaded));
+    final n = pending.length;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Descargar $n ${n == 1 ? 'episodio' : 'episodios'}'),
+        content: Text(
+          'Se descargarán ${_FileTile._size(bytes)} de ${group.title} en tu '
+          'teléfono. Asegúrate de tener espacio y, si usas datos móviles, '
+          'de que te alcancen.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Descargar'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    for (final e in pending) {
+      await _files.download(e);
+    }
   }
 
   /// "T1 · E07" si se sabe el episodio; si no, el nombre del archivo.
@@ -545,6 +624,11 @@ class _FileTile extends StatelessWidget {
     if (file.downloading) {
       // Recién empezada todavía no hay bytes: "0 MB", no "—".
       final done = file.downloaded > 0 ? _size(file.downloaded) : '0 MB';
+      // Al abrir la app TDLib puede tardar en conectar: la descarga está
+      // en cola, no colgada.
+      if (!TelegramService.instance.online.value) {
+        return 'Esperando conexión con Telegram… · $done de ${_size(file.size)}';
+      }
       return '$done de ${_size(file.size)} · '
           '${(file.progress * 100).floor()} %';
     }
@@ -577,63 +661,60 @@ class _FileTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final icon = switch (file.kind) {
-      TgFileKind.video => Icons.movie_outlined,
-      TgFileKind.audio => Icons.music_note,
-      TgFileKind.document => Icons.insert_drive_file_outlined,
+      TgFileKind.video => LucideIcons.film,
+      TgFileKind.audio => LucideIcons.music,
+      TgFileKind.document => LucideIcons.fileText,
     };
+    // Cada estado muestra solo lo que se puede hacer en él: ver/leer y
+    // borrar solo cuando el archivo ya está en el teléfono.
     final Widget action;
     if (file.completed) {
       action = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (file.playable)
-            IconButton(
+            _RoundAction(
+              icon: LucideIcons.play,
               tooltip: 'Ver',
-              onPressed: onPlay,
-              icon: const Icon(
-                Icons.play_circle_fill,
-                color: AppColors.accent,
-                size: 30,
-              ),
-            ),
-          if (!file.playable && file.readable)
-            IconButton(
+              filled: true,
+              onTap: onPlay,
+            )
+          else if (file.readable)
+            _RoundAction(
+              icon: LucideIcons.bookOpen,
               tooltip: 'Leer',
-              onPressed: onRead,
-              icon: const Icon(
-                Icons.menu_book_rounded,
-                color: AppColors.accent,
-                size: 28,
-              ),
+              filled: true,
+              onTap: onRead,
             ),
-          IconButton(
+          const SizedBox(width: 4),
+          _RoundAction(
+            icon: LucideIcons.trash2,
             tooltip: 'Borrar del teléfono',
-            onPressed: onRemove,
-            icon: const Icon(Icons.delete_outline, color: AppColors.textMuted),
+            ghost: true,
+            onTap: onRemove,
           ),
         ],
       );
     } else if (file.downloading) {
-      action = IconButton(
+      action = _RoundAction(
+        icon: LucideIcons.pause,
         tooltip: 'Pausar',
-        onPressed: onPause,
-        icon: const Icon(
-          Icons.pause_circle_outline,
-          color: Colors.white,
-          size: 30,
-        ),
+        progress: file.progress,
+        onTap: onPause,
+      );
+    } else if (file.downloaded > 0) {
+      action = _RoundAction(
+        icon: LucideIcons.arrowDownToLine,
+        tooltip: 'Reanudar',
+        progress: file.progress,
+        paused: true,
+        onTap: onDownload,
       );
     } else {
-      action = IconButton(
-        tooltip: file.downloaded > 0 ? 'Reanudar' : 'Descargar',
-        onPressed: onDownload,
-        icon: Icon(
-          file.downloaded > 0
-              ? Icons.play_for_work
-              : Icons.download_for_offline_outlined,
-          color: AppColors.accent,
-          size: 30,
-        ),
+      action = _RoundAction(
+        icon: LucideIcons.arrowDownToLine,
+        tooltip: 'Descargar',
+        onTap: onDownload,
       );
     }
 
@@ -682,16 +763,108 @@ class _FileTile extends StatelessWidget {
               action,
             ],
           ),
-          if (file.downloading || (file.downloaded > 0 && !file.completed)) ...[
-            const SizedBox(height: 8),
-            LinearProgressIndicator(
-              value: file.progress,
-              minHeight: 3,
-              color: file.downloading ? AppColors.accent : AppColors.textMuted,
-              backgroundColor: AppColors.border,
-            ),
-          ],
         ],
+      ),
+    );
+  }
+}
+
+/// Botón redondo de acción de una fila: lleno (ver/leer), con borde
+/// (descargar, pausar) o fantasma (borrar). Con [progress] dibuja un aro
+/// con el avance de la descarga alrededor.
+class _RoundAction extends StatelessWidget {
+  const _RoundAction({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.filled = false,
+    this.ghost = false,
+    this.paused = false,
+    this.progress,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final bool filled;
+  final bool ghost;
+  final bool paused;
+  final double? progress;
+
+  static const double _size = 40;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = progress;
+    final iconColor = filled
+        ? Colors.white
+        : ghost
+        ? AppColors.textMuted
+        : p != null && !paused
+        ? AppColors.textPrimary
+        : AppColors.accent;
+    return Tooltip(
+      message: tooltip,
+      child: InkResponse(
+        onTap: onTap,
+        radius: _size / 2 + 2,
+        child: SizedBox(
+          width: _size,
+          height: _size,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              if (filled)
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: AppColors.accent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: SizedBox.expand(),
+                )
+              else if (!ghost)
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: p != null ? Colors.transparent : AppColors.border,
+                      width: 1.4,
+                    ),
+                  ),
+                  child: const SizedBox.expand(),
+                ),
+              if (p != null) ...[
+                const SizedBox.expand(
+                  child: CircularProgressIndicator(
+                    value: 1,
+                    strokeWidth: 2.4,
+                    color: AppColors.border,
+                  ),
+                ),
+                SizedBox.expand(
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(end: p.clamp(0.0, 1.0)),
+                    duration: const Duration(milliseconds: 400),
+                    builder: (context, v, _) => CircularProgressIndicator(
+                      value: v,
+                      strokeWidth: 2.4,
+                      strokeCap: StrokeCap.round,
+                      color: paused ? AppColors.textMuted : AppColors.accent,
+                    ),
+                  ),
+                ),
+              ],
+              Padding(
+                // El triángulo de "play" se ve centrado con un poco a la
+                // derecha.
+                padding: EdgeInsets.only(
+                  left: icon == LucideIcons.play ? 2 : 0,
+                ),
+                child: Icon(icon, size: 18, color: iconColor),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

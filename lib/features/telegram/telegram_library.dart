@@ -5,6 +5,8 @@ import 'telegram_files.dart';
 /// Sección de "Mis archivos de Telegram" (mismas categorías que el
 /// catálogo de QvaTube, más "Otros").
 enum TgSection {
+  /// Todo junto (no es una categoría: [sectionOf] nunca la devuelve).
+  all('Todos', null),
   movies('Películas', 'movie'),
   series('Series', 'series'),
   anime('Anime', 'anime'),
@@ -205,7 +207,8 @@ List<TgFile> filterFiles(
       .toList();
   return [
     for (final f in files)
-      if (sectionOf(f) == section && status.matches(f))
+      if ((section == TgSection.all || sectionOf(f) == section) &&
+          status.matches(f))
         if (words.isEmpty ||
             words.every(
               (w) =>
@@ -224,6 +227,7 @@ Map<TgSection, int> sectionCounts(List<TgFile> files) {
     counts[s] = (counts[s] ?? 0) + 1;
   }
   return {
+    if (files.isNotEmpty) TgSection.all: files.length,
     for (final s in TgSection.values)
       if ((counts[s] ?? 0) > 0) s: counts[s]!,
   };

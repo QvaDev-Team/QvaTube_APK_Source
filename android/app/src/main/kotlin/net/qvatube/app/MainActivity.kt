@@ -13,6 +13,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.media.MediaMetadata
 import android.media.session.MediaSession
@@ -40,6 +42,8 @@ import io.flutter.plugin.common.StandardMessageCodec
 import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * Canal nativo (`qvatube/device`) para:
@@ -68,6 +72,15 @@ class MainActivity : FlutterActivity() {
 
     // Estado de la notificación y sesión multimedia en segundo plano.
     private var mediaSession: MediaSession? = null
+    private var multicastLock: android.net.wifi.WifiManager.MulticastLock? = null
+
+    // Carátula de la notificación multimedia (póster, carátula del disco…).
+    // Se descarga una vez por URL en segundo plano; mientras tanto la
+    // notificación sale sin imagen y se vuelve a publicar al llegar.
+    private var mediaArtUrl: String = ""
+    private var mediaArt: Bitmap? = null
+    private var mediaArtLoading: String? = null
+    private var lastMediaUpdate: (() -> Unit)? = null
     private var mediaReceiverRegistered = false
     private val mediaNotificationId = 9801
     private val mediaChannelId = "qvatube_media_playback"
@@ -238,6 +251,29 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     } else {
                         result.error("open_url", "Ninguna app puede abrir $url", null)
+                    }
+                }
+                "wifiMulticastLock" -> {
+                    // Compartir por Wi-Fi: sin este bloqueo muchos Android
+                    // descartan los anuncios por difusión (UDP) de la red.
+                    val on = call.argument<Boolean>("on") ?: false
+                    try {
+                        if (on) {
+                            if (multicastLock == null) {
+                                val wm = applicationContext.getSystemService(Context.WIFI_SERVICE)
+                                    as android.net.wifi.WifiManager
+                                multicastLock = wm.createMulticastLock("qvatube-share").apply {
+                                    setReferenceCounted(false)
+                                    acquire()
+                                }
+                            }
+                        } else {
+                            multicastLock?.release()
+                            multicastLock = null
+                        }
+                        result.success(true)
+                    } catch (_: Exception) {
+                        result.success(false)
                     }
                 }
                 "setKeepScreenOn" -> {
@@ -449,6 +485,7 @@ class MainActivity : FlutterActivity() {
                     val hasPrevious = call.argument<Boolean>("hasPrevious") ?: false
                     val positionMs = (call.argument<Number>("positionMs"))?.toLong() ?: 0L
                     val durationMs = (call.argument<Number>("durationMs"))?.toLong() ?: 0L
+                    val artworkUrl = call.argument<String>("artworkUrl") ?: ""
                     updateMediaNotification(
                         title = title,
                         subtitle = subtitle,
@@ -456,7 +493,8 @@ class MainActivity : FlutterActivity() {
                         hasNext = hasNext,
                         hasPrevious = hasPrevious,
                         positionMs = positionMs,
-                        durationMs = durationMs
+                        durationMs = durationMs,
+                        artworkUrl = artworkUrl
                     )
                     result.success(true)
                 }
@@ -649,8 +687,21 @@ class MainActivity : FlutterActivity() {
         hasNext: Boolean,
         hasPrevious: Boolean,
         positionMs: Long,
-        durationMs: Long
+        durationMs: Long,
+        artworkUrl: String = ""
     ) {
+        lastMediaUpdate = {
+            updateMediaNotification(
+                title, subtitle, isPlaying, hasNext, hasPrevious,
+                positionMs, durationMs, artworkUrl
+            )
+        }
+        if (artworkUrl != mediaArtUrl) {
+            mediaArt = null
+            mediaArtUrl = artworkUrl
+            if (artworkUrl.isNotBlank()) loadMediaArt(artworkUrl)
+        }
+        val art = mediaArt
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
                 PackageManager.PERMISSION_GRANTED
@@ -706,6 +757,10 @@ class MainActivity : FlutterActivity() {
             )
         if (durationMs > 0L) {
             metadataBuilder.putLong(MediaMetadata.METADATA_KEY_DURATION, durationMs)
+        }
+        if (art != null) {
+            metadataBuilder.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, art)
+            metadataBuilder.putBitmap(MediaMetadata.METADATA_KEY_ART, art)
         }
         session.setMetadata(metadataBuilder.build())
 
@@ -763,6 +818,7 @@ class MainActivity : FlutterActivity() {
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setOngoing(isPlaying)
             .setOnlyAlertOnce(true)
+        if (art != null) builder.setLargeIcon(art)
 
         val compactIndices = mutableListOf<Int>()
         var actionIndex = 0
@@ -814,7 +870,46 @@ class MainActivity : FlutterActivity() {
         nm.notify(mediaNotificationId, builder.build())
     }
 
+    /** Descarga y reduce (máx. ~512 px) la carátula; al terminar vuelve a
+     *  publicar la notificación con la imagen. */
+    private fun loadMediaArt(url: String) {
+        if (mediaArtLoading == url) return
+        mediaArtLoading = url
+        Thread {
+            val bitmap = try {
+                val conn = URL(url).openConnection() as HttpURLConnection
+                conn.connectTimeout = 8000
+                conn.readTimeout = 10000
+                conn.instanceFollowRedirects = true
+                val bytes = conn.inputStream.use { it.readBytes() }
+                conn.disconnect()
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                var sample = 1
+                while (bounds.outWidth / (sample * 2) >= 512 &&
+                    bounds.outHeight / (sample * 2) >= 512
+                ) {
+                    sample *= 2
+                }
+                BitmapFactory.decodeByteArray(
+                    bytes, 0, bytes.size,
+                    BitmapFactory.Options().apply { inSampleSize = sample }
+                )
+            } catch (_: Exception) {
+                null
+            }
+            runOnUiThread {
+                if (mediaArtLoading == url) mediaArtLoading = null
+                if (bitmap != null && mediaArtUrl == url) {
+                    mediaArt = bitmap
+                    lastMediaUpdate?.invoke()
+                }
+            }
+        }.start()
+    }
+
     private fun clearMediaNotification() {
+        lastMediaUpdate = null
         try {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.cancel(mediaNotificationId)

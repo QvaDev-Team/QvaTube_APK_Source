@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +16,7 @@ import '../../../catalog/application/catalog_providers.dart';
 import '../../../catalog/domain/catalog_models.dart';
 import '../../../reader/book_reader_screen.dart';
 import '../../../telegram/telegram_delivery.dart';
+import '../../../telegram/telegram_files.dart';
 import 'media_player_screen.dart';
 import 'report_content_dialog.dart';
 
@@ -482,18 +485,109 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
   ///
   /// Devuelve `false` si no aplica (o el servidor no tiene el modo app
   /// activo) para que el botón siga con el deep link de siempre.
+  /// Archivos (chat_id/msg_id) de una lista de pistas o episodios.
+  static List<({int chatId, int msgId})> _sources(
+    Iterable<Map<String, dynamic>> rows,
+  ) => [
+    for (final r in rows)
+      if (r['chat_id'] is num && r['msg_id'] is num)
+        (
+          chatId: (r['chat_id'] as num).toInt(),
+          msgId: (r['msg_id'] as num).toInt(),
+        ),
+  ];
+
+  /// Si todos [items] ya se enviaron al gestor, avisa y devuelve `true`
+  /// (no se vuelven a mandar al chat).
+  bool _alreadyDelivered(List<({int chatId, int msgId})> items, String what) {
+    if (items.isEmpty) return false;
+    if (!canDeliverToApp(ref.read(authControllerProvider).user)) return false;
+    final files = TelegramFiles.instance;
+    if (!items.every((i) => files.wasDelivered(i.chatId, i.msgId))) {
+      return false;
+    }
+    final router = GoRouter.of(context);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            'Ya pediste estos $what: están en tu gestor de '
+            'descargas.',
+          ),
+          persist: false,
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(
+            label: 'Ver',
+            onPressed: () => router.push('/cuenta/telegram'),
+          ),
+        ),
+      );
+    return true;
+  }
+
+  /// Pedidos al gestor en curso (estático: sobrevive a cerrar y abrir la
+  /// ficha). Evita que dos toques seguidos en "Descargar" manden el mismo
+  /// archivo dos veces al chat.
+  static final Set<String> _appInFlight = {};
+
   Future<bool> _tryAppDelivery(
     Future<Map<String, dynamic>> Function() request, {
     bool showLoading = true,
     String unit = 'episodio',
+    ({int chatId, int msgId})? source,
+    String? batchKey,
   }) async {
     if (!canDeliverToApp(ref.read(authControllerProvider).user)) return false;
     final router = GoRouter.of(context);
     final messenger = ScaffoldMessenger.of(context);
+    void notice(String text) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(text),
+            persist: false,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Ver',
+              onPressed: () => router.push('/cuenta/telegram'),
+            ),
+          ),
+        );
+    }
+
+    final key = source != null ? '${source.chatId}:${source.msgId}' : batchKey;
+    if (key != null && _appInFlight.contains(key)) {
+      notice('Ya lo estás pidiendo: espera un momento.');
+      return true;
+    }
+    // Ya se pidió antes: no se vuelve a mandar al chat, se descarga lo que
+    // ya llegó.
+    if (source != null) {
+      final files = TelegramFiles.instance;
+      if (files.wasDelivered(source.chatId, source.msgId)) {
+        final file = files.fileFor(source.chatId, source.msgId);
+        if (file == null) {
+          notice('Ya lo pediste: está llegando a tu gestor de descargas.');
+        } else if (file.completed) {
+          notice('Ya está descargado en tu teléfono.');
+        } else if (file.downloading) {
+          notice('Ya se está descargando en tu gestor de descargas.');
+        } else {
+          unawaited(files.download(file));
+          notice('Empezó a descargarse en tu gestor de descargas.');
+        }
+        return true;
+      }
+    }
+
     void done() {
+      if (key != null) _appInFlight.remove(key);
       if (showLoading && mounted) setState(() => _loadingAction = false);
     }
 
+    if (key != null) _appInFlight.add(key);
     if (showLoading) setState(() => _loadingAction = true);
     try {
       final response = await request();
@@ -507,19 +601,21 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
       }
       final queued = (response['queued'] as num?)?.toInt();
       final title = response['title']?.toString();
+      if (queued == null) TelegramFiles.instance.addCatalogRow(response);
       final String text;
       if (queued == null) {
         text =
             '${title == null || title.isEmpty ? 'El archivo' : title} ya está '
-            'en tus archivos de Telegram.';
+            'en tu gestor de descargas.';
       } else if (queued == 0) {
         text = 'No hay nada para enviar.';
       } else {
         text =
             'El bot te enviará $queued '
             '${queued == 1 ? unit : '${unit}s'}. Irán apareciendo en '
-            'tus archivos de Telegram.';
+            'tu gestor de descargas.';
       }
+      messenger.hideCurrentSnackBar();
       messenger.showSnackBar(
         SnackBar(
           content: Text(text),
@@ -584,6 +680,7 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
       () => ref
           .read(catalogApiProvider)
           .authorizeDownload(chatId: chatId, msgId: msgId, toApp: true),
+      source: (chatId: chatId, msgId: msgId),
     )) {
       return;
     }
@@ -619,8 +716,11 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
     final categoryKey = widget.item.categoryKey;
     final title = _title;
     if (categoryKey == null || categoryKey.isEmpty || title == null) return;
+    if (_loadingAction) return;
+    if (_alreadyDelivered(_sources(_seasonEpisodes), 'episodios')) return;
 
     if (await _tryAppDelivery(
+      batchKey: 'season:$categoryKey:$title:$_selectedSeason',
       () => ref
           .read(catalogApiProvider)
           .authorizeSeasonDownload(
@@ -739,11 +839,19 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
   Future<bool> _tryAppBatch(
     Future<Map<String, dynamic>> Function() request, {
     required String unit,
+    required List<({int chatId, int msgId})> items,
+    required String batchKey,
   }) async {
     if (_batchLoading) return false;
+    if (_alreadyDelivered(items, '${unit}s')) return true;
     setState(() => _batchLoading = true);
     try {
-      return await _tryAppDelivery(request, showLoading: false, unit: unit);
+      return await _tryAppDelivery(
+        request,
+        showLoading: false,
+        unit: unit,
+        batchKey: batchKey,
+      );
     } finally {
       if (mounted) setState(() => _batchLoading = false);
     }
@@ -759,7 +867,14 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
           album: item.album ?? '',
           toApp: toApp,
         );
-    if (await _tryAppBatch(() => request(toApp: true), unit: 'pista')) return;
+    if (await _tryAppBatch(
+      () => request(toApp: true),
+      unit: 'pista',
+      items: _sources(_episodes),
+      batchKey: 'album:${item.categoryKey}:${item.artist}:${item.album}',
+    )) {
+      return;
+    }
     await _runBatchRequest(request);
   }
 
@@ -779,6 +894,9 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
         await _tryAppBatch(
           () => api.authorizeBatchDownload(items, toApp: true),
           unit: 'archivo',
+          items: items,
+          batchKey:
+              'batch:${items.map((i) => '${i.chatId}:${i.msgId}').join(',')}',
         ) ||
         await _runBatchRequest(() => api.authorizeBatchDownload(items));
     if (ok && mounted) {
@@ -800,6 +918,7 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
           .read(catalogApiProvider)
           .authorizeDownload(chatId: chatId, msgId: msgId, toApp: true),
       showLoading: false,
+      source: (chatId: chatId, msgId: msgId),
     )) {
       return;
     }
@@ -1749,10 +1868,12 @@ class _ContentDetailSheetState extends ConsumerState<_ContentDetailSheet> {
                 ],
               ),
               const SizedBox(height: 8),
-              const Center(
+              Center(
                 child: Text(
-                  'La descarga necesita Telegram instalado',
-                  style: TextStyle(fontSize: 11, color: Colors.white38),
+                  canDeliverToApp(ref.watch(authControllerProvider).user)
+                      ? 'Se descarga en tu gestor de descargas'
+                      : 'La descarga necesita Telegram instalado',
+                  style: const TextStyle(fontSize: 11, color: Colors.white38),
                 ),
               ),
               if (!_isAlbum && widget.item.dupCount > 1) ...[

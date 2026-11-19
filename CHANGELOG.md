@@ -1,5 +1,12 @@
 # Novedades de QvaTube
 
+## 2.1.0
+- Nuevo: comparte por Wi-Fi lo que descargaste con otro teléfono que tenga QvaTube, sin gastar datos. Busca el icono de Wi-Fi en el Gestor de descargas.
+- El reproductor ahora te deja cambiar el idioma del audio y activar los subtítulos que traen las películas y series, y recuerda lo que eliges.
+- La notificación y la pantalla de bloqueo muestran el póster o la carátula de lo que estás viendo o escuchando.
+- Nuevo botón de descargas arriba, con un aro que muestra el progreso, y el Gestor de descargas renovado: sección "Todos", iconos más limpios y tus descargas siguen solas al volver a abrir la app.
+- Arreglos: ya no se pide dos veces el mismo archivo si tocas "Descargar" seguido, y la reproducción de archivos descargados abre al primer toque.
+
 ## 2.0.0
 - ¡Llegamos a la versión 2.0! Una actualización muy esperada por toda la comunidad: ahora puedes conectar tu cuenta de Telegram y gestionar tus descargas directamente dentro de QvaTube.
 - Tus archivos del bot se organizan por secciones (Películas, Series, Anime, Novelas, Música, Libros y Otros) con buscador, filtro por estado y series agrupadas por episodios.

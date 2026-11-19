@@ -166,8 +166,8 @@ class _AccountMenuSheet extends ConsumerWidget {
                 // Telegram y en teléfonos ARM).
                 if (TelegramService.isAvailable)
                   _MenuTile(
-                    icon: Icons.send,
-                    label: 'Telegram',
+                    icon: Icons.download_for_offline_outlined,
+                    label: 'Gestor de descargas',
                     onTap: () => _go(context, '/cuenta/telegram'),
                   ),
                 _MenuTile(

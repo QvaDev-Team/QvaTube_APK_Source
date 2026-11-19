@@ -121,7 +121,8 @@ void main() {
       ).map((f) => f.name),
       ['Kong.mkv'],
     );
-    expect(sectionCounts(files), {TgSection.movies: 2});
+    expect(sectionCounts(files), {TgSection.all: 2, TgSection.movies: 2});
+    expect(filterFiles(files, section: TgSection.all).length, 2);
   });
 }
 
