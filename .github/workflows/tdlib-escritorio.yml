@@ -1,0 +1,125 @@
+name: TDLib para escritorio (Windows y Linux)
+
+# Compila la librería oficial de Telegram (TDLib, tdjson) para la versión de
+# escritorio y la publica en la release "tdlib-<versión>" del repo público,
+# junto a los binarios de Android. La app la descarga bajo demanda y comprueba
+# su SHA-256 (lib/features/telegram/tdlib/td_library.dart).
+#
+# Solo a mano (Actions → Run workflow): hace falta una vez por versión de
+# TDLib. Al terminar, el resumen del run muestra las sumas para pegarlas en
+# td_library.dart.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TDLIB_VERSION: '1.8.65'
+  # Commit "Update version to 1.8.65." de tdlib/td.
+  TDLIB_COMMIT: a8f21f5230172634becc1739050ef23ecd6ea291
+  DIST_REPO: QvaDev-Team/QvaTube_APK
+
+jobs:
+  linux:
+    name: Linux x64 (libtdjson.so)
+    # Misma base que el AppImage: así funciona en distros con glibc 2.35+.
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Dependencias
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends make git zlib1g-dev libssl-dev gperf cmake g++
+      - name: Código de TDLib
+        run: |
+          git init td && cd td
+          git remote add origin https://github.com/tdlib/td.git
+          git fetch --depth 1 origin "$TDLIB_COMMIT"
+          git checkout FETCH_HEAD
+      - name: Compilar tdjson
+        run: |
+          cd td && mkdir build && cd build
+          # OpenSSL estático: no depende de la versión de libssl del usuario.
+          cmake -DCMAKE_BUILD_TYPE=Release -DOPENSSL_USE_STATIC_LIBS=TRUE ..
+          cmake --build . --target tdjson -j 3
+          strip --strip-unneeded libtdjson.so.*
+          ls -la libtdjson.so*
+          cp -L libtdjson.so "$GITHUB_WORKSPACE/libtdjson-linux-x64.so"
+          ldd "$GITHUB_WORKSPACE/libtdjson-linux-x64.so" || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tdlib-linux
+          path: libtdjson-linux-x64.so
+
+  windows:
+    name: Windows x64 (tdjson.dll)
+    runs-on: windows-latest
+    steps:
+      - name: Dependencias (vcpkg)
+        shell: pwsh
+        run: |
+          choco install gperf -y --no-progress
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg" install openssl:x64-windows-static-md zlib:x64-windows-static-md
+      - name: Código de TDLib
+        shell: bash
+        run: |
+          git init td && cd td
+          git remote add origin https://github.com/tdlib/td.git
+          git fetch --depth 1 origin "$TDLIB_COMMIT"
+          git checkout FETCH_HEAD
+      - name: Compilar tdjson
+        shell: pwsh
+        run: |
+          cd td
+          mkdir build
+          cd build
+          cmake -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static-md ..
+          cmake --build . --target tdjson --config Release -- /m:3
+          Get-ChildItem -Recurse -Filter tdjson.dll | Select-Object FullName, Length
+          $dll = Get-ChildItem -Recurse -Filter tdjson.dll | Where-Object { $_.FullName -match 'Release' } | Select-Object -First 1
+          Copy-Item $dll.FullName "$env:GITHUB_WORKSPACE\tdjson-windows-x64.dll"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tdlib-windows
+          path: tdjson-windows-x64.dll
+
+  publicar:
+    name: Publicar en la release tdlib
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.DIST_REPO_TOKEN }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: tdlib-*
+          merge-multiple: true
+          path: dist
+      - name: Comprimir, sumas y subir
+        run: |
+          set -euo pipefail
+          cd dist
+          TAG="tdlib-$TDLIB_VERSION"
+          {
+            echo "### Sumas para td_library.dart"
+            echo
+            echo '| Archivo | Bytes .gz | SHA-256 .gz | SHA-256 descomprimido |'
+            echo '|---|---|---|---|'
+          } >> "$GITHUB_STEP_SUMMARY"
+          for f in libtdjson-linux-x64.so tdjson-windows-x64.dll; do
+            RAW=$(sha256sum "$f" | cut -d' ' -f1)
+            gzip -9 -n -k "$f"
+            GZ=$(sha256sum "$f.gz" | cut -d' ' -f1)
+            BYTES=$(stat -c %s "$f.gz")
+            echo "| \`$f.gz\` | $BYTES | \`$GZ\` | \`$RAW\` |" >> "$GITHUB_STEP_SUMMARY"
+            echo "$f.gz $BYTES gz=$GZ raw=$RAW"
+          done
+          # SHA256SUMS: se conservan las líneas de Android y se añaden estas.
+          gh release download "$TAG" --repo "$DIST_REPO" --pattern SHA256SUMS.txt --clobber || touch SHA256SUMS.txt
+          grep -v -e 'linux-x64' -e 'windows-x64' SHA256SUMS.txt > sumas.txt || true
+          sha256sum libtdjson-linux-x64.so.gz tdjson-windows-x64.dll.gz >> sumas.txt
+          mv sumas.txt SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          gh release upload "$TAG" libtdjson-linux-x64.so.gz tdjson-windows-x64.dll.gz SHA256SUMS.txt --repo "$DIST_REPO" --clobber
