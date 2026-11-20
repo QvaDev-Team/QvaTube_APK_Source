@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart' show immutable;
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -558,6 +559,36 @@ abstract final class DeviceChannel {
     return Directory.systemTemp.path;
   }
 
+  /// Lugares donde el gestor de descargas puede guardar los archivos: la
+  /// memoria interna y cada tarjeta SD montada (Android). Lista vacía en
+  /// escritorio o si no se pudo consultar.
+  static Future<List<StorageVolume>> storageVolumes() async {
+    if (!Platform.isAndroid) return const [];
+    try {
+      final list = await _channel.invokeListMethod<Object?>('storageVolumes');
+      return [
+        for (final e in list ?? const [])
+          if (e is Map) StorageVolume.fromMap(Map<String, Object?>.from(e)),
+      ];
+    } on PlatformException {
+      return const [];
+    } on MissingPluginException {
+      return const [];
+    }
+  }
+
+  /// Cierra y vuelve a abrir la app (Android). `false` si no se pudo.
+  static Future<bool> restartApp() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _channel.invokeMethod<bool>('restartApp') ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   /// Abre una URL (o un archivo local) con la aplicación del sistema.
   static Future<bool> openUrl(String url) async {
     if (isDesktop) return _openWithSystem(url);
@@ -593,4 +624,36 @@ abstract final class DeviceChannel {
       return false;
     }
   }
+}
+
+/// Un almacenamiento del teléfono (memoria interna o tarjeta SD).
+@immutable
+class StorageVolume {
+  const StorageVolume({
+    required this.id,
+    required this.path,
+    required this.label,
+    required this.removable,
+    required this.freeBytes,
+    required this.totalBytes,
+  });
+
+  factory StorageVolume.fromMap(Map<String, Object?> m) => StorageVolume(
+    id: m['id']?.toString() ?? '',
+    path: m['path']?.toString() ?? '',
+    label: m['label']?.toString() ?? '',
+    removable: m['removable'] == true,
+    freeBytes: (m['freeBytes'] as num?)?.toInt() ?? 0,
+    totalBytes: (m['totalBytes'] as num?)?.toInt() ?? 0,
+  );
+
+  /// `internal`, `sd1`, `sd2`…
+  final String id;
+
+  /// Carpeta de la app en ese almacenamiento (sin permisos extra).
+  final String path;
+  final String label;
+  final bool removable;
+  final int freeBytes;
+  final int totalBytes;
 }

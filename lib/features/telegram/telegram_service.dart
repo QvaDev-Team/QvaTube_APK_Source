@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/platform/device_channel.dart';
+import '../../core/storage/download_storage.dart';
 import 'tdlib/td_client.dart';
 import 'tdlib/td_library.dart';
 
@@ -212,13 +213,17 @@ class TelegramService extends ChangeNotifier {
     final client = _client;
     if (client == null) return;
     final base = '${await DeviceChannel.cacheDirectory()}/tdlib';
+    // Los archivos van donde el usuario eligió (interna o SD); la base de
+    // datos siempre en la memoria interna.
+    final filesRoot = await DownloadStorage.root();
+    DownloadStorage.telegramRoot = filesRoot;
     final info = await PackageInfo.fromPlatform();
     try {
       await client.send({
         '@type': 'setTdlibParameters',
         'use_test_dc': false,
         'database_directory': '$base/db',
-        'files_directory': '$base/archivos',
+        'files_directory': DownloadStorage.telegramFilesDir(filesRoot),
         'database_encryption_key': _databaseKey(),
         'use_file_database': true,
         'use_chat_info_database': true,

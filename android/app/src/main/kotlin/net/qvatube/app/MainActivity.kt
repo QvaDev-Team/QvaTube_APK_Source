@@ -615,6 +615,11 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "cacheDirectory" -> result.success(filesDir.absolutePath)
+                "storageVolumes" -> result.success(storageVolumes())
+                "restartApp" -> {
+                    result.success(true)
+                    restartApp()
+                }
                 "installApk" -> {
                     val path = call.argument<String>("path")
                     if (path.isNullOrBlank()) {
@@ -718,6 +723,83 @@ class MainActivity : FlutterActivity() {
     }
 
     /** Lee el versionCode / versionName de un APK en disco. */
+    /**
+     * Dónde puede guardar el gestor de descargas: la memoria interna de la
+     * app (`filesDir`) y la carpeta propia de la app en cada tarjeta SD
+     * montada (`Android/data/<paquete>/files`, de `getExternalFilesDirs`).
+     * Esas carpetas no necesitan permisos de almacenamiento.
+     */
+    private fun storageVolumes(): List<Map<String, Any?>> {
+        val out = mutableListOf<Map<String, Any?>>()
+        fun entry(dir: File, id: String, label: String, removable: Boolean) {
+            val stat = try {
+                android.os.StatFs(dir.absolutePath)
+            } catch (_: Exception) {
+                null
+            }
+            out.add(
+                mapOf(
+                    "id" to id,
+                    "path" to dir.absolutePath,
+                    "label" to label,
+                    "removable" to removable,
+                    "freeBytes" to (stat?.availableBytes ?: 0L),
+                    "totalBytes" to (stat?.totalBytes ?: 0L),
+                ),
+            )
+        }
+        entry(filesDir, "internal", "Almacenamiento interno", false)
+        val dirs = try {
+            getExternalFilesDirs(null)
+        } catch (_: Exception) {
+            emptyArray<File?>()
+        }
+        val sm = getSystemService(Context.STORAGE_SERVICE) as? android.os.storage.StorageManager
+        var sdIndex = 0
+        for (dir in dirs) {
+            if (dir == null) continue
+            val removable = try {
+                android.os.Environment.isExternalStorageRemovable(dir)
+            } catch (_: Exception) {
+                false
+            }
+            val mounted = try {
+                android.os.Environment.getExternalStorageState(dir) ==
+                    android.os.Environment.MEDIA_MOUNTED
+            } catch (_: Exception) {
+                false
+            }
+            // La memoria compartida interna es el mismo espacio físico que
+            // filesDir: solo se ofrecen las tarjetas extraíbles.
+            if (!removable || !mounted) continue
+            if (!dir.exists()) dir.mkdirs()
+            sdIndex++
+            val label = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                sm?.getStorageVolume(dir)?.getDescription(this)
+            } else {
+                null
+            } ?: if (sdIndex == 1) "Tarjeta SD" else "Tarjeta SD $sdIndex"
+            entry(dir, "sd$sdIndex", label, true)
+        }
+        return out
+    }
+
+    /** Vuelve a abrir la app desde cero (para aplicar la nueva ubicación). */
+    private fun restartApp() {
+        val intent = packageManager.getLaunchIntentForPackage(packageName) ?: return
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        val pending = PendingIntent.getActivity(
+            this,
+            7301,
+            intent,
+            PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val am = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+        am.set(android.app.AlarmManager.RTC, System.currentTimeMillis() + 300, pending)
+        finishAffinity()
+        Runtime.getRuntime().exit(0)
+    }
+
     private fun readApkVersion(file: File): Map<String, Any> {
         val pm = packageManager
         val info = pm.getPackageArchiveInfo(file.absolutePath, 0)

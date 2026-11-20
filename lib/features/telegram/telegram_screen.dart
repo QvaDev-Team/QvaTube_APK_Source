@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_flutter/lucide_flutter.dart';
@@ -9,6 +11,7 @@ import '../../core/theme/app_text.dart';
 import '../auth/presentation/providers/auth_controller.dart';
 import '../share/received_store.dart';
 import '../share/wifi_share_screen.dart';
+import 'storage_location_screen.dart';
 import 'tdlib/td_library.dart';
 import 'telegram_delivery.dart';
 import 'telegram_files.dart';
@@ -269,6 +272,17 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
             ),
             icon: const Icon(LucideIcons.wifi, size: 21),
           ),
+          // Dónde se guardan los archivos: memoria interna o tarjeta SD.
+          if (Platform.isAndroid)
+            IconButton(
+              tooltip: 'Ubicación de almacenamiento',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const StorageLocationScreen(),
+                ),
+              ),
+              icon: const Icon(Icons.sd_storage_outlined, size: 21),
+            ),
           if (_tg.stage == TgStage.ready) ...[
             IconButton(
               tooltip: 'Cuenta de Telegram',

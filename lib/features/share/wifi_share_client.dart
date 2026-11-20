@@ -160,7 +160,7 @@ class WifiShareClient extends ChangeNotifier {
     failed.clear();
     await DeviceChannel.setKeepScreenOn(true);
     notifyListeners();
-    final dir = await ReceivedStore.dir();
+    final dir = await ReceivedStore.filesDir();
     for (final item in items) {
       if (_cancel) break;
       current = item.id;

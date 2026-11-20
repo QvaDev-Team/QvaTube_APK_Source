@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../../core/platform/device_channel.dart';
+import '../../core/storage/download_storage.dart';
 import '../telegram/telegram_files.dart';
 import 'wifi_share_protocol.dart';
 
@@ -54,6 +55,17 @@ class ReceivedStore extends ChangeNotifier {
 
   static Future<Directory> dir() async {
     final d = Directory('${await DeviceChannel.cacheDirectory()}/qvashare');
+    await d.create(recursive: true);
+    return d;
+  }
+
+  /// Carpeta donde guardar lo que se recibe ahora (memoria interna o
+  /// tarjeta SD, según el gestor de descargas). El índice sigue en
+  /// [dir]: guarda rutas completas, así lo recibido antes no se pierde.
+  static Future<Directory> filesDir() async {
+    final d = Directory(
+      DownloadStorage.receivedDir(await DownloadStorage.root()),
+    );
     await d.create(recursive: true);
     return d;
   }
