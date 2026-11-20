@@ -1,5 +1,9 @@
 # Novedades de QvaTube
 
+## 2.2.4
+- Nuevo en el Gestor de descargas: elige dónde guardar tus descargas, en el almacenamiento interno o en la tarjeta SD. Ideal para teléfonos con poco espacio. Toca el icono de la tarjeta SD arriba en el gestor.
+- Lo que ya descargaste se queda donde estaba y lo sigues viendo normal; solo lo nuevo se guarda en la ubicación elegida.
+
 ## 2.2.3
 - Gestor de descargas con Telegram y Compartir por Wi-Fi ya disponibles también en QvaTube para Windows y Linux.
 - Mejoras de estabilidad en Compartir por Wi-Fi y en la conexión de Telegram en escritorio y móvil.

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/platform/device_channel.dart';
 import '../share/received_store.dart';
+import 'legacy_downloads.dart';
 import 'tdlib/td_client.dart';
 import 'telegram_service.dart';
 
@@ -150,6 +151,18 @@ class TgFile {
     downloading = local['is_downloading_active'] == true;
     completed = local['is_downloading_completed'] == true;
     localPath = local['path']?.toString() ?? '';
+    if (completed && localPath.isNotEmpty) {
+      LegacyDownloads.remember(messageId, localPath);
+    } else if (!completed && !downloading && downloaded == 0) {
+      // Descargado antes en la otra ubicación (interna o SD): TDLib ya no
+      // lo encuentra, pero el archivo sigue ahí y se puede ver.
+      final old = LegacyDownloads.find(messageId, name, size);
+      if (old != null) {
+        completed = true;
+        downloaded = size;
+        localPath = old;
+      }
+    }
   }
 
   static int _int(Object? v) => v is num ? v.toInt() : 0;
@@ -898,6 +911,7 @@ class TelegramFiles extends ChangeNotifier {
     // Recibido por Wi-Fi (no es de TDLib).
     if (file.fileId < 0) return ReceivedStore.instance.delete(file);
     unawaited(_setActive(file.fileId, false));
+    await LegacyDownloads.forget(file.messageId, file.localPath);
     await _client?.send({'@type': 'deleteFile', 'file_id': file.fileId});
     file
       ..downloaded = 0

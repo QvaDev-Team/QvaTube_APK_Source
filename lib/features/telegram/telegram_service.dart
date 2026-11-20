@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/platform/device_channel.dart';
 import '../../core/storage/download_storage.dart';
+import 'legacy_downloads.dart';
 import 'tdlib/td_client.dart';
 import 'tdlib/td_library.dart';
 
@@ -217,6 +218,13 @@ class TelegramService extends ChangeNotifier {
     // datos siempre en la memoria interna.
     final filesRoot = await DownloadStorage.root();
     DownloadStorage.telegramRoot = filesRoot;
+    // Lo descargado en la otra ubicación se queda donde está y se sigue
+    // viendo (TDLib solo conoce la carpeta actual).
+    await DownloadStorage.addKnownRoot(filesRoot);
+    await LegacyDownloads.init(
+      currentRoot: filesRoot,
+      otherRoots: await DownloadStorage.knownRoots(),
+    );
     final info = await PackageInfo.fromPlatform();
     try {
       await client.send({

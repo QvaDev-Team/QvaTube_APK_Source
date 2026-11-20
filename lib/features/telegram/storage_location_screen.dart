@@ -90,7 +90,8 @@ class _StorageLocationScreenState extends State<StorageLocationScreen> {
         title: const Text('Reiniciar la app'),
         content: Text(
           'Las nuevas descargas se guardarán en $label después de reiniciar '
-          'QvaTube. Lo que ya descargaste no se mueve.\n\n'
+          'QvaTube. Lo que ya descargaste se queda donde está y lo sigues '
+          'viendo normal en el gestor.\n\n'
           'Si hay descargas en curso, se reanudarán al volver a abrir.',
         ),
         actions: [

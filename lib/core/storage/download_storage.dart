@@ -22,9 +22,14 @@ abstract final class DownloadStorage {
 
   /// Carpeta elegida por el usuario, aunque ahora no esté disponible.
   static Future<String?> selectedPath() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString(_key);
-    return saved == null || saved.isEmpty ? null : saved;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_key);
+      return saved == null || saved.isEmpty ? null : saved;
+    } catch (_) {
+      // Sin preferencias (p. ej. en tests): memoria interna.
+      return null;
+    }
   }
 
   /// Guarda la elección (`null` = memoria interna).
@@ -60,6 +65,26 @@ abstract final class DownloadStorage {
     } catch (_) {
       return false;
     }
+  }
+
+  /// Ubicaciones con las que alguna vez arrancó Telegram (y la memoria
+  /// interna): ahí puede haber archivos ya descargados.
+  static const String _historyKey = 'qvatube.download_storage_history';
+
+  static Future<Set<String>> knownRoots() async {
+    List<String>? history;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      history = prefs.getStringList(_historyKey);
+    } catch (_) {}
+    return {await DeviceChannel.cacheDirectory(), ...?history};
+  }
+
+  static Future<void> addKnownRoot(String root) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_historyKey) ?? const <String>[];
+    if (list.contains(root)) return;
+    await prefs.setStringList(_historyKey, [...list, root]);
   }
 
   /// Carpeta de los archivos de Telegram dentro de [root].
